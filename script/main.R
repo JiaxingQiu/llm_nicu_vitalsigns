@@ -20,6 +20,11 @@ ts_sp <- read_excel("./data/PAS Challenge SPO2 Data.xlsx")
 view_k_row(ts_hr) # viz first 10 rows
 view_k_row(ts_sp)
 
+# --- load patient demo ---
+df_outc <- read_excel("./data/PAS Challenge Outcome Data.xlsx")
+df_demo <- read_excel("./data/PAS Challenge Demographic Data.xlsx")
+
+
 # --- brady 80 (heart rate < 80) ---
 th <- 80
 rows <- apply(ts_hr[,3:ncol(ts_hr)], 1, function(x) any(x < th))
@@ -30,6 +35,7 @@ events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = "
 events <- apply(ts_sub, 1, function(x) threshold_event_extra(x, th = th, direction = "<"))
 threshold_event_extra(x=as.numeric(unlist(ts_sub[2,])), th = 80, direction = "<", plot=T)
 threshold_event_extra(x=as.numeric(unlist(ts_sub[2,])), th = 90, direction = "<", plot=T)
+
 
 # --- hyperoxia (SPO2 > 98) ---
 th <- 98
