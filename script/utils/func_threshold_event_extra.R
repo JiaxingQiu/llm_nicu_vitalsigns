@@ -7,7 +7,7 @@ threshold_event_extra <- function(x,  th, direction=c(">", "<")[2], min_dur = 2,
     # prepare a set of smoothed x, to calculate the estimate of onset/offset
     x_smoothed <- list()
     time_index <- seq_along(x)
-    for(k in c(1, 5, 10, 15, 20) ){
+    for(k in c(5, 10, 15, 20) ){
       x_sm <- lowess(time_index, x, f = k/300)
       x_smoothed[[paste0("k=",k)]] <- x_sm$y
     }

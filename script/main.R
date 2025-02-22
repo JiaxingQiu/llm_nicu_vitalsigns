@@ -33,14 +33,29 @@ view_k_row(ts_sub, i_row = 2, vs = 'HR')
 # apply function threshold_events(x, th, "<") to each row (x) of dataframe ts_sub
 events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = "<"))
 events <- apply(ts_sub, 1, function(x) threshold_event_extra(x, th = th, direction = "<"))
-threshold_event_extra(x=as.numeric(unlist(ts_sub[2,])), th = 80, direction = "<", plot=T)
-threshold_event_extra(x=as.numeric(unlist(ts_sub[2,])), th = 90, direction = "<", plot=T)
+events <- apply(ts_sub, 1, function(x) threshold_event_filtered(x, th = th, direction = "<"))
+events <- apply(ts_sub, 1, function(x) describe_event(x, th = th, plot=F, type = 1))
+
+# sample 10 infants to take a look
+for(i in sample(1:nrow(ts_sub),20) ){
+  # threshold_event_filtered(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T)
+  print(describe_event(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T, type=4))
+}
 
 
-# --- hyperoxia (SPO2 > 98) ---
-th <- 98
-rows <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) any(x > th))
-ts_sub <- ts_sp[rows,3:ncol(ts_sp)]
-view_k_row(ts_sub, i_row = 2, vs = 'SP')
-events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = ">"))
-# events <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) threshold_event(x, th = th, direction = ">"))
+
+# 1. easy level of data
+# 2. easy level of ground true description
+# 3. easy level of counterfact time series
+
+
+# # --- hyperoxia (SPO2 > 98) ---
+# th <- 98
+# rows <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) any(x > th))
+# ts_sub <- ts_sp[rows,3:ncol(ts_sp)]
+# view_k_row(ts_sub, i_row = 2, vs = 'SP')
+# events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = ">"))
+# # events <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) threshold_event(x, th = th, direction = ">"))
+
+
+
