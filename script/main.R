@@ -34,14 +34,13 @@ view_k_row(ts_sub, i_row = 2, vs = 'HR')
 events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = "<"))
 events <- apply(ts_sub, 1, function(x) threshold_event_extra(x, th = th, direction = "<"))
 events <- apply(ts_sub, 1, function(x) threshold_event_filtered(x, th = th, direction = "<"))
-events <- apply(ts_sub, 1, function(x) describe_event(x, th = th, plot=F, type = 1))
+events <- apply(ts_sub, 1, function(x) describe_brady_event(x, th = th, plot=F, type = 1))
 
 # sample 10 infants to take a look
 for(i in sample(1:nrow(ts_sub),20) ){
   # threshold_event_filtered(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T)
-  print(describe_event(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T, type=4))
+  print(describe_brady_event(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T, type=4))
 }
-
 
 
 # 1. easy level of data

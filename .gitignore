@@ -2,3 +2,5 @@ data/
 res/
 lit/
 .DS_Store
+script/VAE/results/
+__pycache__/

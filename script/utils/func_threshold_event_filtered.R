@@ -14,6 +14,11 @@ threshold_event_filtered <- function(x, th, direction = "<", plot = F){
     events <- events[indices]
   }
   if(length(events)>0){
+    # Remove empty elements
+    events <- events[sapply(events, function(x) !is.null(x) && length(x) != 0)]
+  }
+    
+  if(length(events)>0){
     if(plot){
       time_index <- seq_along(x)
       for(event in events){
@@ -25,6 +30,7 @@ threshold_event_filtered <- function(x, th, direction = "<", plot = F){
       }
     }
   }
+  
   return(events)
   
 }

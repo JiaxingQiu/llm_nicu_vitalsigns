@@ -1,5 +1,5 @@
 
-describe_event <- function(x, th, direction = "<", plot = F, type = seq(1,4)[1]){
+describe_brady_event <- function(x, th, direction = "<", plot = F, type = seq(1,4)[1]){
   
   # description string to return
   description <- ""
@@ -27,7 +27,7 @@ describe_event <- function(x, th, direction = "<", plot = F, type = seq(1,4)[1])
       if(type == 4){
         drop_fast <- event['drop_rate'] < (-5)
         back_fast <- event['drop_rate'] > 5
-        event_descriptions[[i]] <- paste0("The heart rate dropped from ", x[event['onset']], " beats per minute", ifelse(drop_fast, "fastly ", " "), "since time ", round(event['onset']),". ",
+        event_descriptions[[i]] <- paste0("The heart rate started to drop from about ", x[event['onset']], " beats per minute", ifelse(drop_fast, " fastly ", " "), "since time ", round(event['onset']),". ",
                                           "After remaining below ",th, " beats per minute"," for ",event['duration']," time points, ",
                                           "the heart rate increased to around ", x[event['offset']], " beats per minute", ifelse(back_fast, " fastly.",".") )
       }
