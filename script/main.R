@@ -20,41 +20,48 @@ ts_sp <- read_excel("./data/PAS Challenge SPO2 Data.xlsx")
 view_k_row(ts_hr) # viz first 10 rows
 view_k_row(ts_sp)
 
-# --- load patient demo ---
-df_outc <- read_excel("./data/PAS Challenge Outcome Data.xlsx")
-df_demo <- read_excel("./data/PAS Challenge Demographic Data.xlsx")
+
+ts_sub <- ts_hr[,3:ncol(ts_hr)]
+events80 <- apply(ts_sub, 1, function(x) describe_brady_event(x, th = 80, plot=F, type = 0))
+events90 <- apply(ts_sub, 1, function(x) describe_brady_event(x, th = 90, plot=F, type = 0))
+events100 <- apply(ts_sub, 1, function(x) describe_brady_event(x, th = 100, plot=F, type = 0))
 
 
-# --- brady 80 (heart rate < 80) ---
-th <- 80
-rows <- apply(ts_hr[,3:ncol(ts_hr)], 1, function(x) any(x < th))
-ts_sub <- ts_hr[rows,3:ncol(ts_hr)]
-view_k_row(ts_sub, i_row = 2, vs = 'HR')
-# apply function threshold_events(x, th, "<") to each row (x) of dataframe ts_sub
-events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = "<"))
-events <- apply(ts_sub, 1, function(x) threshold_event_extra(x, th = th, direction = "<"))
-events <- apply(ts_sub, 1, function(x) threshold_event_filtered(x, th = th, direction = "<"))
-events <- apply(ts_sub, 1, function(x) describe_brady_event(x, th = th, plot=F, type = 1))
+get_most_severe_event <- function(row_index){
+  # for each row of ts_sub
+  # find the most severe event in events80, events90 and events100
+  # keep the most severe event
+  # if no event, return "no event." 
+  event80 <- events80[row_index]
+  event90 <- events90[row_index]
+  event100 <- events100[row_index]
 
-# sample 10 infants to take a look
-for(i in sample(1:nrow(ts_sub),20) ){
-  # threshold_event_filtered(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T)
-  print(describe_brady_event(x=as.numeric(unlist(ts_sub[i,])), th=th, plot=T, type=4))
+  if(all(c(event80, event90, event100) == "")){
+    return(NA)
+  }
+  if(event80!=""){
+    return(event80)
+  }
+  if(event90!=""){
+    return(event90)
+  }
+  if(event100!=""){
+    return(event100)
+  }
 }
 
+# apply the function to each row_index of ts_sub
+most_severe_events <- sapply(seq(1,nrow(ts_sub)), get_most_severe_event)
+# count NA in most_severe_events
+sum(!is.na(most_severe_events))
+# get row index of not NA in most_severe_events
+row_index <- which(!is.na(most_severe_events))
+# ts_event dataframe
+ts_event <- ts_hr[row_index, ]
+# get values of most_severe_events for the row_index
+ts_event_description <- most_severe_events[row_index]
+ts_event$event_description <- ts_event_description
 
-# 1. easy level of data
-# 2. easy level of ground true description
-# 3. easy level of counterfact time series
-
-
-# # --- hyperoxia (SPO2 > 98) ---
-# th <- 98
-# rows <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) any(x > th))
-# ts_sub <- ts_sp[rows,3:ncol(ts_sp)]
-# view_k_row(ts_sub, i_row = 2, vs = 'SP')
-# events <- apply(ts_sub, 1, function(x) threshold_event(x, th = th, direction = ">"))
-# # events <- apply(ts_sp[,3:ncol(ts_sp)], 1, function(x) threshold_event(x, th = th, direction = ">"))
-
+write.csv(ts_event, "./data/HR_events.csv", row.names = F)
 
 

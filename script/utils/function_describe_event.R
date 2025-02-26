@@ -1,9 +1,12 @@
 
-describe_brady_event <- function(x, th, direction = "<", plot = F, type = seq(1,4)[1]){
+describe_brady_event <- function(x, th, direction = "<", plot = F, type = c(seq(1,4),0)[1]){
   
+  if(type == 0){
+    type <- sample(seq(1,4),1)
+  }
   # description string to return
   description <- ""
-  context <- paste0("This is a heart rate time series from a NICU infant. A Bradycardia event is defined as heart rate drop below ",th,". \n ")
+  context <- paste0("This is a heart rate time series from a NICU infant. A Bradycardia",th," event is defined as heart rate below ",th," beats per minute. \n ")
   events <- threshold_event_filtered(x, th, direction, plot=plot)
   event_descriptions <- list()
   if(length(events)>0){
@@ -12,15 +15,15 @@ describe_brady_event <- function(x, th, direction = "<", plot = F, type = seq(1,
       # ground-truth description generation
       # easy
       if(type == 1){
-        event_descriptions[[i]] <- paste0("There was a Bradycardia event (heart rate below ",th, " beats per minute",") from time ", event['start'], " to ",event['end'],".")
+        event_descriptions[[i]] <- paste0("There was a Bradycardia",th," event from time ", event['start'], " to time ",event['end'],".")
       }
       if(type == 2){
         event_descriptions[[i]] <- paste0("Since time ",round(event['start'])," the heart rate remained below ",th," for ",event['duration']," time points. ",
-                                          "Then the heart rate increased to ",x[event['offset']], " beats per minute",".")
+                                          "Then the heart rate increased to around ",x[event['offset']], " beats per minute",".")
       }
       # hard
       if(type == 3) {
-        event_descriptions[[i]] <- paste0("Since time around ", round(event['onset']), ", ",
+        event_descriptions[[i]] <- paste0("Since time ", round(event['onset']), ", ",
                                           "the heart rate began to drop, falling below ",th, " beats per minute"," at time ", round(event['start']), ", ",
                                           "and remained below ",th," for the next ", round(event['duration']), " time points.")
       }
