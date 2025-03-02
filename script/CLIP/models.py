@@ -2,35 +2,36 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from config import *
 from torchinfo import summary as nn_summary
+from config import *
 from data import *
+from evals import *
 from tqdm import tqdm
 
 class CLIPModel(nn.Module):
-    def __init__(self, ts_dim, text_dim, projection_dim=256, temperature=0.01):
+    def __init__(self, ts_dim, text_dim, projection_dim=128, temperature=0.01):
         super().__init__()
         self.W_ts = nn.Sequential(
-            nn.Linear(ts_dim, 256, bias=True),
+            nn.Linear(ts_dim, 128, bias=True),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 256, bias=True),
+            nn.Linear(128, 256, bias=True),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 256, bias=True),
+            nn.Linear(256, 128, bias=True),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, projection_dim, bias=True)
+            nn.Linear(128, projection_dim, bias=True)
             # nn.Linear(ts_dim, projection_dim, bias=False)
         )
         # change to sequential
         self.W_t = nn.Sequential(
-            nn.Linear(text_dim, 256, bias=True),
+            nn.Linear(text_dim, 128, bias=True),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 512, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 256, bias=True),
+            nn.Linear(128, 256, bias=True),
             nn.LeakyReLU(0.2),
             nn.Linear(256, 256, bias=True),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, projection_dim, bias=True)
+            nn.Linear(256, 128, bias=True),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, projection_dim, bias=True)
             # nn.Linear(text_dim, projection_dim, bias=False)
         )
         
@@ -146,18 +147,10 @@ def test_epoch(model, test_dataloader, device):
     return total_loss / num_batches
 
 
-def train(model, train_dataloader, test_dataloader, optimizer, num_epochs, device):
+
+def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, device):
     train_losses = []
     test_losses = []
-    
-    # Learning rate scheduler
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode='min',           # Reduce LR when metric stops decreasing
-        factor=0.9,          # Multiply LR by this factor
-        patience=100,          # Number of epochs to wait before reducing LR
-        min_lr=1e-20         # Don't reduce LR below this value
-    )
     
     # Keep track of best model
     best_loss = float('inf')
@@ -208,18 +201,9 @@ def train(model, train_dataloader, test_dataloader, optimizer, num_epochs, devic
         return train_losses, test_losses
 
 
-def get_prob(model, df_new, text_model_name):
-    ts_f, tx_f, labels = get_features(df_new, text_encoder_name = text_model_name)
-    dataloader = CLIPDataset(ts_f, tx_f, labels).dataloader(batch_size=1)
-    model.eval()
-    probs = []
-    with torch.no_grad():
-        for _, (ts_features, text_features, labels) in enumerate(dataloader):
-            ts_features = ts_features.to(device)
-            text_features = text_features.to(device)
-            labels = labels.to(device)
-            logits, _, _ = model(ts_features, text_features)
-            prob = F.softmax(logits, dim=1)
-            probs.append(prob)
-    probs = torch.cat(probs, dim=0)
-    return probs
+
+
+def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name):
+    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name)
+    eval_metrics = evaluate_predictions(y_true, y_prob, txt_ls)
+    return eval_metrics
