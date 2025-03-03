@@ -1,8 +1,28 @@
 # configurations goes here
-
 import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# data
+batch_size = 128
+text_encoder_name = 'sentence-transformers/all-mpnet-base-v2' # select from below
+ts_encoder_name = 'hr_vae_linear_medium'
+
+# model
+overwrite = False
+model_name = 'hey_you_forget_to_name_your_model'
+embedded_dim = 128 # dim to project ts and text to, and get logits
+init_lr = 0.0001 # initial learning rate
+patience = 50 # patience for learning rate decay
+
+# training
+num_saves = 200 # total epochs will be num_saves * num_epochs
+num_epochs = 50
+loss_type = 'block_diagonal'
+train_losses=[]
+test_losses=[]
+train_eval_metrics_list = []
+test_eval_metrics_list = []
+
 
 text_encoders = [
     # BERT-base
