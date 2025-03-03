@@ -104,6 +104,10 @@ def evaluate_predictions(y_true, y_prob, class_names=None):
     precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
         y_true_labels, y_pred_labels, average='macro'
     )
+    # Precision, Recall, F1 (macro and weighted)
+    precision_micro, recall_micro, f1_micro, _ = precision_recall_fscore_support(
+        y_true_labels, y_pred_labels, average='micro'
+    )
     precision_weighted, recall_weighted, f1_weighted, _ = precision_recall_fscore_support(
         y_true_labels, y_pred_labels, average='weighted'
     )
@@ -114,7 +118,10 @@ def evaluate_predictions(y_true, y_prob, class_names=None):
         'f1_macro': f1_macro,
         'precision_weighted': precision_weighted,
         'recall_weighted': recall_weighted,
-        'f1_weighted': f1_weighted
+        'f1_weighted': f1_weighted,
+        'precision_micro': precision_micro,
+        'recall_micro': recall_micro,
+        'f1_micro': f1_micro
     })
     
     # Confusion Matrix
@@ -130,7 +137,7 @@ def evaluate_predictions(y_true, y_prob, class_names=None):
     
     # PRC AUC
     try:
-        auc = average_precision_score(y_true, y_prob, multi_class='ovr')
+        auc = average_precision_score(y_true, y_prob)
         metrics['prc_auc'] = auc
     except:
         metrics['prc_auc'] = None
@@ -173,3 +180,16 @@ def evaluate_predictions(y_true, y_prob, class_names=None):
     # plt.show()
     
     return metrics
+
+
+def calculate_f1_precision_recall_from_cm(confusion_matrix):
+    # Extract values from confusion matrix
+    tn, fp = confusion_matrix[0]
+    fn, tp = confusion_matrix[1]
+    
+    # Calculate metrics
+    precision = tp / (tp + fp) if (tp + fp) != 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) != 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) != 0 else 0
+    
+    return {'precision': precision, 'recall': recall, 'f1': f1}

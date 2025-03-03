@@ -27,6 +27,8 @@ class CLIPModel(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(128, 256, bias=True),
             nn.LeakyReLU(0.2),
+            # nn.Linear(256, 256, bias=True),
+            # nn.LeakyReLU(0.2),
             nn.Linear(256, 256, bias=True),
             nn.LeakyReLU(0.2),
             nn.Linear(256, 128, bias=True),
@@ -54,7 +56,7 @@ def cross_entropy(preds, targets):
     # Compute cross entropy loss manually
     batch_size = preds.shape[0]
     exp_preds = torch.exp(preds)
-    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True)
+    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # sum over the columns, keep the rows
     log_probs = torch.log(softmax_probs)
     loss = -torch.sum(targets * log_probs) / batch_size
     return loss
@@ -65,7 +67,8 @@ def cross_entropy2(preds, targets):
     return loss
 
 
-def loss_block_diagonal(logits, labels):
+
+def loss_block_diagonal(logits, labels): # symmetric cross-entropy loss calculation
     # labels = labels.detach().cpu().numpy()
     # labels = pd.factorize(labels)[0]
     # labels = torch.tensor(labels, device=logits.device)
@@ -82,14 +85,14 @@ def loss_block_diagonal(logits, labels):
     loss = (loss_ts + loss_tx) / 2
     return loss
 
-def loss_similarity(logits, ts_embedded, text_embedded, model_temperature):
+def loss_similarity(logits, ts_embedded, text_embedded):
     batch_size = logits.shape[0]
     # Compute similarities
     with torch.no_grad():  # Detach the similarity computation
         ts_similarity = ts_embedded @ ts_embedded.T
         texts_similarity = text_embedded @ text_embedded.T
         # calculate targets using average similarity
-        targets = F.softmax( (ts_similarity + texts_similarity) / 2 * model_temperature,  dim=-1 )
+        targets = F.softmax( (ts_similarity + texts_similarity)/2,  dim=-1 )
     # assert targets is a matrix of size (batch_size, batch_size)
     assert targets.shape == (batch_size, batch_size)
     
@@ -98,7 +101,7 @@ def loss_similarity(logits, ts_embedded, text_embedded, model_temperature):
     return (loss_ts + loss_tx) / 2
 
 
-def train_epoch(model, train_dataloader, optimizer, device):
+def train_epoch(model, train_dataloader, optimizer, device, loss_type='block_diagonal'):
     model.train()
     total_loss = 0
     num_batches = 0
@@ -113,9 +116,10 @@ def train_epoch(model, train_dataloader, optimizer, device):
         logits, ts_embedded, text_embedded = model(ts_features, text_features)
 
         # Choose one loss function
-        loss = loss_block_diagonal(logits, labels)
-        # OR
-        # loss = loss_similarity(logits, ts_embedded, text_embedded, model.temperature)
+        if loss_type == 'block_diagonal':
+            loss = loss_block_diagonal(logits, labels)
+        elif loss_type == 'similarity':
+            loss = loss_similarity(logits, ts_embedded, text_embedded)
         loss.backward(retain_graph=True)
         optimizer.step()
 
@@ -125,7 +129,7 @@ def train_epoch(model, train_dataloader, optimizer, device):
     
     return total_loss / num_batches
 
-def test_epoch(model, test_dataloader, device):
+def test_epoch(model, test_dataloader, device, loss_type='block_diagonal'):
     model.eval()
     total_loss = 0
     num_batches = 0
@@ -137,9 +141,10 @@ def test_epoch(model, test_dataloader, device):
             labels = labels.to(device)
             
             logits, ts_embedded, text_embedded = model(ts_features, text_features)
-            loss = loss_block_diagonal(logits, labels)
-            # OR
-            # loss = loss_similarity(logits, ts_embedded, text_embedded, model.temperature)
+            if loss_type == 'block_diagonal':
+                loss = loss_block_diagonal(logits, labels)
+            elif loss_type == 'similarity':
+                loss = loss_similarity(logits, ts_embedded, text_embedded)
             
             total_loss += loss.item()
             num_batches += 1
@@ -148,7 +153,7 @@ def test_epoch(model, test_dataloader, device):
 
 
 
-def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, device):
+def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, device, loss_type='block_diagonal'):
     train_losses = []
     test_losses = []
     
@@ -159,10 +164,10 @@ def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_ep
     try:
         for epoch in range(num_epochs):#tqdm()
             # Train for one epoch
-            train_loss = train_epoch(model, train_dataloader, optimizer, device)
+            train_loss = train_epoch(model, train_dataloader, optimizer, device, loss_type)
             
             # Test for one epoch
-            test_loss = test_epoch(model, test_dataloader, device)
+            test_loss = test_epoch(model, test_dataloader, device, loss_type)
             
             # Store losses
             train_losses.append(train_loss)

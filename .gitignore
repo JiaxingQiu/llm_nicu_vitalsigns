@@ -4,6 +4,7 @@ lit/
 .DS_Store
 .Rhistory
 script/VAE/results/
+script/CLIP/results/
 script/WSDIST/results/
 __pycache__/
 .vscode/

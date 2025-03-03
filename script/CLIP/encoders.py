@@ -36,7 +36,7 @@ class TXTEncoder():
             from transformers import BertTokenizer, BertModel
             tokenizer = BertTokenizer.from_pretrained(self.model_name)
             model = BertModel.from_pretrained(self.model_name)
-            encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
+            encoded_input = tokenizer(text_list, return_tensors='pt', padding=True,truncation=True, max_length=512)
             output = model(**encoded_input)
             return output.pooler_output #output.last_hidden_state[:, 0, :]
             
