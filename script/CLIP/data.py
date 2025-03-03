@@ -1,9 +1,51 @@
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-
+from torch.nn import functional as F
 from config import *
 from encoders import *
+from models import get_similarity_targets
+
+class CLIPDataset(Dataset):
+    def __init__(self, ts_features, text_features, labels):
+        """
+        Args:
+            ts_features: time series features tensor [N, ts_dim]
+            text_features: text features tensor [N, text_dim]
+            labels: class labels tensor [N]
+        """
+        # Verify inputs are tensors
+        if not isinstance(ts_features, torch.Tensor):
+            ts_features = torch.FloatTensor(ts_features)
+        if not isinstance(text_features, torch.Tensor):
+            text_features = torch.FloatTensor(text_features)
+        if not isinstance(labels, torch.Tensor):
+            labels = torch.LongTensor(labels)
+            
+        assert len(ts_features) == len(text_features) == len(labels), "All inputs must have the same length"
+        self.ts_features = ts_features
+        self.text_features = text_features
+        self.labels = labels
+        self.targets_org = get_similarity_targets(ts_features, text_features)
+    
+    def __len__(self):
+        return len(self.labels)
+    
+    def __getitem__(self, idx):
+        return (
+            idx,
+            self.ts_features[idx],
+            self.text_features[idx],
+            self.labels[idx],
+            self.targets_org[idx]
+        )
+    def dataloader(self, batch_size=32):
+        return DataLoader(self, 
+                          batch_size=batch_size, 
+                          shuffle=False)
+    
+
 
 class TSFeature(Dataset):
     def __init__(self, norm_ts_df, encoder_model_name):
@@ -88,8 +130,6 @@ def get_ts_txt_org(df):
 
     # get text list txt_ls
     txt_ls = df.loc[:,'text'].tolist()
-
-
     labels = df.loc[:,'label'].tolist()
 
     return norm_ts_df, txt_ls, labels
@@ -105,40 +145,6 @@ def get_features(df,
     
     return ts_f, tx_f, labels
 
-
-class CLIPDataset(Dataset):
-    def __init__(self, ts_features, text_features, labels):
-        """
-        Args:
-            ts_features: time series features tensor [N, ts_dim]
-            text_features: text features tensor [N, text_dim]
-            labels: class labels tensor [N]
-        """
-        # Verify inputs are tensors
-        if not isinstance(ts_features, torch.Tensor):
-            ts_features = torch.FloatTensor(ts_features)
-        if not isinstance(text_features, torch.Tensor):
-            text_features = torch.FloatTensor(text_features)
-        if not isinstance(labels, torch.Tensor):
-            labels = torch.LongTensor(labels)
-            
-        assert len(ts_features) == len(text_features) == len(labels), "All inputs must have the same length"
-        self.ts_features = ts_features
-        self.text_features = text_features
-        self.labels = labels
-    
-    def __len__(self):
-        return len(self.labels)
-    
-    def __getitem__(self, idx):
-        return (
-            self.ts_features[idx],
-            self.text_features[idx],
-            self.labels[idx]
-        )
-    
-    def dataloader(self, batch_size=32):
-        return DataLoader(self, batch_size=batch_size, shuffle=False)
 
 
 # def get_dataloaders(ts_f, tx_f, labels, train_ratio=0.8, batch_size=32):

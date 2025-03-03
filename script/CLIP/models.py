@@ -5,7 +5,6 @@ import numpy as np
 from torchinfo import summary as nn_summary
 from config import *
 from data import *
-from evals import *
 from tqdm import tqdm
 
 class CLIPModel(nn.Module):
@@ -51,6 +50,22 @@ class CLIPModel(nn.Module):
         return logits, ts_embedded, text_embedded
     
 
+def get_similarity_targets(ts_features, text_features):
+    ts_features_norm = F.normalize(ts_features, p=2, dim=1)  # dim=1 for row-wise normalization
+    text_features_norm = F.normalize(text_features, p=2, dim=1)
+    ts_similarity = ts_features_norm @ ts_features_norm.T
+    texts_similarity = text_features_norm @ text_features_norm.T
+    targets = (ts_similarity + texts_similarity)/2
+    # scale each rwo to sum up to 1
+    # targets = F.softmax(targets, dim=-1)
+    # scale each row to [0,1]
+    row_min = targets.min(dim=1, keepdim=True)[0]
+    row_max = targets.max(dim=1, keepdim=True)[0]
+    targets = (targets - row_min) / (row_max - row_min)
+
+    targets = (targets + targets.T)/2  # re-symmetrize again after scaling
+    return targets
+
 
 def cross_entropy(preds, targets):
     # Compute cross entropy loss manually
@@ -89,10 +104,7 @@ def loss_similarity(logits, ts_embedded, text_embedded):
     batch_size = logits.shape[0]
     # Compute similarities
     with torch.no_grad():  # Detach the similarity computation
-        ts_similarity = ts_embedded @ ts_embedded.T
-        texts_similarity = text_embedded @ text_embedded.T
-        # calculate targets using average similarity
-        targets = F.softmax( (ts_similarity + texts_similarity)/2,  dim=-1 )
+        targets = get_similarity_targets(ts_embedded, text_embedded)
     # assert targets is a matrix of size (batch_size, batch_size)
     assert targets.shape == (batch_size, batch_size)
     
@@ -101,17 +113,25 @@ def loss_similarity(logits, ts_embedded, text_embedded):
     return (loss_ts + loss_tx) / 2
 
 
+def loss_similarity_org(logits, targets_org):
+    loss_ts = cross_entropy(logits, targets_org)
+    loss_tx = cross_entropy(logits.T, targets_org.T)
+    return (loss_ts + loss_tx) / 2
+    
+
 def train_epoch(model, train_dataloader, optimizer, device, loss_type='block_diagonal'):
     model.train()
     total_loss = 0
     num_batches = 0
     
-    for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
-        
+    for batch_idx, (id, ts_features, text_features, labels, targets_org) in enumerate(train_dataloader):
+
         ts_features = ts_features.to(device)
         text_features = text_features.to(device)
         labels = labels.to(device)
-        
+        targets_org = targets_org[:,id]
+        targets_org = targets_org.to(device)
+
         optimizer.zero_grad()
         logits, ts_embedded, text_embedded = model(ts_features, text_features)
 
@@ -120,6 +140,8 @@ def train_epoch(model, train_dataloader, optimizer, device, loss_type='block_dia
             loss = loss_block_diagonal(logits, labels)
         elif loss_type == 'similarity':
             loss = loss_similarity(logits, ts_embedded, text_embedded)
+        elif loss_type == 'similarity_org':
+            loss = loss_similarity_org(logits, targets_org)
         loss.backward(retain_graph=True)
         optimizer.step()
 
@@ -135,17 +157,21 @@ def test_epoch(model, test_dataloader, device, loss_type='block_diagonal'):
     num_batches = 0
     
     with torch.no_grad():
-        for batch_idx, (ts_features, text_features, labels) in enumerate(test_dataloader):
+        for batch_idx, (id, ts_features, text_features, labels, targets_org) in enumerate(test_dataloader):
+            
             ts_features = ts_features.to(device)
             text_features = text_features.to(device)
             labels = labels.to(device)
+            targets_org = targets_org[:,id]
+            targets_org = targets_org.to(device)
             
             logits, ts_embedded, text_embedded = model(ts_features, text_features)
             if loss_type == 'block_diagonal':
                 loss = loss_block_diagonal(logits, labels)
             elif loss_type == 'similarity':
                 loss = loss_similarity(logits, ts_embedded, text_embedded)
-            
+            elif loss_type == 'similarity_org':
+                loss = loss_similarity_org(logits, targets_org)
             total_loss += loss.item()
             num_batches += 1
     
@@ -206,9 +232,3 @@ def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_ep
         return train_losses, test_losses
 
 
-
-
-def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name):
-    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name)
-    eval_metrics = evaluate_predictions(y_true, y_prob, txt_ls)
-    return eval_metrics

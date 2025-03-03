@@ -193,3 +193,12 @@ def calculate_f1_precision_recall_from_cm(confusion_matrix):
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) != 0 else 0
     
     return {'precision': precision, 'recall': recall, 'f1': f1}
+
+
+
+
+
+def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name):
+    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name)
+    eval_metrics = evaluate_predictions(y_true, y_prob, txt_ls)
+    return eval_metrics
