@@ -5,6 +5,7 @@ lit/
 .Rhistory
 script/VAE/results/
 script/CLIP/results/
+script/CLIP/tmp/
 script/WSDIST/results/
 __pycache__/
 .vscode/

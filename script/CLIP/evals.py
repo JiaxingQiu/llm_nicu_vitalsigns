@@ -92,8 +92,13 @@ def get_eval_metrics(y_true, y_prob):
     if torch.is_tensor(y_prob):
         y_prob = y_prob.detach().numpy()
     
+    # remove rows with nan in y_prob
+    y_true = y_true[~np.isnan(y_prob).any(axis=1)]
+    y_prob = y_prob[~np.isnan(y_prob).any(axis=1)]
+
     # Assert shapes match
     assert y_true.shape == y_prob.shape, f"Shape mismatch: y_true {y_true.shape} != y_prob {y_prob.shape}"
+    
     
     # Get predicted class labels
     y_pred_labels = np.argmax(y_prob, axis=1)
@@ -247,12 +252,20 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         ax1.grid(True)
 
         # Plot metrics on the right subplot
+        # metrics_config = {
+        #     'F1': {'color': 'navy', 'label': 'F1'},
+        #     'Precision': {'color': 'darkgreen', 'label': 'Precision'},
+        #     'Recall': {'color': 'darkred', 'label': 'Recall'},
+        #     'AUROC': {'color': 'indigo', 'label': 'AUROC'},
+        #     'AUPRC': {'color': 'darkorange', 'label': 'AUPRC'}
+        # }
+
         metrics_config = {
-            'F1': {'color': 'navy', 'label': 'F1'},
-            'Precision': {'color': 'darkgreen', 'label': 'Precision'},
-            'Recall': {'color': 'darkred', 'label': 'Recall'},
-            'AUROC': {'color': 'indigo', 'label': 'AUROC'},
-            'AUPRC': {'color': 'darkorange', 'label': 'AUPRC'}
+            'F1': {'color': 'blue', 'label': 'F1'},
+            'Precision': {'color': 'green', 'label': 'Precision'},
+            'Recall': {'color': 'red', 'label': 'Recall'},
+            'AUROC': {'color': 'purple', 'label': 'AUROC'},  # Changed from cyan
+            'AUPRC': {'color': 'orange', 'label': 'AUPRC'}   # Changed from yellow
         }
 
         # Plot lines and create labels

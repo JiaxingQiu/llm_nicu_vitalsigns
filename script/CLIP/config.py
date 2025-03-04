@@ -23,6 +23,24 @@ test_losses=[]
 train_eval_metrics_list = []
 test_eval_metrics_list = []
 
+text_config = {
+    'cl': {
+        'die7d': True,
+        'fio2': False
+    },
+    'demo': {
+        'ga_bwt': True,
+        'gre': False, # gender_race_ethnicity
+        'apgar_mage': False
+    },
+    'ts': {
+        'sumb': True, # sum_brady
+        'sumd': False, # sum_desat
+        'simple': True,
+        'full': False,
+        'event1': False
+    }
+}
 
 text_encoders = [
     # BERT-base
@@ -58,3 +76,17 @@ ts_encoders = [
     'hr_vae_linear_medium',
     'sp_vae_linear_medium'
 ]
+
+
+def get_true_components(config):
+    """Get all components that are True in the config."""
+    true_components = []
+    
+    # Flatten nested dictionary and get True values
+    for category, params in config.items():
+        true_components += [
+            key for key, value in params.items() 
+            if value is True
+        ]
+    
+    return true_components

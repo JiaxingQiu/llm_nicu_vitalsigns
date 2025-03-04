@@ -165,3 +165,243 @@ def get_features(df,
 #     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 #     return train_loader, test_loader
+
+
+
+# --------------------------text input processing----------------------------------
+def extract_event1(text):
+    """
+    Extract the first event description from the text.
+    """
+    # Find start of Event 1
+    start_marker = "\n Event 1: "
+    end_marker = "\n Event 2: "
+    
+    # initialize event1_str
+    event1_str = ""
+
+    # Get start position
+    start_pos = text.find(start_marker)
+    if start_pos == -1:  # If Event 1 not found
+        return event1_str
+    start_pos += len(start_marker)
+    # Get end position
+    end_pos = text.find(end_marker)
+    if end_pos == -1:  # If Event 2 not found, take until end
+        return text[start_pos:].strip()
+    
+    # Return text between markers
+    event1_str = text[start_pos:end_pos].strip()
+    
+    return event1_str
+
+    
+def summarize_brady(text):
+    """
+    Count events and identify the single event type in the text.
+    
+    Args:
+        text (str): Input text containing event descriptions
+        
+    Returns:
+        str: Summary like "2 Bradycardia90 (heart rate below 90) events happened."
+              or "1 Bradycardia90 (heart rate below 90) event happened."
+    """
+    if not isinstance(text, str):
+        return "No Bradycardia events."
+    
+    # Count events
+    event_count = text.count("\n Event")
+    if event_count == 0:
+        return "No Bradycardia events."
+    
+    # Find the event name and threshold
+    import re
+    brady_match = re.search(r'Bradycardia(\d+)', text)
+
+    if brady_match:
+        event_name = brady_match.group(0)  # e.g., "Bradycardia90"
+        threshold = brady_match.group(1)    # e.g., "90"
+        event_word = "event" if event_count == 1 else "events"
+        return f"{event_count} {event_name} {event_word} (heart rate below {threshold}) happened."
+    else:
+        event_word = "event" if event_count == 1 else "events"
+        return f"{event_count} Bradycardia {event_word} happened."
+    
+def summarize_desat(text):
+    """
+    Count events and identify the single event type in the text.
+    
+    Args:
+        text (str): Input text containing event descriptions
+        
+    Returns:
+        str: Summary like "2 Desaturation90 (spo2 below 90) events happened." or "1 Desaturation90 (spo2 below 90) event happened."
+    """
+    if not isinstance(text, str):
+        return "No Desaturation events."
+    
+    # Count events
+    event_count = text.count("\n Event")
+    if event_count == 0:
+        return "No Desaturation events."
+    
+    # Find the event name and threshold
+    import re
+    desat_match = re.search(r'Desaturation(\d+)', text)
+
+    if desat_match:
+        event_name = desat_match.group(0)  # e.g., "Desaturation90"
+        threshold = desat_match.group(1)    # e.g., "90"
+        event_word = "event" if event_count == 1 else "events"
+        return f"{event_count} {event_name} {event_word} (spo2 below {threshold}) happened."
+    else:
+        event_word = "event" if event_count == 1 else "events"
+        return f"{event_count} Desaturation {event_word} happened."
+
+def gen_demo(row,
+             ga_bwt=True,
+             gre=False, # gender_race_ethnicity
+             apgar_mage=False):
+    """
+    Generate a demographic description string from a single row.
+    
+    Args:
+        row (pd.Series): A row containing demographic information:
+            - EGA: Gestational age in weeks
+            - BWT: Birth weight in grams
+            - Male: 0 for female, 1 for male
+            - Black: 0 for white, 1 for black
+            - Hispanic: 0 for non-Hispanic, 1 for Hispanic
+            - Apgar5: APGAR score at 5 minutes
+            - Maternal Age: Mother's age in years
+            
+    Returns:
+        str: Formatted demographic description
+    """
+
+    def is_valid_number(value):
+        """Check if value is a valid number (not NaN, None, or invalid)"""
+        if value is None:
+            return False
+        if pd.isna(value):  # Catches pandas NA, NaN
+            return False
+        if np.isnan(value) if isinstance(value, float) else False:  # Catches numpy NaN
+            return False
+        try:
+            float(value)  # Try converting to float
+            return True
+        except (ValueError, TypeError):
+            return False
+        
+    ga_str = ""
+    weight_str = ""
+    gender_str = ""
+    race_str = ""
+    ethnicity_str = ""
+    apgar_str = ""
+    mother_str = ""
+
+    # Format each component
+    if ga_bwt:
+        if is_valid_number(row['EGA']): 
+            ga_str = f"This infant has gestational age {int(round(row['EGA'], 1))} weeks. "
+        if is_valid_number(row['BWT']):
+            weight_str = f"Birth weight is {int(round(row['BWT'], 1))} grams. "
+    
+    if gre:
+        gender_str = "This infant is Male " if row['Male'] == 1 else "This infant is Female "
+        race_str = "Black " if row['Black'] == 1 else "non-Black "
+        ethnicity_str = "Hispanic. " if row['Hispanic'] == 1 else "non-Hispanic. "
+    if apgar_mage:
+        if is_valid_number(row['Apgar5']):
+            apgar_str = f"The Apgar5 scores {int(round(row['Apgar5'], 1))}. "
+        if is_valid_number(row['Maternal Age']):
+            mother_str = f"Mother is {int(round(row['Maternal Age'], 1))} years old. "
+    
+    # if all _str are "", return empty string
+    if not (ga_str or weight_str or gender_str or race_str or ethnicity_str or apgar_str or mother_str):
+        return ""
+    # Combine all parts
+    return f"{ga_str}{weight_str}{gender_str}{race_str}{ethnicity_str}{apgar_str}{mother_str}"
+    
+    
+
+def gen_cl_event(row,
+                 die7d=True,
+                 fio2=False):
+    """
+    Generate a clinical event description string from a single row.
+    
+    Args:
+        - row (pd.Series): A row containing clinical information.
+        - die7d (bool): if ture, return death in 7 days.
+        - fio2 (bool): if ture, return the FiO2 event.
+    """
+    die7d_str = ""
+    fio2_str = ""
+
+    if die7d:
+        die7d_str = 'This infant will die in 7 days. ' if row['Died'] == 1 else 'This infant will survive. '
+    
+    if fio2:
+        fio2_str = f"The FIO2 is {int(round(row['FIO2']))}."
+    
+    return f"{die7d_str}{fio2_str}"
+
+
+def gen_ts_event(row,
+                 sumb=True, # sum_brady
+                 sumd=False, # sum_desat
+                 simple=True,
+                 full=False,
+                 event1=False):
+    """
+    Generate a time series event description string from a single row.
+
+    Args:
+        - row (pd.Series): A row containing time series information.
+        - sumb (bool): if ture, return summarize of count and definition of Bradycardia event.
+        - sumd (bool): if ture, return summarize of count and definition of Desaturation event.
+        - simple (bool): if ture, return simplified time series event description.
+        - full (bool): if ture, return full event description.
+        - event1 (bool): if ture, return the first event description.
+    """
+
+    sum_str = ""
+    simple_str = ""
+    full_str = ""
+    event1_str = ""
+
+    if sumb:
+        sum_str = summarize_brady(row['event_description'])
+        sum_str = sum_str + " "
+    if sumd:
+        sum_str = summarize_desat(row['event_description'])
+        sum_str = sum_str + " "
+    if simple:
+        x = row['event_description']
+        simple_str = '\n'.join(x.split('\n')[1:]) if isinstance(x, str) else x
+        simple_str = simple_str + " "
+    if full:
+        full_str = row['event_description']
+        full_str = full_str + " "
+    if event1:
+        event1_str = extract_event1(row['event_description'])
+        event1_str = event1_str + " "
+    
+    return f"{sum_str}{simple_str}{full_str}{event1_str}"
+
+
+def gen_text_input_column(df, text_config):
+    # demographic description
+    df['demo'] = df.apply(gen_demo, axis=1, **text_config['demo'])
+    # clinical events
+    df['cl_event'] = df.apply(gen_cl_event, axis=1, **text_config['cl'])
+    # time series events
+    df['ts_event'] = df.apply(gen_ts_event, axis=1, **text_config['ts'])
+    
+    df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_event']
+    print(df['text'][0])
+
+    return df
