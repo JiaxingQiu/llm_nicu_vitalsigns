@@ -19,9 +19,18 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("using device: ", device)
 
 
-def prepare_data(data_path, batch_size = 128):
+def prepare_data(data_path, batch_size = 128, normalize=True):
     # data_path = './data/PAS Challenge HR Data.xlsx'    
-    df = pd.read_excel(data_path, sheet_name='Sheet1', engine="calamine")
+    if '.xlsx' in data_path:
+        df = pd.read_excel(data_path, sheet_name='Sheet1', engine="calamine")
+    elif '.csv' in data_path:
+        df = pd.read_csv(data_path)
+    else:
+        raise ValueError(f"Unsupported file format: {data_path}")
+    # convert all column names to string
+    df.columns = df.columns.astype(str)
+    # keep columns 'VitalID' 'VitalTime' and '1' : '300'
+    df = df[['VitalID', 'VitalTime'] + [f'{i}' for i in range(1, 301)]]
     df['id_time'] = 'id_' + df['VitalID'].astype(str) + '_' + df['VitalTime'].astype(str)
     df.set_index('id_time', inplace=True, drop=True)
     df.drop(columns=['VitalID', 'VitalTime'], inplace=True)  
@@ -66,7 +75,10 @@ def prepare_data(data_path, batch_size = 128):
     df_scaled = df.copy() # [obs, time]
     df_scaled = df_scaled.astype(float)  # Convert all columns to float
     df_scaled.loc[:,:] = data_scaled
-    dataset = VSTSDataset(df_scaled)
+    if normalize:
+        dataset = VSTSDataset(df_scaled)
+    else:
+        dataset = VSTSDataset(df)
 
     # Split dataset into train and test in the ratio of 80:20
     train_dataset, test_dataset = random_split(dataset, [0.8,0.2])

@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+
 
 # global variables
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -340,3 +342,144 @@ class VAE_LSTM(nn.Module):
         z = self.reparameterization(mean, log_var)
         x_hat = self.decode(z)
         return x_hat, mean, log_var
+
+
+
+class BetaVAE_Medium(nn.Module):
+    
+    def __init__(self, 
+                 sequence_length=300, 
+                 latent_dim=32, 
+                 hidden_dim=128,
+                 beta=4.0,  # Beta parameter for KL weight
+                 gamma=1000.0,  # For capacity-controlled version
+                 c_max=25.0,   # Maximum capacity
+                 iter_threshold=100000):  # For capacity annealing
+        super().__init__()
+        
+        self.sequence_length = sequence_length
+        self.latent_dim = latent_dim
+        self.beta = beta
+        self.gamma = gamma
+        self.c_max = c_max
+        self.iter_threshold = iter_threshold
+        self.current_iter = 0
+        
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Linear(sequence_length, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim*2),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*2),
+            nn.Linear(hidden_dim*2, hidden_dim*4),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*4),
+            nn.Linear(hidden_dim*4, hidden_dim*2),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*2),
+            nn.Linear(hidden_dim*2, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim)
+        )
+        
+        # Latent space parameters
+        self.fc_mu = nn.Linear(hidden_dim, latent_dim)
+        self.fc_var = nn.Linear(hidden_dim, latent_dim)
+        
+        # Decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim*2),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*2),
+            nn.Linear(hidden_dim*2, hidden_dim*4),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*4),
+            nn.Linear(hidden_dim*4, hidden_dim*2),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim*2),
+            nn.Linear(hidden_dim*2, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(hidden_dim, sequence_length)
+        )
+        
+    def encode(self, x):
+        x = self.encoder(x)
+        return self.fc_mu(x), self.fc_var(x)
+    
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+    
+    def decode(self, z):
+        return self.decoder(z)
+    
+    def forward(self, x):
+        mu, log_var = self.encode(x)
+        z = self.reparameterize(mu, log_var)
+        return self.decode(z), mu, log_var
+    
+    def get_capacity(self):
+        """Compute capacity for controlled capacity increase"""
+        if self.current_iter > self.iter_threshold:
+            return self.c_max
+        return self.c_max * (self.current_iter / self.iter_threshold)
+    
+    def loss_function(self, recon_x, x, mu, log_var, beta=None):
+        """
+        Compute Beta-VAE loss with optional capacity control
+        """
+        if beta is None:
+            beta = self.beta
+            
+        # Reconstruction loss (MSE for continuous data)
+        recon_loss = F.mse_loss(recon_x, x, reduction='mean')
+        
+        # KL divergence
+        kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        
+        # Capacity controlled version
+        C = self.get_capacity()
+        kl_loss = self.gamma * torch.abs(kl_div - C)
+        
+        # Total loss
+        total_loss = recon_loss + beta * kl_loss
+        
+        return total_loss, recon_loss, kl_div
+
+# Training loop
+# def train_beta_vae(model, train_loader, optimizer, epoch, device):
+#     model.train()
+#     train_loss = 0
+#     for batch_idx, data in enumerate(train_loader):
+#         data = data.to(device)
+#         optimizer.zero_grad()
+        
+#         # Forward pass
+#         recon_batch, mu, log_var = model(data)
+        
+#         # Compute loss
+#         loss, recon_loss, kl_div = model.loss_function(recon_batch, data, mu, log_var)
+        
+#         # Backward pass
+#         loss.backward()
+#         optimizer.step()
+        
+#         train_loss += loss.item()
+#         model.current_iter += 1
+        
+#         # Log progress
+#         if batch_idx % 100 == 0:
+#             print(f'Train Epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)} '
+#                   f'({100. * batch_idx / len(train_loader):.0f}%)]\t'
+#                   f'Loss: {loss.item():.6f}\t'
+#                   f'Recon: {recon_loss.item():.6f}\t'
+#                   f'KL: {kl_div.item():.6f}')
+    
+#     return train_loss / len(train_loader)

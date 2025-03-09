@@ -2,26 +2,41 @@
 import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# data
-batch_size = 128
-text_encoder_name = 'sentence-transformers/all-mpnet-base-v2' # select from below
-ts_encoder_name = 'hr_vae_linear_medium'
 
-# model
-overwrite = False
-model_name = 'hey_you_forget_to_name_your_model'
-embedded_dim = 128 # dim to project ts and text to, and get logits
-init_lr = 0.0001 # initial learning rate
-patience = 50 # patience for learning rate decay
+def set_seed(seed: int = 333) -> None:
+    """
+    Set random seeds for reproducibility.
+    
+    Args:
+        seed (int): Random seed value. Default is 42.
+    """
+    import random
+    import numpy as np
+    import torch
+    from sklearn.utils import check_random_state
+    
+    # Python random
+    random.seed(seed)
+    
+    # Numpy
+    np.random.seed(seed)
+    
+    # PyTorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # for multi-GPU
+    
+    # Deterministic operations
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-# training
-num_saves = 200 # total epochs will be num_saves * num_epochs
-num_epochs = 50
-loss_type = 'block_diagonal'
-train_losses=[]
-test_losses=[]
-train_eval_metrics_list = []
-test_eval_metrics_list = []
+    # Scikit-learn
+    check_random_state(seed)
+    
+    print(f"Random seed set to {seed}")
+
+# Usage
+set_seed(333)  # or any other seed value
 
 text_config = {
     'cl': {
@@ -38,9 +53,64 @@ text_config = {
         'sumd': False, # sum_desat
         'simple': True,
         'full': False,
-        'event1': False
+        'event1': False,
+        'succ_inc': True,
+        'histogram': True
     }
 }
+
+# Initialize the config dictionary with default values
+config_dict = {
+    # Device
+    'device': device,
+    
+    # Data settings
+    'batch_size': 128,
+    'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
+    'ts_encoder_name': 'hr_vae_linear_medium',
+    'ts_aug': False,
+    'ts_normalize': True,
+    'ts_encode': True,
+    'block_target': True,
+    'balance': False,
+    
+    # Model settings
+    'model_name': 'hey_you_forget_to_name_your_model',
+    'embedded_dim': 128,
+    'init_lr': 0.0001,
+    'patience': 50,
+    
+    # Training settings
+    'num_saves': 200,
+    'num_epochs': 50,
+    'loss_type': 'block_diagonal',
+    'txt_ls': None,
+    
+    # Text configuration
+    'text_config': text_config
+}
+
+def update_config(**kwargs):
+    """Update configuration with new values"""
+    config_dict.update(kwargs)
+    return config_dict
+
+def get_config_dict():
+    """Get current configuration"""
+    return config_dict.copy()
+
+# Usage example:
+"""
+# Update specific values
+update_config(
+    model_name='new_model_name',
+    batch_size=64,
+    ts_aug=True
+)
+
+# Get current config
+current_config = get_config_dict()
+"""
 
 text_encoders = [
     # BERT-base

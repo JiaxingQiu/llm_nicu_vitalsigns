@@ -5,6 +5,8 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import functional as F
 from config import *
 from encoders import *
+from augmentor import augment_ts_df
+from describer import generate_descriptions
 from models import get_similarity_targets
 
 class CLIPDataset(Dataset):
@@ -48,14 +50,27 @@ class CLIPDataset(Dataset):
 
 
 class TSFeature(Dataset):
-    def __init__(self, norm_ts_df, encoder_model_name):
-        self.ts_df = norm_ts_df # normalized time series dataframe. Shape: [obs, time]
+    def __init__(self, ts_df, encoder_model_name, normalize=True, encode_ts=True):
+        if normalize:
+            data = ts_df.values
+            obs_mean = np.nanmean(data, axis=1)
+            osb_std = np.nanstd(data, axis=1)
+            osb_std = np.where(osb_std == 0, 1e-8, osb_std)
+            data_t = (data.T - obs_mean.T) / osb_std.T
+            data_scaled = data_t.T
+            norm_ts_df = ts_df.copy() # [obs, time]
+            norm_ts_df = norm_ts_df.astype(float)
+            norm_ts_df.loc[:,:] = data_scaled
+            ts_df = norm_ts_df
+        self.ts_df = ts_df # normalized time series dataframe. Shape: [obs, time]
         self.encoder_model_name = encoder_model_name
         self.encoder = TSEncoder(model_name = encoder_model_name)
-        self.features = self.encode_batch(self.ts_df) # tensor shape: [obs, embed_dim]
-        # Convert to tensor if not already
-        if not isinstance(self.features, torch.Tensor):
-            self.features = torch.tensor(self.features)
+        if encode_ts:
+            self.features = self.encode_batch(self.ts_df) # tensor shape: [obs, embed_dim]
+        else:
+            self.features = self.ts_df.values # numpy array shape: [obs, time]
+        # onvert to tensor
+        self.features = torch.tensor(self.features, dtype=torch.float32)
 
     def encode_batch(self, df, batch_size=32):
         encoded = []
@@ -118,28 +133,20 @@ def get_ts_txt_org(df):
     
     # get normalized time series dataframe norm_ts_df
     ts_df = df.loc[:,'1':'300']
-    data = ts_df.values
-    obs_mean = np.nanmean(data, axis=1)
-    osb_std = np.nanstd(data, axis=1)
-    osb_std = np.where(osb_std == 0, 1e-8, osb_std)
-    data_t = (data.T - obs_mean.T) / osb_std.T
-    data_scaled = data_t.T
-    norm_ts_df = ts_df.copy() # [obs, time]
-    norm_ts_df = norm_ts_df.astype(float)
-    norm_ts_df.loc[:,:] = data_scaled
-
     # get text list txt_ls
     txt_ls = df.loc[:,'text'].tolist()
     labels = df.loc[:,'label'].tolist()
 
-    return norm_ts_df, txt_ls, labels
+    return ts_df, txt_ls, labels
 
 
 def get_features(df, 
                  ts_encoder_name='hr_vae_linear_medium', 
-                 text_encoder_name='sentence-transformers/all-mpnet-base-v2'):
-    norm_ts_df, txt_ls, labels = get_ts_txt_org(df)
-    ts_f = TSFeature(norm_ts_df, encoder_model_name=ts_encoder_name).features
+                 text_encoder_name='sentence-transformers/all-mpnet-base-v2',
+                 normalize=True,
+                 encode_ts=True):
+    ts_df, txt_ls, labels = get_ts_txt_org(df)
+    ts_f = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=normalize, encode_ts=encode_ts).features
     tx_f = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features
     labels = torch.tensor(labels)
     
@@ -355,7 +362,9 @@ def gen_ts_event(row,
                  sumd=False, # sum_desat
                  simple=True,
                  full=False,
-                 event1=False):
+                 event1=False,
+                 succ_inc=True,
+                 histogram=True):
     """
     Generate a time series event description string from a single row.
 
@@ -372,36 +381,163 @@ def gen_ts_event(row,
     simple_str = ""
     full_str = ""
     event1_str = ""
+    histogram_str = ""
+    succ_inc_str = ""
 
     if sumb:
-        sum_str = summarize_brady(row['event_description'])
+        sum_str = summarize_brady(row['description_ts_event'])
         sum_str = sum_str + " "
     if sumd:
-        sum_str = summarize_desat(row['event_description'])
+        sum_str = summarize_desat(row['description_ts_event'])
         sum_str = sum_str + " "
     if simple:
-        x = row['event_description']
+        x = row['description_ts_event']
         simple_str = '\n'.join(x.split('\n')[1:]) if isinstance(x, str) else x
         simple_str = simple_str + " "
     if full:
-        full_str = row['event_description']
+        full_str = row['description_ts_event']
         full_str = full_str + " "
     if event1:
-        event1_str = extract_event1(row['event_description'])
+        event1_str = extract_event1(row['description_ts_event'])
         event1_str = event1_str + " "
-    
-    return f"{sum_str}{simple_str}{full_str}{event1_str}"
+    if histogram:
+        histogram_str = row['description_histogram']
+        histogram_str = histogram_str + " "
+    if succ_inc:
+        succ_inc_str = row['description_succ_inc']
+        succ_inc_str = succ_inc_str + " "
+    return f"{sum_str}{simple_str}{full_str}{event1_str}{histogram_str}{succ_inc_str}"
 
 
 def gen_text_input_column(df, text_config):
+    df.columns = df.columns.astype(str)
     # demographic description
     df['demo'] = df.apply(gen_demo, axis=1, **text_config['demo'])
     # clinical events
     df['cl_event'] = df.apply(gen_cl_event, axis=1, **text_config['cl'])
     # time series events
-    df['ts_event'] = df.apply(gen_ts_event, axis=1, **text_config['ts'])
+    df['ts_description'] = df.apply(gen_ts_event, axis=1, **text_config['ts'])
     
-    df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_event']
+    df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']
+    
     print(df['text'][0])
 
     return df
+
+def add_augmented_ts_desc(df_sub,
+                    config_dict, 
+                    pretrained_model_path='./pretrained/hr_vae_linear_medium.pth',
+                    K = 50):
+    ts_df = df_sub.loc[:, '1':'300'].astype(float)
+    df_aug_sub = augment_ts_df(ts_df, pretrained_model_path, K = K)
+    df_aug_desc = generate_descriptions(ts_df = df_aug_sub.loc[:, '1':'300'], id_df = df_aug_sub.loc[:, ['rowid']])
+    df_aug_sub = df_aug_sub.merge(df_aug_desc, on='rowid', how='left')
+
+
+    if 'rowid' in df_sub.columns:
+        # maintain the original rowid
+        df_rowid = df_sub[['rowid']].copy()
+        df_rowid['raw_rowid'] = df_rowid['rowid']
+        df_rowid.reset_index(drop=True, inplace=True)
+        df_rowid['rowid'] = df_rowid.index.to_series()
+        df_aug_sub = df_aug_sub.merge(df_rowid, on='rowid', how='left')
+        df_aug_sub['rowid'] = df_aug_sub['raw_rowid']
+        df_aug_sub.drop(columns=['raw_rowid'], inplace=True)
+
+
+    columns_to_keep = ['rowid'] + list(df_sub.columns[~df_sub.columns.isin(df_aug_sub.columns)])
+    df_raw = df_sub[columns_to_keep]
+    df_aug_sub = df_aug_sub.merge(df_raw, on='rowid', how='left')
+    df_aug_sub = gen_text_input_column(df_aug_sub, config_dict['text_config'])
+    # df_sub = pd.concat([df_sub, df_aug_sub])
+    print(f"Augmented {len(df_aug_sub)} rows")
+    return df_aug_sub
+
+
+def augment_balance_data(df_sub, 
+                         txt_ls_org,
+                         y_col, 
+                         config_dict, 
+                         pretrained_model_path='./pretrained/hr_vae_linear_medium.pth', 
+                         K = 50,
+                         max_size = None):
+    if not config_dict['balance']:
+        aug_data = add_augmented_ts_desc(df_sub, config_dict, pretrained_model_path, K)
+        return pd.concat([df_sub, aug_data], ignore_index=True)
+    
+    # Get original class sizes and calculate needed augmentations
+    class_sizes = df_sub[y_col].value_counts()
+    if max_size is None:
+        max_size = class_sizes.max()
+    else:
+        max_size = min(max_size, class_sizes.max())
+    
+    print("Original class distribution:")
+    for class_label in txt_ls_org:
+        print(f"Class {class_label}: {class_sizes.get(class_label, 0)}")
+    print(f"\nTarget size per class: {max_size}")
+    
+    final_dfs = [df_sub]  # Start with original data
+    
+    # Only augment classes that need it
+    for class_label in txt_ls_org:
+        if class_label not in class_sizes or class_sizes[class_label] < max_size:
+            df_class = df_sub[df_sub[y_col] == class_label]
+            needed_samples = max_size - class_sizes.get(class_label, 0)
+            
+            # Calculate exact K needed to avoid over-generation
+            k = int(np.ceil(needed_samples / len(df_class)))
+            
+            if k > 0:
+                aug_data = add_augmented_ts_desc(df_class, config_dict, pretrained_model_path, K=k)
+                if len(aug_data) > needed_samples:
+                    aug_data = aug_data.head(needed_samples)
+                final_dfs.append(aug_data)
+    
+    df_balanced = pd.concat(final_dfs, ignore_index=True)
+    
+    print("\nFinal class distribution:")
+    final_dist = df_balanced[y_col].value_counts()
+    for class_label in txt_ls_org:
+        print(f"Class {class_label}: {final_dist.get(class_label, 0)}")
+    
+    return df_balanced
+        
+
+def label_death7d(df, df_y, id_col='VitalID'):
+    
+    # df_y must have columns ID, DiedNICU, DeathAge
+    if id_col not in df_y.columns or 'DiedNICU' not in df_y.columns or 'DeathAge' not in df_y.columns:
+        raise ValueError("df_y must have columns ID, DiedNICU, and DeathAge")
+    # df must have columns ID and Age
+    if id_col not in df.columns or 'Age' not in df.columns:
+        raise ValueError("df must have columns ID and Age")
+    
+    # Create a copy of df_day to avoid modifying original
+    df_labeled = df.copy()
+
+    # Initialize the death label column with 0
+    df_labeled['Died'] = 0
+
+    # Filter patients who died in NICU
+    died_patients = df_y[df_y['DiedNICU'] == 1]
+
+    # For each patient who died
+    for _, patient in died_patients.iterrows():
+        id = patient[id_col]
+        death_age = patient['DeathAge']
+        
+        # Find records for this patient within 7 days of death
+        mask = (
+            (df_labeled[id_col] == id) & 
+            (df_labeled['Age'] >= death_age - 7) & 
+            (df_labeled['Age'] <= death_age)
+        )
+        
+        # Label these records as 1
+        df_labeled.loc[mask, 'Died'] = 1
+    # Check distribution by TestID
+    print("\nSample of patients with positive labels:")
+    print(df_labeled[df_labeled['Died'] == 1].groupby(id_col).size().sort_values(ascending=False).head(5))
+
+    return df_labeled

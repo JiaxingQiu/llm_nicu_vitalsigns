@@ -4,8 +4,8 @@ from data import *
 from models import *
 
 
-def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name):
-    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name)
+def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name, ts_normalize, ts_encode):
+    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name, ts_normalize, ts_encode)
     eval_metrics = get_eval_metrics(y_true, y_prob)
     return eval_metrics
 
@@ -14,10 +14,12 @@ def get_logit(model,
               ts_df, # df of new time series
               txt_ls, # list of possible outcome texts
               ts_encoder_name,
-              text_encoder_name):
+              text_encoder_name,
+              ts_normalize,
+              ts_encode):
     
     model.eval()
-    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
+    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=ts_normalize, encode_ts=ts_encode).features
     tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
 
     # calculate the logits for all observations and outcomes, one outcome all observations per each 
@@ -112,13 +114,13 @@ def get_eval_metrics(y_true, y_prob):
     
     # Precision, Recall, F1 
     precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
-        y_true_labels, y_pred_labels, average='macro'
+        y_true_labels, y_pred_labels, average='macro', zero_division=0 
     )
     precision_micro, recall_micro, f1_micro, _ = precision_recall_fscore_support(
-        y_true_labels, y_pred_labels, average='micro'
+        y_true_labels, y_pred_labels, average='micro', zero_division=0 
     )
     precision_weighted, recall_weighted, f1_weighted, _ = precision_recall_fscore_support(
-        y_true_labels, y_pred_labels, average='weighted'
+        y_true_labels, y_pred_labels, average='weighted', zero_division=0 
     )
     
     
@@ -136,7 +138,7 @@ def get_eval_metrics(y_true, y_prob):
     # Per-class metrics
     class_metrics = {}
     precision, recall, f1, support = precision_recall_fscore_support(
-        y_true_labels, y_pred_labels, average=None
+        y_true_labels, y_pred_labels, average=None, zero_division=0
     )
 
     for i in range(y_true.shape[1]):
@@ -211,21 +213,6 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         test_auroc = [eval_metrics['auroc_per_class'][pos_class_index] for eval_metrics in test_eval_metrics_list]
         test_auprc = [eval_metrics['auprc_per_class'][pos_class_index] for eval_metrics in test_eval_metrics_list]
         
-        # train_metrics = []
-        # for cm in confusion_matrices_train:
-        #     metrics = calculate_f1_precision_recall_from_cm(cm)
-        #     train_metrics.append(metrics)
-        #     test_metrics = []
-        # for cm in confusion_matrices_test:
-        #     metrics = calculate_f1_precision_recall_from_cm(cm)
-        #     test_metrics.append(metrics)
-        # train_f1 = [m['f1'] for m in train_metrics]
-        # train_precision = [m['precision'] for m in train_metrics]
-        # train_recall = [m['recall'] for m in train_metrics]
-        # test_f1 = [m['f1'] for m in test_metrics]
-        # test_precision = [m['precision'] for m in test_metrics]
-        # test_recall = [m['recall'] for m in test_metrics]
-        # epochs = range(1, len(train_f1) + 1)
     else:
         train_f1 = [eval_metrics['f1_macro'] for eval_metrics in train_eval_metrics_list]
         train_precision = [eval_metrics['precision_macro'] for eval_metrics in train_eval_metrics_list]
@@ -280,8 +267,11 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
                     color=config['color'], 
                     linestyle='--',
                     label=f'{config["label"]} (Test)')
-        # Single legend
+         # add horizontal line at y=0.5 for F1
+        ax2.axhline(y=0.5, color='darkgray', linestyle='--')
+       # Single legend
         ax2.legend(loc='center left', bbox_to_anchor=(1.05, 0.5))
+        ax1.grid(True)
         # Adjust layout
         plt.tight_layout()
         plt.subplots_adjust(right=0.85)

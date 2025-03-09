@@ -7,44 +7,141 @@ from config import *
 from data import *
 from tqdm import tqdm
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_dim, hidden_dim, dropout=0.2):
+        super().__init__()
+        self.proj = nn.Sequential(
+            # First transformation
+            nn.Linear(in_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(dropout),  # Dropout after activation
+            
+            # Second transformation
+            nn.Linear(hidden_dim, in_dim),
+            nn.BatchNorm1d(in_dim),
+            nn.Dropout(dropout)   # Dropout before residual connection
+        )
+        self.activation = nn.LeakyReLU(0.2)
+        
+    def forward(self, x):
+        return self.activation(x + self.proj(x))
+
+class TransformerBlock(nn.Module):
+    def __init__(self, dim, hidden_dim, num_heads=8, dropout=0.1):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(dim)
+        self.attention = nn.MultiheadAttention(
+            embed_dim=dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+        
+        self.norm2 = nn.LayerNorm(dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout)
+        )
+        
+    def forward(self, x):
+        # Pre-norm attention
+        normed = self.norm1(x)
+        attended, _ = self.attention(normed, normed, normed)
+        x = x + attended
+        
+        # Pre-norm MLP
+        normed = self.norm2(x)
+        x = x + self.mlp(normed)
+        return x
+
 class CLIPModel(nn.Module):
     def __init__(self, ts_dim, text_dim, projection_dim=128, temperature=0.01):
         super().__init__()
+
         self.W_ts = nn.Sequential(
-            nn.Linear(ts_dim, 128, bias=True),
+            # Initial projection
+            nn.Linear(ts_dim, 128),
+            nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2),
-            nn.Linear(128, 256, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 128, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, projection_dim, bias=True)
-            # nn.Linear(ts_dim, projection_dim, bias=False)
+            nn.Dropout(0.1),
+            
+            # ResNet blocks with expanding hidden dimensions
+            ResidualBlock(128, 256, dropout=0.1),
+            ResidualBlock(128, 256, dropout=0.1),
+            ResidualBlock(128, 512, dropout=0.2),
+            ResidualBlock(128, 512, dropout=0.2),
+            ResidualBlock(128, 1024, dropout=0.3),
+            ResidualBlock(128, 1024, dropout=0.3),
+            ResidualBlock(128, 2048, dropout=0.4),
+            ResidualBlock(128, 2048, dropout=0.4),
+    
+            
+            # Final projection
+            nn.Linear(128, projection_dim)#,
+            # nn.BatchNorm1d(projection_dim) # normalizes across batch observations
         )
-        # change to sequential
+
+
         self.W_t = nn.Sequential(
-            nn.Linear(text_dim, 128, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, 256, bias=True),
-            nn.LeakyReLU(0.2),
-            # nn.Linear(256, 256, bias=True),
-            # nn.LeakyReLU(0.2),
-            nn.Linear(256, 256, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 128, bias=True),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, projection_dim, bias=True)
-            # nn.Linear(text_dim, projection_dim, bias=False)
+            # Initial projection from encoded dimension
+            nn.Linear(text_dim, 512),  # Expand to transformer width
+            nn.LayerNorm(512),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            
+            # Transformer blocks (using CLIP specs)
+            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
+            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
+            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
+            
+            # Final projection to match projection_dim
+            nn.Linear(512, projection_dim)#,
+            # nn.LayerNorm(projection_dim) # normalizes across features
         )
+        # self.W_ts = nn.Sequential(
+        #     nn.Linear(ts_dim, 128, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(128, 256, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     # nn.Linear(256, 512, bias=True),
+        #     # nn.LeakyReLU(0.2),
+        #     # nn.Linear(512, 512, bias=True),
+        #     # nn.LeakyReLU(0.2),
+        #     # nn.Linear(512, 256, bias=True),
+        #     # nn.LeakyReLU(0.2),
+        #     nn.Linear(256, 128, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(128, projection_dim, bias=True)
+        #     # nn.Linear(ts_dim, projection_dim, bias=False)
+        # )
+        # # change to sequential
+        # self.W_t = nn.Sequential(
+        #     nn.Linear(text_dim, 128, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(128, 256, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(256, 256, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(256, 128, bias=True),
+        #     nn.LeakyReLU(0.2),
+        #     nn.Linear(128, projection_dim, bias=True)
+        #     # nn.Linear(text_dim, projection_dim, bias=False)
+        # )
         
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
         print(nn_summary(self))
         
     def forward(self, ts_features, text_features):
-        # Project and normalize
+        # Project and L2 normalize (make vectors unit length)
         ts_embedded = F.normalize(self.W_ts(ts_features), dim=1)    # ts_embedded is a matrix of size (obs, projection_dim)
         text_embedded = F.normalize(self.W_t(text_features), dim=1)
         
-        # Calculate similarity # logits is a matrix of size (obs, obs)
+        # Calculate cosine similarity, scaled by temperature
+        # logits is a matrix of size (obs, obs)
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
         # print(logits)
         return logits, ts_embedded, text_embedded
@@ -209,7 +306,7 @@ def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_ep
             
             # Get current learning rate
             current_lr = optimizer.param_groups[0]['lr']
-            
+
             # Print progress
             print(f'Epoch [{epoch+1}/{num_epochs}]')
             print(f'\tTraining Loss: {train_loss:.6f}')
