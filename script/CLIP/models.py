@@ -5,71 +5,48 @@ import numpy as np
 from torchinfo import summary as nn_summary
 from config import *
 from data import *
-from tqdm import tqdm
+from encoders import *
 
-class ResidualBlock(nn.Module):
-    def __init__(self, in_dim, hidden_dim, dropout=0.2):
-        super().__init__()
-        self.proj = nn.Sequential(
-            # First transformation
-            nn.Linear(in_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(dropout),  # Dropout after activation
-            
-            # Second transformation
-            nn.Linear(hidden_dim, in_dim),
-            nn.BatchNorm1d(in_dim),
-            nn.Dropout(dropout)   # Dropout before residual connection
-        )
-        self.activation = nn.LeakyReLU(0.2)
-        
-    def forward(self, x):
-        return self.activation(x + self.proj(x))
-
-class TransformerBlock(nn.Module):
-    def __init__(self, dim, hidden_dim, num_heads=8, dropout=0.1):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(dim)
-        self.attention = nn.MultiheadAttention(
-            embed_dim=dim,
-            num_heads=num_heads,
-            dropout=dropout,
-            batch_first=True
-        )
-        
-        self.norm2 = nn.LayerNorm(dim)
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, dim),
-            nn.Dropout(dropout)
-        )
-        
-    def forward(self, x):
-        # Pre-norm attention
-        normed = self.norm1(x)
-        attended, _ = self.attention(normed, normed, normed)
-        x = x + attended
-        
-        # Pre-norm MLP
-        normed = self.norm2(x)
-        x = x + self.mlp(normed)
-        return x
 
 class CLIPModel(nn.Module):
-    def __init__(self, ts_dim, text_dim, projection_dim=128, temperature=0.01):
+    def __init__(self, 
+                 ts_dim, 
+                 text_dim, 
+                 output_dim=128,
+                 temperature=0.01,
+                 ts_encoder=None,
+                 text_encoder=None):
         super().__init__()
-
-        self.W_ts = nn.Sequential(
+        
+        # Handle both class and instance cases for ts_encoder
+        if ts_encoder is None:
+            self.W_ts = self._default_ts_encoder(ts_dim, output_dim)
+        elif isinstance(ts_encoder, type):  # if ts_encoder is a class
+            self.W_ts = ts_encoder(ts_dim, output_dim)
+        else:  # if ts_encoder is an instance
+            self.W_ts = ts_encoder
+        
+        # Similar handling for text_encoder
+        if text_encoder is None:
+            self.W_t = self._default_text_encoder(text_dim, output_dim)
+        elif isinstance(text_encoder, type):  # if text_encoder is a class
+            self.W_t = text_encoder(text_dim, output_dim)
+        else:  # if text_encoder is an instance
+            self.W_t = text_encoder
+        
+        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
+        print(nn_summary(self))
+    
+    def _default_ts_encoder(self, ts_dim, output_dim):
+        """Default time series encoder if none is provided"""
+        return nn.Sequential(
             # Initial projection
             nn.Linear(ts_dim, 128),
             nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.1),
             
-            # ResNet blocks with expanding hidden dimensions
+            # ResNet blocks
             ResidualBlock(128, 256, dropout=0.1),
             ResidualBlock(128, 256, dropout=0.1),
             ResidualBlock(128, 512, dropout=0.2),
@@ -78,74 +55,60 @@ class CLIPModel(nn.Module):
             ResidualBlock(128, 1024, dropout=0.3),
             ResidualBlock(128, 2048, dropout=0.4),
             ResidualBlock(128, 2048, dropout=0.4),
-    
             
             # Final projection
-            nn.Linear(128, projection_dim)#,
-            # nn.BatchNorm1d(projection_dim) # normalizes across batch observations
+            nn.Linear(128, output_dim)
         )
-
-
-        self.W_t = nn.Sequential(
-            # Initial projection from encoded dimension
-            nn.Linear(text_dim, 512),  # Expand to transformer width
+    
+    def _default_text_encoder(self, text_dim, output_dim):
+        """Default text encoder if none is provided"""
+        return nn.Sequential(
+            # Initial projection
+            nn.Linear(text_dim, 512),
             nn.LayerNorm(512),
             nn.GELU(),
             nn.Dropout(0.1),
             
-            # Transformer blocks (using CLIP specs)
+            # Transformer blocks
             TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
             TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
             TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
             
-            # Final projection to match projection_dim
-            nn.Linear(512, projection_dim)#,
-            # nn.LayerNorm(projection_dim) # normalizes across features
+            # Final projection
+            nn.Linear(512, output_dim)
         )
-        # self.W_ts = nn.Sequential(
-        #     nn.Linear(ts_dim, 128, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(128, 256, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     # nn.Linear(256, 512, bias=True),
-        #     # nn.LeakyReLU(0.2),
-        #     # nn.Linear(512, 512, bias=True),
-        #     # nn.LeakyReLU(0.2),
-        #     # nn.Linear(512, 256, bias=True),
-        #     # nn.LeakyReLU(0.2),
-        #     nn.Linear(256, 128, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(128, projection_dim, bias=True)
-        #     # nn.Linear(ts_dim, projection_dim, bias=False)
-        # )
-        # # change to sequential
-        # self.W_t = nn.Sequential(
-        #     nn.Linear(text_dim, 128, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(128, 256, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(256, 256, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(256, 128, bias=True),
-        #     nn.LeakyReLU(0.2),
-        #     nn.Linear(128, projection_dim, bias=True)
-        #     # nn.Linear(text_dim, projection_dim, bias=False)
-        # )
-        
-        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
-        print(nn_summary(self))
         
     def forward(self, ts_features, text_features):
-        # Project and L2 normalize (make vectors unit length)
-        ts_embedded = F.normalize(self.W_ts(ts_features), dim=1)    # ts_embedded is a matrix of size (obs, projection_dim)
+        ts_embedded = F.normalize(self.W_ts(ts_features), dim=1)
         text_embedded = F.normalize(self.W_t(text_features), dim=1)
         
-        # Calculate cosine similarity, scaled by temperature
-        # logits is a matrix of size (obs, obs)
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
-        # print(logits)
         return logits, ts_embedded, text_embedded
-    
+
+# # way 0: default
+# model = CLIPModel(
+#         ts_dim=300,
+#         text_dim=768,
+#         output_dim=config_dict['embedded_dim']
+#     )
+# # way 1: Passing an instance
+# resnet_encoder = ResNetEncoder(ts_dim=300, output_dim=128)
+# model = CLIPModel(
+#     ts_dim=300,
+#     text_dim=768,
+#     output_dim=128,
+#     ts_encoder=resnet_encoder,
+#     text_encoder=None
+# )
+# # way 2: Passing a class
+# model = CLIPModel(
+#     ts_dim=300,
+#     text_dim=768,
+#     output_dim=128,
+#     ts_encoder=ResNetEncoder,
+#     text_encoder=None
+# )
+
 
 def get_similarity_targets(ts_features, text_features):
     ts_features_norm = F.normalize(ts_features, p=2, dim=1)  # dim=1 for row-wise normalization

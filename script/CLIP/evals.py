@@ -227,36 +227,37 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         
     
     if plot:
-        # Create figure with two subplots side by side
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        # Create figure with three subplots side by side
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(24, 6))
+
         # Plot losses on the left subplot
         ax1.plot(train_losses, 'b-', label='Train Loss')
         ax1.plot(test_losses, 'r-', label='Test Loss')
         ax1.set_xlabel('Epoch')
         ax1.set_ylabel('Loss')
         ax1.set_title('Training and Test Loss')
-        ax1.legend()
-        ax1.grid(True)
 
-        # Plot metrics on the right subplot
-        # metrics_config = {
-        #     'F1': {'color': 'navy', 'label': 'F1'},
-        #     'Precision': {'color': 'darkgreen', 'label': 'Precision'},
-        #     'Recall': {'color': 'darkred', 'label': 'Recall'},
-        #     'AUROC': {'color': 'indigo', 'label': 'AUROC'},
-        #     'AUPRC': {'color': 'darkorange', 'label': 'AUPRC'}
-        # }
+        # Set titles for other subplots
+        # ax2.set_title('AUROC and Recall')
+        ax2.set_xlabel('Saves')
 
+        # ax3.set_title('F1, Precision, and AUPRC')
+        ax3.set_xlabel('Saves')
+        # Split metrics into two groups
         metrics_config = {
-            'F1': {'color': 'blue', 'label': 'F1'},
-            'Precision': {'color': 'green', 'label': 'Precision'},
-            'Recall': {'color': 'red', 'label': 'Recall'},
-            'AUROC': {'color': 'purple', 'label': 'AUROC'},  # Changed from cyan
-            'AUPRC': {'color': 'orange', 'label': 'AUPRC'}   # Changed from yellow
+            'ax2_metrics': {
+                'AUROC': {'color': 'purple', 'label': 'AUROC'},
+                'Recall': {'color': 'red', 'label': 'Recall'}
+            },
+            'ax3_metrics': {
+                'F1': {'color': 'blue', 'label': 'F1'},
+                'Precision': {'color': 'green', 'label': 'Precision'},
+                'AUPRC': {'color': 'orange', 'label': 'AUPRC'}
+            }
         }
 
-        # Plot lines and create labels
-        for metric, config in metrics_config.items():
+        # Plot lines for ax2 (AUROC and Recall)
+        for metric, config in metrics_config['ax2_metrics'].items():
             # Train (solid line)
             ax2.plot(saves, eval(f'train_{metric.lower()}'), 
                     color=config['color'], 
@@ -267,46 +268,39 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
                     color=config['color'], 
                     linestyle='--',
                     label=f'{config["label"]} (Test)')
-         # add horizontal line at y=0.5 for F1
-        ax2.axhline(y=0.5, color='darkgray', linestyle='--')
-       # Single legend
-        ax2.legend(loc='center left', bbox_to_anchor=(1.05, 0.5))
+
+        # Plot lines for ax3 (F1, Precision, AUPRC)
+        for metric, config in metrics_config['ax3_metrics'].items():
+            # Train (solid line)
+            ax3.plot(saves, eval(f'train_{metric.lower()}'), 
+                    color=config['color'], 
+                    linestyle='-',
+                    label=f'{config["label"]} (Train)')
+            # Test (dashed line)
+            ax3.plot(saves, eval(f'test_{metric.lower()}'), 
+                    color=config['color'], 
+                    linestyle='--',
+                    label=f'{config["label"]} (Test)')
+        if binary:
+            # Set y-axis limits
+            ax2.set_ylim(0, 1)
+            ax3.set_ylim(0, 0.3)
+        # Add horizontal line at y=0.5 for ax2
+        ax2.axhline(y=0.5, color='darkgray', linestyle='--', linewidth=2)
+        ax3.axhline(y=0.1, color='darkgray', linestyle='--', linewidth=2)
+
+        # Add legends
+        ax2.legend(loc='upper right')
+        ax3.legend(loc='upper right')
+        
+        # Add grid
         ax1.grid(True)
+        ax2.grid(True)
+        ax3.grid(True)
+
         # Adjust layout
         plt.tight_layout()
         plt.subplots_adjust(right=0.85)
-
-        # # Create figure with two subplots side by side
-        # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-        # # Plot losses on the left subplot
-        # ax1.plot(train_losses, 'b-', label='Train Loss')
-        # ax1.plot(test_losses, 'r-', label='Test Loss')
-        # ax1.set_xlabel('Epoch')
-        # ax1.set_ylabel('Loss')
-        # ax1.set_title('Training and Test Loss')
-        # ax1.legend()
-        # ax1.grid(True)
-
-        # # Plot metrics on the right subplot
-        # ax2.plot(saves, train_f1, 'b-', label='Train F1')
-        # ax2.plot(saves, test_f1, 'b--', label='Test F1')
-        # ax2.plot(saves, train_precision, 'g-', label='Train Precision')
-        # ax2.plot(saves, test_precision, 'g--', label='Test Precision')
-        # ax2.plot(saves, train_recall, 'r-', label='Train Recall')
-        # ax2.plot(saves, test_recall, 'r--', label='Test Recall')
-        # ax2.plot(saves, train_auroc, 'c-', label='Train AUROC')
-        # ax2.plot(saves, test_auroc, 'c--', label='Test AUROC')
-        # ax2.plot(saves, train_auprc, 'y-', label='Train AUPRC')
-        # ax2.plot(saves, test_auprc, 'y--', label='Test AUPRC')
-        # # legend -- as test, - as train
-        # ax2.set_xlabel('Saves')
-        # ax2.set_ylabel('Score')
-        # ax2.set_title('Training and Test Metrics')
-        # ax2.legend()
-        # ax2.grid(True)
-
-        # plt.tight_layout()
-        # plt.show()
 
     if plot_confusion_matrices:
         # plot confusion matrices

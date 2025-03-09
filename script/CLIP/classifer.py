@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchinfo import summary as nn_summary
 from evals import *
+from encoders import *
 
 
 
@@ -45,154 +46,6 @@ class GeneralBinaryClassifier(nn.Module):
         return torch.softmax(self(x), dim=1)
 
 
-class ResNetEncoder(nn.Module):
-    def __init__(self, ts_dim, hidden_dim=128, num_blocks=8, dropout=0.1):
-        super().__init__()
-        
-        layers = [
-            # Initial projection
-            nn.Linear(ts_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(dropout)
-        ]
-        
-        # Add residual blocks
-        for i in range(num_blocks):
-            layers.append(
-                ResidualBlock(
-                    hidden_dim, 
-                    hidden_dim,  # Keep dimension constant
-                    dropout=dropout*(1+i/num_blocks)
-                )
-            )
-        
-        # Final projection
-        layers.extend([
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim)
-        ])
-        
-        self.encoder = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.encoder(x)
-
-# resnet_encoder = ResNetEncoder(ts_dim=300, hidden_dim=128)
-# model = GeneralBinaryClassifier(resnet_encoder)
-
-
-
-class Lambda(nn.Module):
-    def __init__(self, func):
-        super().__init__()
-        self.func = func
-    
-    def forward(self, x):
-        return self.func(x) 
-
-class CNNEncoder(nn.Module):
-    def __init__(self, ts_dim, hidden_dim=128, num_channels=[32, 64], kernel_size=5, dropout=0.2):
-        """
-        CNN encoder for time series.
-        
-        Args:
-            ts_dim (int): Input time series length
-            hidden_dim (int): Final hidden dimension
-            num_channels (list): Number of channels for each conv layer
-            kernel_size (int): Kernel size for conv layers
-            dropout (float): Dropout rate
-        """
-        super().__init__()
-        
-        layers = [Lambda(lambda x: x.unsqueeze(1))]  # Add channel dimension
-        in_channels = 1
-        
-        # Add conv blocks
-        for out_channels in num_channels:
-            layers.extend([
-                nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size//2),
-                nn.ReLU(),
-                nn.BatchNorm1d(out_channels),
-                nn.MaxPool1d(2),
-                nn.Dropout(dropout)
-            ])
-            in_channels = out_channels
-        
-        layers.append(nn.Flatten())
-        
-        # Calculate output dimension
-        with torch.no_grad():
-            x = torch.zeros(2, ts_dim)
-            for layer in layers:
-                x = layer(x)
-            conv_out_dim = x.shape[1]
-        
-        # Add final linear projection to match hidden_dim
-        layers.append(nn.Linear(conv_out_dim, hidden_dim))
-        
-        self.encoder = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.encoder(x)
-
-# # CNN Encoder
-# cnn = CNNEncoder(
-#     ts_dim=300,
-#     hidden_dim=128,
-#     num_channels=[32, 64, 128],  # Three conv layers
-#     kernel_size=5,
-#     dropout=0.2
-# )
-# model = GeneralBinaryClassifier(cnn)
-
-class LinearEncoder(nn.Module):
-    def __init__(self, ts_dim, hidden_dim=128, num_layers=6, dropout=0.2):
-        """
-        Multi-layer perceptron encoder.
-        
-        Args:
-            ts_dim (int): Input time series length
-            hidden_dim (int): Hidden dimension
-            num_layers (int): Number of linear layers
-            dropout (float): Dropout rate
-        """
-        super().__init__()
-        
-        layers = []
-        
-        # First layer (input projection)
-        layers.extend([
-            nn.Linear(ts_dim, hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(dropout)
-        ])
-        
-        # Hidden layers
-        for _ in range(num_layers - 1):
-            layers.extend([
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(dropout)
-            ])
-        
-        self.encoder = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.encoder(x)
-    
-
-# # Linear Encoder
-# mlp = LinearEncoder(
-#     ts_dim=300,
-#     hidden_dim=128,
-#     num_layers=6,
-#     dropout=0.2
-# )
-# # Create classifiers
-# model = GeneralBinaryClassifier(mlp)
-
-
 class TSSEDataset(Dataset):
 
     def __init__(self, ts, y):
@@ -217,9 +70,6 @@ class TSSEDataset(Dataset):
         return DataLoader(self, 
                           batch_size=batch_size, 
                           shuffle=False)
-    
-
-
 
 
 def prepare_basedata(df, y, batch_size = 128, normalize=True):
