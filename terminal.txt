@@ -1,0 +1,25 @@
+# 1. Navigate to your git directory
+
+# 2. Create a virtual environment
+python -m venv clip_env
+
+# 3. Activate the virtual environment
+source clip_env/bin/activate
+
+# 4. Install from requirements.txt
+pip install -r requirements.txt
+
+# 5. Add the environment to Jupyter
+pip install jupyter notebook
+pip install ipykernel
+
+# 6. Remove existing kernel
+jupyter kernelspec uninstall clip_env
+
+# 7. Install kernel again
+python -m ipykernel install --user --name=clip_env --display-name="CLIP"
+
+# 8. Verify installation location
+jupyter kernelspec list
+which jupyter 
+

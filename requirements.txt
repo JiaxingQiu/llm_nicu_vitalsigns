@@ -1,0 +1,8 @@
+sentence_transformers==3.0.1
+torch==2.2.0
+torchinfo==1.8.0
+numpy==1.24.3
+pandas==2.2.0
+rpy2==3.5.17
+matplotlib==3.10.1
+python-calamine==0.3.1

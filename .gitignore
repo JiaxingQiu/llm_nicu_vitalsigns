@@ -10,3 +10,4 @@ script/Data/tmp/
 script/WSDIST/results/
 __pycache__/
 .vscode/
+clip_env/
