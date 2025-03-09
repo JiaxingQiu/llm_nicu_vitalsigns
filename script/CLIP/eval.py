@@ -1,7 +1,7 @@
 
 from config import *
 from data import *
-from models import *
+from clip import *
 
 
 def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name, ts_normalize, ts_encode):

@@ -3,8 +3,8 @@ import torch.nn as nn
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchinfo import summary as nn_summary
-from evals import *
-from encoders import *
+from eval import *
+from encoder import *
 
 
 

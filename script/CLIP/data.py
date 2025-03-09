@@ -4,10 +4,10 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import functional as F
 from config import *
-from encoders import *
+from encoder import *
 from augmentor import augment_ts_df
 from describer import generate_descriptions
-from models import get_similarity_targets
+from clip import get_similarity_targets
 
 class CLIPDataset(Dataset):
     def __init__(self, ts_features, text_features, labels):

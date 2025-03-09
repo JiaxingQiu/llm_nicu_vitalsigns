@@ -5,7 +5,7 @@ import numpy as np
 from torchinfo import summary as nn_summary
 from config import *
 from data import *
-from encoders import *
+from encoder import *
 
 
 class CLIPModel(nn.Module):

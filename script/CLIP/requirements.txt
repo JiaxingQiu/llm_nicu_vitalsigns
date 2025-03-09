@@ -1,0 +1,7 @@
+sentence_transformers==3.0.1
+xformers
+torch
+torchinfo
+torchvision
+numpy
+pandas

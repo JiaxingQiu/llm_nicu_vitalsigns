@@ -2,7 +2,7 @@ from config import *
 import torch
 from torch.utils.data import Dataset
 import numpy as np
-from encoders import *
+from encoder import *
 from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt

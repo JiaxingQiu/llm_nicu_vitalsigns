@@ -1,9 +1,6 @@
 from config import *
 import torch
 import torch.nn as nn
-#%pip install sentence_transformers==3.0.1
-#%pip install xformers
-
 
 # ------- pretrained encoders -------
 class TXTEncoder():
