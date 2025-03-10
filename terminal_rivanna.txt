@@ -1,44 +1,77 @@
+# ——— first time ———— 
 # 1. Set up R directories first
 mkdir -p ~/R/{goolf,x86_64-pc-linux-gnu-library}
 cd ~/R/x86_64-pc-linux-gnu-library
+#ln -s ../goolf/4.4
 
-
-
-
-
-
-
-
-
-# Change to your project directory
+# 2. Change to project directory
 cd /home/jq2uw/llm_nicu_vitalsigns
 
-# Load miniforge module
+# 3. Load required modules
+module purge  # Clear all modules
 module load miniforge
+#module load gcc/11.4.0 openmpi/4.1.4 R/4.4.1
+cat ~/.Renviron
 
-# Create conda environment in your project directory
-conda create --prefix ./clip_env python=3.11
+# 4. Create conda environment with R
+conda create --prefix ./clip_env python=3.11 rpy2
 
-# Activate the environment
+# 5. Activate the environment
 conda activate ./clip_env
 
-# Install required packages
-Pip install ipykernel 
+# 6. Install Python packages
+conda install ipykernel jupyter jupyterlab
 
-# Install from requirements.txt
+# 7. Install from requirements.txt
 pip install -r requirements.txt
 
-# Register the kernel
+# 8. Set up R environment variables
+export R_HOME=$(R RHOME)
+#export R_LIBS_USER=~/R/goolf/4.4
+export R_LIBS_USER=~/R/goolf/4.3
+export LD_LIBRARY_PATH=$R_HOME/lib:$LD_LIBRARY_PATH
+
+# 9. Register the kernel
 python -m ipykernel install --user --name clip_env --display-name "CLIP"
 
-# Verify kernel installation
+# 10. Verify installations
 jupyter kernelspec list
+python -c "import rpy2; print('rpy2 version:', rpy2.__version__)"
+R --version
 
 
 
+# find the r path
+echo $R_HOME
 
-For Future Sessions:
-# In terminal before starting JupyterLab
+
+# in python script, on the top
+
+import os
+# Set R environment variables using the conda environment path
+r_home = '/sfs/gpfs/tardis/home/jq2uw/llm_nicu_vitalsigns/clip_env/lib/R' # use “echo $R_HOME” to find r path
+os.environ['R_HOME'] = r_home
+os.environ['R_LIBS'] = f"{r_home}/library"
+os.environ['R_LIBS_USER'] = os.path.expanduser('~/R/goolf/4.3')
+os.environ['LD_LIBRARY_PATH'] = f"{r_home}/lib:" + os.environ.get('LD_LIBRARY_PATH', '')
+
+# ——— future sessions ———— 
+0. Terminal setup (before starting JupyterLab): (optional)
+# Change to project directory
 cd /home/jq2uw/llm_nicu_vitalsigns
+# Load modules
 module load miniforge
+module load gcc/11.4.0 openmpi/4.1.4 R/4.4.1
+# Activate environment
 conda activate ./clip_env
+
+
+1. In Jupyter notebook:
+import os
+# Set R environment variables using the conda environment path
+r_home = '/sfs/gpfs/tardis/home/jq2uw/llm_nicu_vitalsigns/clip_env/lib/R' # use “echo $R_HOME” to find r path
+os.environ['R_HOME'] = r_home
+os.environ['R_LIBS'] = f"{r_home}/library"
+os.environ['R_LIBS_USER'] = os.path.expanduser('~/R/goolf/4.3')
+os.environ['LD_LIBRARY_PATH'] = f"{r_home}/lib:" + os.environ.get('LD_LIBRARY_PATH', '')
+

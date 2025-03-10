@@ -284,7 +284,7 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         if binary:
             # Set y-axis limits
             ax2.set_ylim(0, 1)
-            ax3.set_ylim(0, 0.3)
+            ax3.set_ylim(0, 0.5)
         # Add horizontal line at y=0.5 for ax2
         ax2.axhline(y=0.5, color='darkgray', linestyle='--', linewidth=2)
         ax3.axhline(y=0.1, color='darkgray', linestyle='--', linewidth=2)
