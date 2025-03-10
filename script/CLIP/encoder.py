@@ -12,6 +12,7 @@ class TXTEncoder():
         
 
     def encode_text_list(self, text_list):
+        text_list = text_list.to(device)
         # sentence transformer
         if self.model_name in ['sentence-transformers/all-mpnet-base-v2',  # Optimized for sentence embeddings
                           'sentence-transformers/paraphrase-mpnet-base-v2',  # Optimized for paraphrase detection
@@ -35,6 +36,7 @@ class TXTEncoder():
             from transformers import BertTokenizer, BertModel
             tokenizer = BertTokenizer.from_pretrained(self.model_name)
             model = BertModel.from_pretrained(self.model_name)
+            model = model.to(device)
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True,truncation=True, max_length=512)
             output = model(**encoded_input)
             return output.pooler_output #output.last_hidden_state[:, 0, :]
@@ -49,6 +51,7 @@ class TXTEncoder():
             from transformers import RobertaTokenizer, RobertaModel
             tokenizer = RobertaTokenizer.from_pretrained(self.model_name)
             model = RobertaModel.from_pretrained(self.model_name)
+            model = model.to(device)
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
             output = model(**encoded_input)
             return output.pooler_output #output.last_hidden_state[:, 0, :]
@@ -62,6 +65,7 @@ class TXTEncoder():
             from transformers import DistilBertTokenizer, DistilBertModel
             tokenizer = DistilBertTokenizer.from_pretrained(self.model_name)
             model = DistilBertModel.from_pretrained(self.model_name)
+            model = model.to(device)
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
             output = model(**encoded_input)
             return output.last_hidden_state.mean(dim=1) # output.last_hidden_state[:, 0, :]
@@ -72,6 +76,7 @@ class TXTEncoder():
             from transformers import AutoTokenizer, MPNetModel
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             model = MPNetModel.from_pretrained(self.model_name)
+            model = model.to(device) 
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
             output = model(**encoded_input)
             return output.pooler_output 

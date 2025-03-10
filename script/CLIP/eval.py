@@ -1,26 +1,38 @@
-
 from config import *
 from data import *
 from clip import *
 
 
-def eval_model(model, y_true, ts_df, txt_ls, ts_encoder_name, text_encoder_name, ts_normalize, ts_encode):
-    _, y_prob = get_logit(model, ts_df, txt_ls, ts_encoder_name, text_encoder_name, ts_normalize, ts_encode)
+def eval_model(model, 
+               y_true, 
+               ts_df, 
+               txt_ls,
+               ts_encoder_name, 
+               text_encoder_name, 
+               ts_normalize, 
+               ts_encode):
+    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=ts_normalize, encode_ts=ts_encode).features
+    tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
+    
+
+    model = model.to(device)
+    ts_f_mat = ts_f_mat.to(device)
+    tx_f_ls = tx_f_ls.to(device)
+    _, y_prob = get_logit(model, ts_f_mat, tx_f_ls)
+    y_true = y_true.to(device) # y_true is a tensor of size (obs, num_classes)
+    y_prob = y_prob.to(device) # y_prob is a tensor of size (obs, num_classes)
     eval_metrics = get_eval_metrics(y_true, y_prob)
     return eval_metrics
 
 
 def get_logit(model, 
-              ts_df, # df of new time series
-              txt_ls, # list of possible outcome texts
-              ts_encoder_name,
-              text_encoder_name,
-              ts_normalize,
-              ts_encode):
+              ts_f_mat, # ts tensor engineered by TSFeature
+              tx_f_ls # txt tensor engineered by TXTFeature 
+              ):
     
     model.eval()
-    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=ts_normalize, encode_ts=ts_encode).features
-    tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
+    # ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=ts_normalize, encode_ts=ts_encode).features
+    # tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
 
     # calculate the logits for all observations and outcomes, one outcome all observations per each 
     obs_ys_logits = []
@@ -43,14 +55,13 @@ def get_logit(model,
 
 
 def get_logit1(model, 
-              ts_df, # df of new time series
-              txt_ls, # list of possible outcome texts
-              ts_encoder_name,
-              text_encoder_name):
+              ts_f_mat, # ts tensor engineered by TSFeature
+              tx_f_ls # txt tensor engineered by TXTFeature 
+              ):
     
     model.eval()
-    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
-    tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
+    # ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
+    # tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
 
     # calculate the logits for all observations and outcomes, one by one
     obs_ys_logits = []
@@ -90,9 +101,9 @@ def get_eval_metrics(y_true, y_prob):
     
     # Convert tensors to numpy if needed
     if torch.is_tensor(y_true):
-        y_true = y_true.detach().numpy()
+        y_true = y_true.detach().cpu().numpy()
     if torch.is_tensor(y_prob):
-        y_prob = y_prob.detach().numpy()
+        y_prob = y_prob.detach().cpu().numpy()
     
     # remove rows with nan in y_prob
     y_true = y_true[~np.isnan(y_prob).any(axis=1)]

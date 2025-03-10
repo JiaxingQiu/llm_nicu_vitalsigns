@@ -50,7 +50,7 @@ class CLIPDataset(Dataset):
 
 
 class TSFeature(Dataset):
-    def __init__(self, ts_df, encoder_model_name, normalize=True, encode_ts=True):
+    def __init__(self, ts_df, encoder_model_name, normalize=True, encode_ts=False):
         if normalize:
             data = ts_df.values
             obs_mean = np.nanmean(data, axis=1)
