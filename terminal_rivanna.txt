@@ -1,0 +1,44 @@
+# 1. Set up R directories first
+mkdir -p ~/R/{goolf,x86_64-pc-linux-gnu-library}
+cd ~/R/x86_64-pc-linux-gnu-library
+
+
+
+
+
+
+
+
+
+# Change to your project directory
+cd /home/jq2uw/llm_nicu_vitalsigns
+
+# Load miniforge module
+module load miniforge
+
+# Create conda environment in your project directory
+conda create --prefix ./clip_env python=3.11
+
+# Activate the environment
+conda activate ./clip_env
+
+# Install required packages
+Pip install ipykernel 
+
+# Install from requirements.txt
+pip install -r requirements.txt
+
+# Register the kernel
+python -m ipykernel install --user --name clip_env --display-name "CLIP"
+
+# Verify kernel installation
+jupyter kernelspec list
+
+
+
+
+For Future Sessions:
+# In terminal before starting JupyterLab
+cd /home/jq2uw/llm_nicu_vitalsigns
+module load miniforge
+conda activate ./clip_env
