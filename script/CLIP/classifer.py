@@ -30,7 +30,9 @@ class GeneralBinaryClassifier(nn.Module):
         
         # Classifier (outputs logits)
         self.classifier = nn.Linear(encoder_out_dim, 2)
-        
+        # Move model to device
+        self.device = device
+        self.to(device)
         print(nn_summary(self))
     
     def forward(self, x):

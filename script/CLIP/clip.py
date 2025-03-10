@@ -36,6 +36,9 @@ class CLIPModel(nn.Module):
         
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
         print(nn_summary(self))
+        # Move model to device
+        self.device = device
+        self.to(device)
     
     def _default_ts_encoder(self, ts_dim, output_dim):
         """Default time series encoder if none is provided"""
