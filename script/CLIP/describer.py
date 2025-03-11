@@ -1,7 +1,11 @@
 import rpy2.robjects as robjects
 from rpy2.robjects import numpy2ri
 from rpy2.robjects.packages import STAP
+import rpy2.robjects as ro
+ro.r('options(warn=-1)')  # Suppress all warnings
 import os
+from joblib import Parallel, delayed
+import multiprocessing
 
 # Enable automatic conversion between numpy and R arrays
 numpy2ri.activate()
@@ -70,6 +74,54 @@ def generate_descriptions(ts_df, id_df):
 
 
 
+
+def generate_descriptions_parallel(ts_df, id_df):
+    """
+    Generate various descriptions for time series data using parallel processing.
+    """
+    # Split data into identifiers and time series
+    df_desc = id_df.copy()
+    
+    # Define helper functions for parallel processing
+    def process_row(row):
+        succ_inc = describe_succ_inc_summ(row.values)
+        histogram = describe_hr_histogram(row.values)
+        events80 = describe_brady_events(row.values, th=80, plot=False, type=0)
+        events90 = describe_brady_events(row.values, th=90, plot=False, type=0)
+        events100 = describe_brady_events(row.values, th=100, plot=False, type=0)
+        return {
+            'succ_inc': succ_inc,
+            'histogram': histogram,
+            'events': (events80, events90, events100)
+        }
+    
+    # determine the number of cores to use by checking the number of available cores
+    try:
+        total_cores = multiprocessing.cpu_count()
+        n_cores = max(1, int(total_cores * 0.75)) 
+    except:
+        n_cores = 4
+    # Process all rows in parallel
+    results = Parallel(n_jobs=n_cores, verbose=1)(
+        delayed(process_row)(row) for _, row in ts_df.iterrows()
+    )
+    
+    # Extract results
+    df_desc['description_succ_inc'] = [r['succ_inc'] for r in results]
+    df_desc['description_histogram'] = [r['histogram'] for r in results]
+    
+    # Process events
+    events80 = [r['events'][0] for r in results]
+    events90 = [r['events'][1] for r in results]
+    events100 = [r['events'][2] for r in results]
+    
+    # Get most severe events
+    df_desc['description_ts_event'] = [
+        get_most_severe_event_py(idx, events80, events90, events100) 
+        for idx in range(len(ts_df))
+    ]
+    
+    return df_desc
 
 def describe_brady_events(x, th=80, direction="<", plot=False, type=1):
     """Python wrapper to call R's describe_brady_event function"""

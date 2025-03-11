@@ -5,8 +5,6 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import functional as F
 from config import *
 from encoder import *
-from augmentor import augment_ts_df
-from describer import generate_descriptions
 from clip import get_similarity_targets
 
 class CLIPDataset(Dataset):
@@ -45,7 +43,9 @@ class CLIPDataset(Dataset):
     def dataloader(self, batch_size=32):
         return DataLoader(self, 
                           batch_size=batch_size, 
-                          shuffle=False)
+                          shuffle=True,
+                          num_workers=0,
+                          pin_memory=True)
     
 
 
@@ -116,10 +116,6 @@ class TXTFeature(Dataset):
 
 
 
-
-
-
-
 def get_ts_txt_org(df):
     # df must have columns: 
     # VitalID, VitalTime, 
@@ -174,9 +170,47 @@ def get_features(df,
 #     return train_loader, test_loader
 
 
+def label_death7d(df, df_y, id_col='VitalID'):
+    
+    # df_y must have columns ID, DiedNICU, DeathAge
+    if id_col not in df_y.columns or 'DiedNICU' not in df_y.columns or 'DeathAge' not in df_y.columns:
+        raise ValueError("df_y must have columns ID, DiedNICU, and DeathAge")
+    # df must have columns ID and Age
+    if id_col not in df.columns or 'Age' not in df.columns:
+        raise ValueError("df must have columns ID and Age")
+    
+    # Create a copy of df_day to avoid modifying original
+    df_labeled = df.copy()
+
+    # Initialize the death label column with 0
+    df_labeled['Died'] = 0
+
+    # Filter patients who died in NICU
+    died_patients = df_y[df_y['DiedNICU'] == 1]
+
+    # For each patient who died
+    for _, patient in died_patients.iterrows():
+        id = patient[id_col]
+        death_age = patient['DeathAge']
+        
+        # Find records for this patient within 7 days of death
+        mask = (
+            (df_labeled[id_col] == id) & 
+            (df_labeled['Age'] >= death_age - 7) & 
+            (df_labeled['Age'] <= death_age)
+        )
+        
+        # Label these records as 1
+        df_labeled.loc[mask, 'Died'] = 1
+    # Check distribution by TestID
+    print("\nSample of patients with positive labels:")
+    print(df_labeled[df_labeled['Died'] == 1].groupby(id_col).size().sort_values(ascending=False).head(5))
+
+    return df_labeled
+
 
 # --------------------------text input processing----------------------------------
-def extract_event1(text):
+def text_extract_event1(text):
     """
     Extract the first event description from the text.
     """
@@ -203,7 +237,7 @@ def extract_event1(text):
     return event1_str
 
     
-def summarize_brady(text):
+def text_summarize_brady(text):
     """
     Count events and identify the single event type in the text.
     
@@ -235,7 +269,7 @@ def summarize_brady(text):
         event_word = "event" if event_count == 1 else "events"
         return f"{event_count} Bradycardia {event_word} happened."
     
-def summarize_desat(text):
+def text_summarize_desat(text):
     """
     Count events and identify the single event type in the text.
     
@@ -266,7 +300,7 @@ def summarize_desat(text):
         event_word = "event" if event_count == 1 else "events"
         return f"{event_count} Desaturation {event_word} happened."
 
-def gen_demo(row,
+def text_gen_demo(row,
              ga_bwt=True,
              gre=False, # gender_race_ethnicity
              apgar_mage=False):
@@ -334,7 +368,7 @@ def gen_demo(row,
     
     
 
-def gen_cl_event(row,
+def text_gen_cl_event(row,
                  die7d=True,
                  fio2=False):
     """
@@ -357,7 +391,7 @@ def gen_cl_event(row,
     return f"{die7d_str}{fio2_str}"
 
 
-def gen_ts_event(row,
+def text_gen_ts_event(row,
                  sumb=True, # sum_brady
                  sumd=False, # sum_desat
                  simple=True,
@@ -385,10 +419,10 @@ def gen_ts_event(row,
     succ_inc_str = ""
 
     if sumb:
-        sum_str = summarize_brady(row['description_ts_event'])
+        sum_str = text_summarize_brady(row['description_ts_event'])
         sum_str = sum_str + " "
     if sumd:
-        sum_str = summarize_desat(row['description_ts_event'])
+        sum_str = text_summarize_desat(row['description_ts_event'])
         sum_str = sum_str + " "
     if simple:
         x = row['description_ts_event']
@@ -398,7 +432,7 @@ def gen_ts_event(row,
         full_str = row['description_ts_event']
         full_str = full_str + " "
     if event1:
-        event1_str = extract_event1(row['description_ts_event'])
+        event1_str = text_extract_event1(row['description_ts_event'])
         event1_str = event1_str + " "
     if histogram:
         histogram_str = row['description_histogram']
@@ -409,135 +443,17 @@ def gen_ts_event(row,
     return f"{sum_str}{simple_str}{full_str}{event1_str}{histogram_str}{succ_inc_str}"
 
 
-def gen_text_input_column(df, text_config):
+def text_gen_input_column(df, text_config):
     df.columns = df.columns.astype(str)
     # demographic description
-    df['demo'] = df.apply(gen_demo, axis=1, **text_config['demo'])
+    df['demo'] = df.apply(text_gen_demo, axis=1, **text_config['demo'])
     # clinical events
-    df['cl_event'] = df.apply(gen_cl_event, axis=1, **text_config['cl'])
+    df['cl_event'] = df.apply(text_gen_cl_event, axis=1, **text_config['cl'])
     # time series events
-    df['ts_description'] = df.apply(gen_ts_event, axis=1, **text_config['ts'])
+    df['ts_description'] = df.apply(text_gen_ts_event, axis=1, **text_config['ts'])
     
     df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']
     
     print(df['text'][0])
 
     return df
-
-def add_augmented_ts_desc(df_sub,
-                    config_dict, 
-                    pretrained_model_path='./pretrained/hr_vae_linear_medium.pth',
-                    K = 50):
-    ts_df = df_sub.loc[:, '1':'300'].astype(float)
-    df_aug_sub = augment_ts_df(ts_df, pretrained_model_path, K = K)
-    df_aug_desc = generate_descriptions(ts_df = df_aug_sub.loc[:, '1':'300'], id_df = df_aug_sub.loc[:, ['rowid']])
-    df_aug_sub = df_aug_sub.merge(df_aug_desc, on='rowid', how='left')
-
-
-    if 'rowid' in df_sub.columns:
-        # maintain the original rowid
-        df_rowid = df_sub[['rowid']].copy()
-        df_rowid['raw_rowid'] = df_rowid['rowid']
-        df_rowid.reset_index(drop=True, inplace=True)
-        df_rowid['rowid'] = df_rowid.index.to_series()
-        df_aug_sub = df_aug_sub.merge(df_rowid, on='rowid', how='left')
-        df_aug_sub['rowid'] = df_aug_sub['raw_rowid']
-        df_aug_sub.drop(columns=['raw_rowid'], inplace=True)
-
-
-    columns_to_keep = ['rowid'] + list(df_sub.columns[~df_sub.columns.isin(df_aug_sub.columns)])
-    df_raw = df_sub[columns_to_keep]
-    df_aug_sub = df_aug_sub.merge(df_raw, on='rowid', how='left')
-    df_aug_sub = gen_text_input_column(df_aug_sub, config_dict['text_config'])
-    # df_sub = pd.concat([df_sub, df_aug_sub])
-    print(f"Augmented {len(df_aug_sub)} rows")
-    return df_aug_sub
-
-
-def augment_balance_data(df_sub, 
-                         txt_ls_org,
-                         y_col, 
-                         config_dict, 
-                         pretrained_model_path='./pretrained/hr_vae_linear_medium.pth', 
-                         K = 50,
-                         max_size = None):
-    if not config_dict['balance']:
-        aug_data = add_augmented_ts_desc(df_sub, config_dict, pretrained_model_path, K)
-        return pd.concat([df_sub, aug_data], ignore_index=True)
-    
-    # Get original class sizes and calculate needed augmentations
-    class_sizes = df_sub[y_col].value_counts()
-    if max_size is None:
-        max_size = class_sizes.max()
-    else:
-        max_size = min(max_size, class_sizes.max())
-    
-    print("Original class distribution:")
-    for class_label in txt_ls_org:
-        print(f"Class {class_label}: {class_sizes.get(class_label, 0)}")
-    print(f"\nTarget size per class: {max_size}")
-    
-    final_dfs = [df_sub]  # Start with original data
-    
-    # Only augment classes that need it
-    for class_label in txt_ls_org:
-        if class_label not in class_sizes or class_sizes[class_label] < max_size:
-            df_class = df_sub[df_sub[y_col] == class_label]
-            needed_samples = max_size - class_sizes.get(class_label, 0)
-            
-            # Calculate exact K needed to avoid over-generation
-            k = int(np.ceil(needed_samples / len(df_class)))
-            
-            if k > 0:
-                aug_data = add_augmented_ts_desc(df_class, config_dict, pretrained_model_path, K=k)
-                if len(aug_data) > needed_samples:
-                    aug_data = aug_data.head(needed_samples)
-                final_dfs.append(aug_data)
-    
-    df_balanced = pd.concat(final_dfs, ignore_index=True)
-    
-    print("\nFinal class distribution:")
-    final_dist = df_balanced[y_col].value_counts()
-    for class_label in txt_ls_org:
-        print(f"Class {class_label}: {final_dist.get(class_label, 0)}")
-    
-    return df_balanced
-        
-
-def label_death7d(df, df_y, id_col='VitalID'):
-    
-    # df_y must have columns ID, DiedNICU, DeathAge
-    if id_col not in df_y.columns or 'DiedNICU' not in df_y.columns or 'DeathAge' not in df_y.columns:
-        raise ValueError("df_y must have columns ID, DiedNICU, and DeathAge")
-    # df must have columns ID and Age
-    if id_col not in df.columns or 'Age' not in df.columns:
-        raise ValueError("df must have columns ID and Age")
-    
-    # Create a copy of df_day to avoid modifying original
-    df_labeled = df.copy()
-
-    # Initialize the death label column with 0
-    df_labeled['Died'] = 0
-
-    # Filter patients who died in NICU
-    died_patients = df_y[df_y['DiedNICU'] == 1]
-
-    # For each patient who died
-    for _, patient in died_patients.iterrows():
-        id = patient[id_col]
-        death_age = patient['DeathAge']
-        
-        # Find records for this patient within 7 days of death
-        mask = (
-            (df_labeled[id_col] == id) & 
-            (df_labeled['Age'] >= death_age - 7) & 
-            (df_labeled['Age'] <= death_age)
-        )
-        
-        # Label these records as 1
-        df_labeled.loc[mask, 'Died'] = 1
-    # Check distribution by TestID
-    print("\nSample of patients with positive labels:")
-    print(df_labeled[df_labeled['Died'] == 1].groupby(id_col).size().sort_values(ascending=False).head(5))
-
-    return df_labeled

@@ -12,7 +12,6 @@ class TXTEncoder():
         
 
     def encode_text_list(self, text_list):
-        text_list = text_list.to(device)
         # sentence transformer
         if self.model_name in ['sentence-transformers/all-mpnet-base-v2',  # Optimized for sentence embeddings
                           'sentence-transformers/paraphrase-mpnet-base-v2',  # Optimized for paraphrase detection

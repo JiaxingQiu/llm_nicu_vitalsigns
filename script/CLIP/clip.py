@@ -189,11 +189,17 @@ def train_epoch(model, train_dataloader, optimizer, device, loss_type='block_dia
     
     for batch_idx, (id, ts_features, text_features, labels, targets_org) in enumerate(train_dataloader):
 
-        ts_features = ts_features.to(device)
-        text_features = text_features.to(device)
-        labels = labels.to(device)
+        # ts_features = ts_features.to(device)
+        # text_features = text_features.to(device)
+        # labels = labels.to(device)
+        # targets_org = targets_org[:,id]
+        # targets_org = targets_org.to(device)
+
+        # Move entire batch at once instead of individual tensors
         targets_org = targets_org[:,id]
-        targets_org = targets_org.to(device)
+        batch = (ts_features, text_features, labels, targets_org)
+        batch = tuple(t.to(device) for t in batch)
+        ts_features, text_features, labels, targets_org = batch
 
         optimizer.zero_grad()
         logits, ts_embedded, text_embedded = model(ts_features, text_features)
@@ -222,11 +228,15 @@ def test_epoch(model, test_dataloader, device, loss_type='block_diagonal'):
     with torch.no_grad():
         for batch_idx, (id, ts_features, text_features, labels, targets_org) in enumerate(test_dataloader):
             
-            ts_features = ts_features.to(device)
-            text_features = text_features.to(device)
-            labels = labels.to(device)
+            # ts_features = ts_features.to(device)
+            # text_features = text_features.to(device)
+            # labels = labels.to(device)
+            # targets_org = targets_org[:,id]
+            # targets_org = targets_org.to(device)
             targets_org = targets_org[:,id]
-            targets_org = targets_org.to(device)
+            batch = (ts_features, text_features, labels, targets_org)
+            batch = tuple(t.to(device) for t in batch)
+            ts_features, text_features, labels, targets_org = batch
             
             logits, ts_embedded, text_embedded = model(ts_features, text_features)
             if loss_type == 'block_diagonal':
@@ -242,7 +252,7 @@ def test_epoch(model, test_dataloader, device, loss_type='block_diagonal'):
 
 
 
-def train(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, device, loss_type='block_diagonal'):
+def train_clip(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, device, loss_type='block_diagonal'):
     train_losses = []
     test_losses = []
     

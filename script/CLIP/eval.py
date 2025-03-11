@@ -1,8 +1,9 @@
 from config import *
 from data import *
 from clip import *
+import torch
 
-
+@torch.no_grad() 
 def eval_model(model, 
                y_true, 
                ts_df, 
@@ -24,7 +25,7 @@ def eval_model(model,
     eval_metrics = get_eval_metrics(y_true, y_prob)
     return eval_metrics
 
-
+@torch.no_grad() 
 def get_logit(model, 
               ts_f_mat, # ts tensor engineered by TSFeature
               tx_f_ls # txt tensor engineered by TXTFeature 
@@ -53,7 +54,7 @@ def get_logit(model,
 
     return obs_ys_logits, softmax_probs
 
-
+@torch.no_grad() 
 def get_logit1(model, 
               ts_f_mat, # ts tensor engineered by TSFeature
               tx_f_ls # txt tensor engineered by TXTFeature 
@@ -292,10 +293,10 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
                     color=config['color'], 
                     linestyle='--',
                     label=f'{config["label"]} (Test)')
-        if binary:
-            # Set y-axis limits
-            ax2.set_ylim(0, 1)
-            ax3.set_ylim(0, 0.5)
+        # if binary:
+        #     # Set y-axis limits
+        #     ax2.set_ylim(0, 1)
+        #     ax3.set_ylim(0, 0.5)
         # Add horizontal line at y=0.5 for ax2
         ax2.axhline(y=0.5, color='darkgray', linestyle='--', linewidth=2)
         ax3.axhline(y=0.1, color='darkgray', linestyle='--', linewidth=2)

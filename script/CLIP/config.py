@@ -69,9 +69,9 @@ config_dict = {
     'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_aug': False,
-    'ts_normalize': True,
-    'ts_encode': True,
-    'block_target': True,
+    'ts_normalize': False,
+    'ts_encode': False,
+    'block_target': False,
     'balance': False,
     
     # Model settings
