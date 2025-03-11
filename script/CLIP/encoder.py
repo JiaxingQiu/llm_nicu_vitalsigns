@@ -318,37 +318,45 @@ class MLPEncoder(nn.Module):
         
         Args:
             ts_dim (int): Input time series length
+            output_dim (int): Output dimension
             hidden_dim (int): Hidden dimension
-            num_layers (int): Number of linear layers
+            num_hidden_layers (int): Number of hidden layers
             dropout (float): Dropout rate
         """
         super().__init__()
         
         layers = []
         
-        # First layer (input projection)
-        layers.extend([
-            nn.Linear(ts_dim, hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(dropout)
-        ])
-        
-        # Hidden layers
-        for _ in range(num_hidden_layers - 1):
+        if num_hidden_layers > 0:
+            # First hidden layer (input projection)
             layers.extend([
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(ts_dim, hidden_dim),
                 nn.LeakyReLU(0.2),
                 nn.Dropout(dropout)
             ])
         
-        # Final projection
-        layers.append(nn.Linear(hidden_dim, output_dim))
+            # Hidden layers
+            if num_hidden_layers > 1:
+                for _ in range(num_hidden_layers - 1):
+                    layers.extend([
+                        nn.Linear(hidden_dim, hidden_dim),
+                        nn.LeakyReLU(0.2),
+                        nn.Dropout(dropout)
+                    ])
+        else:
+            hidden_dim = ts_dim
+        
+        # Final projection - extend instead of append for list of layers
+        layers.extend([
+            nn.Linear(hidden_dim, output_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(dropout)
+        ])
         
         self.encoder = nn.Sequential(*layers)
     
     def forward(self, x):
         return self.encoder(x)
-    
 
 # # Linear Encoder
 # mlp = MLPEncoder(
