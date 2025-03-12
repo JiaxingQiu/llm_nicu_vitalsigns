@@ -3,32 +3,70 @@ from data import *
 from clip import *
 import torch
 
-@torch.no_grad() 
-def eval_model(model, 
-               y_true, 
-               ts_df, 
-               txt_ls,
-               ts_encoder_name, 
-               text_encoder_name, 
-               ts_normalize, 
-               ts_encode):
-    ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=ts_normalize, encode_ts=ts_encode).features
-    tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
-    
 
+class EvalInputs:
+    def __init__(self, 
+                 df_new,
+                 ts_encoder_name, 
+                 text_encoder_name, 
+                 ts_normalize, 
+                 ts_encode,
+                 y_true_cols = ['true1', 'true2'],
+                 y_pred_cols = ['text1', 'text2'],
+                 clip_type="2d"):
+        
+        self.y_true = torch.tensor(df_new[y_true_cols].values)
+        if clip_type == "2d":
+            self.ts_f_mat, self.tx_f_mat_ls, _ = get_features3d(df_new,
+                                                                ts_encoder_name, 
+                                                                text_encoder_name, 
+                                                                ts_normalize, 
+                                                                ts_encode,
+                                                                text_col_ls=y_pred_cols) # text1 is a column of "will die", text2 is a column of "will survive"
+        elif clip_type == "3d":
+            tx_f_mat_ls_ls = []
+            for y_pred_col in y_pred_cols:
+                # replace cl_event with text1 / text2 in tx_df_mat_ls
+                ts_f_mat, tx_f_mat_ls, _ = get_features3d(df_new,
+                                                          ts_encoder_name, 
+                                                          text_encoder_name, 
+                                                          ts_normalize, 
+                                                          ts_encode,
+                                                          text_col_ls=['demo', y_pred_col, 'ts_description']) # text1 is a column of "will die", text2 is a column of "will survive"
+                tx_f_mat_ls_ls.append(tx_f_mat_ls)
+            self.tx_f_mat_ls_ls = tx_f_mat_ls_ls
+            self.ts_f_mat = ts_f_mat
+     
+            
+        
+
+@torch.no_grad() 
+def eval_clip(model, 
+              eval_inputs):
+    # true1 column is one-hot indicator of true text of first level of outcome, "this infant will die in 7 days"
+    # true2 column is one-hot indicator of true text of second level of outcome, "this infant will survive"
+    # text1 column is text of first level of predicted outcome, "this infant will die in 7 days"
+    # text2 column is text of second level of predicted outcome, "this infant will survive"
+
+    y_true = eval_inputs.y_true
+    ts_f_mat = eval_inputs.ts_f_mat
+    tx_f_mat_ls = eval_inputs.tx_f_mat_ls
+    
     model = model.to(device)
     ts_f_mat = ts_f_mat.to(device)
-    tx_f_ls = tx_f_ls.to(device)
-    _, y_prob = get_logit(model, ts_f_mat, tx_f_ls)
+    tx_f_mat_ls = [tx_f_mat.to(device) for tx_f_mat in tx_f_mat_ls]
+    _, y_prob = get_logit(model, ts_f_mat, tx_f_mat_ls)
     y_true = y_true.to(device) # y_true is a tensor of size (obs, num_classes)
     y_prob = y_prob.to(device) # y_prob is a tensor of size (obs, num_classes)
     eval_metrics = get_eval_metrics(y_true, y_prob)
     return eval_metrics
 
+
+
 @torch.no_grad() 
 def get_logit(model, 
               ts_f_mat, # ts tensor engineered by TSFeature
-              tx_f_ls # txt tensor engineered by TXTFeature 
+              tx_f_mat_ls # txt tensor engineered by TXTFeature 
               ):
     
     model.eval()
@@ -37,10 +75,11 @@ def get_logit(model,
 
     # calculate the logits for all observations and outcomes, one outcome all observations per each 
     obs_ys_logits = []
-    # for each outcome, get the logits for all observations
-    for tx_f in tx_f_ls:
-        tx_f = tx_f.reshape(1, -1)
-        tx_f_mat = torch.cat([tx_f] * ts_f_mat.shape[0], dim=0) # shape = (obs, dim_tx_f)
+    # # for each outcome, get the logits for all observations
+    # for tx_f in tx_f_ls:
+    #     tx_f = tx_f.reshape(1, -1)
+    #     tx_f_mat = torch.cat([tx_f] * ts_f_mat.shape[0], dim=0) # shape = (obs, dim_tx_f)
+    for tx_f_mat in tx_f_mat_ls: # shape = (obs, dim_tx_f)
         logit, _, _ = model(ts_f_mat, tx_f_mat)
         # keep the diagonal of logit
         obs_logits = torch.diag(logit)
@@ -54,34 +93,70 @@ def get_logit(model,
 
     return obs_ys_logits, softmax_probs
 
+
 @torch.no_grad() 
-def get_logit1(model, 
-              ts_f_mat, # ts tensor engineered by TSFeature
-              tx_f_ls # txt tensor engineered by TXTFeature 
-              ):
-    
-    model.eval()
-    # ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
-    # tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
+def eval_clip3d(model, # model of CLIP3DModel
+                eval_inputs):
+    # true1 column is one-hot indicator of true text of first level of outcome, "this infant will die in 7 days"
+    # true2 column is one-hot indicator of true text of second level of outcome, "this infant will survive"
+    # text1 column is text of first level of predicted outcome, "this infant will die in 7 days"
+    # text2 column is text of second level of predicted outcome, "this infant will survive"
 
-    # calculate the logits for all observations and outcomes, one by one
+    y_true = eval_inputs.y_true
+    ts_f_mat = eval_inputs.ts_f_mat
+    tx_f_mat_ls_ls = eval_inputs.tx_f_mat_ls_ls
     obs_ys_logits = []
-    for i in range(ts_f_mat.shape[0]):
-        ts_f = ts_f_mat[i,:]
-        ts_f = ts_f.reshape(1, -1)
-        logits = [] 
-        for tx_f in tx_f_ls:
-            tx_f = tx_f.reshape(1, -1)
-            with torch.no_grad():
-                logit, _, _ = model(ts_f, tx_f) # logit is a tensor of size (1, 1)
-                logits.append(logit) 
-        logits = torch.cat(logits, dim=1)
-        obs_ys_logits.append(logits)
-    obs_ys_logits = torch.cat(obs_ys_logits, dim=0)
+    for tx_f_mat_ls in tx_f_mat_ls_ls:
+        ts_f_mat = ts_f_mat.to(device)
+        tx_f_mat_ls = [tx_f_mat.to(device) for tx_f_mat in tx_f_mat_ls]
+        logits, _, _ = model(ts_f_mat, tx_f_mat_ls)
+        obs_logits = torch.diag(logits)
+        obs_logits = obs_logits.reshape(-1, 1)
+        obs_ys_logits.append(obs_logits)
+    
+    # concat by columns
+    obs_ys_logits = torch.cat(obs_ys_logits, dim=1)
     exp_preds = torch.exp(obs_ys_logits)
-    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True)
+    y_prob = exp_preds / exp_preds.sum(dim=1, keepdim=True)
+    
+    y_true = y_true.to(device) # y_true is a tensor of size (obs, num_classes)
+    y_prob = y_prob.to(device) # y_prob is a tensor of size (obs, num_classes)
+    eval_metrics = get_eval_metrics(y_true, y_prob)
+    return eval_metrics
 
-    return obs_ys_logits, softmax_probs
+
+
+
+
+
+# @torch.no_grad() 
+# def get_logit1(model, 
+#               ts_f_mat, # ts tensor engineered by TSFeature
+#               tx_f_ls # txt tensor engineered by TXTFeature 
+#               ):
+    
+#     model.eval()
+#     # ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
+#     # tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
+
+#     # calculate the logits for all observations and outcomes, one by one
+#     obs_ys_logits = []
+#     for i in range(ts_f_mat.shape[0]):
+#         ts_f = ts_f_mat[i,:]
+#         ts_f = ts_f.reshape(1, -1)
+#         logits = [] 
+#         for tx_f in tx_f_ls:
+#             tx_f = tx_f.reshape(1, -1)
+#             with torch.no_grad():
+#                 logit, _, _ = model(ts_f, tx_f) # logit is a tensor of size (1, 1)
+#                 logits.append(logit) 
+#         logits = torch.cat(logits, dim=1)
+#         obs_ys_logits.append(logits)
+#     obs_ys_logits = torch.cat(obs_ys_logits, dim=0)
+#     exp_preds = torch.exp(obs_ys_logits)
+#     softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True)
+
+#     return obs_ys_logits, softmax_probs
 
 
 
@@ -259,12 +334,12 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         metrics_config = {
             'ax2_metrics': {
                 'AUROC': {'color': 'purple', 'label': 'AUROC'},
-                'Recall': {'color': 'red', 'label': 'Recall'}
+                'AUPRC': {'color': 'orange', 'label': 'AUPRC'}
             },
             'ax3_metrics': {
                 'F1': {'color': 'blue', 'label': 'F1'},
                 'Precision': {'color': 'green', 'label': 'Precision'},
-                'AUPRC': {'color': 'orange', 'label': 'AUPRC'}
+                'Recall': {'color': 'red', 'label': 'Recall'}
             }
         }
 
@@ -293,12 +368,13 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
                     color=config['color'], 
                     linestyle='--',
                     label=f'{config["label"]} (Test)')
-        # if binary:
-        #     # Set y-axis limits
-        #     ax2.set_ylim(0, 1)
-        #     ax3.set_ylim(0, 0.5)
+        
+        ax2.set_ylim(0, 1)
+        ax3.set_ylim(0, 1)
         # Add horizontal line at y=0.5 for ax2
         ax2.axhline(y=0.5, color='darkgray', linestyle='--', linewidth=2)
+        ax2.axhline(y=0.1, color='darkgray', linestyle='--', linewidth=2)
+        ax3.axhline(y=0.5, color='darkgray', linestyle='--', linewidth=2)
         ax3.axhline(y=0.1, color='darkgray', linestyle='--', linewidth=2)
 
         # Add legends

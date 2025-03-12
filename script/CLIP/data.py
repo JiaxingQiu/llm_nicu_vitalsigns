@@ -48,6 +48,91 @@ class CLIPDataset(Dataset):
                           pin_memory=True)
     
 
+class CLIP3DDataset(Dataset):
+    def __init__(self, ts_features, text_features_list, labels):
+        """
+        Dataset for CLIP3D model handling multiple text features per time series.
+        
+        Args:
+            ts_features: time series features tensor [N, ts_dim]
+            text_features_list: list of text features tensors, each [N, text_dim]
+            labels: class labels tensor [N]
+        """
+        # Convert inputs to tensors if needed
+        self.ts_features = torch.FloatTensor(ts_features) if not isinstance(ts_features, torch.Tensor) else ts_features
+        self.text_features_list = [
+            torch.FloatTensor(text_features) if not isinstance(text_features, torch.Tensor) else text_features
+            for text_features in text_features_list
+        ]
+        self.labels = torch.LongTensor(labels) if not isinstance(labels, torch.Tensor) else labels
+        
+        # Verify dimensions
+        n_samples = len(self.ts_features)
+        assert all(len(text_features) == n_samples for text_features in self.text_features_list), \
+            "All text features must have the same number of samples as ts_features"
+        assert len(self.labels) == n_samples, \
+            "Labels must have the same number of samples as features"
+            
+        # Create similarity targets]
+        text_features_stacked = torch.stack(self.text_features_list, dim=0)  # [n_text, N, text_dim]
+        text_features_avg = torch.mean(text_features_stacked, dim=0)  # [N, text_dim]
+        self.targets_org = get_similarity_targets(self.ts_features, text_features_avg)
+    
+    def __len__(self):
+        return len(self.labels)
+    
+    def __getitem__(self, idx):
+        """
+        Returns:
+            tuple: (
+                idx: sample index,
+                ts_features: time series features [ts_dim],
+                text_features: list of text features, each [text_dim],
+                label: class label,
+                target_org: similarity target
+            )
+        """
+        return (
+            idx,
+            self.ts_features[idx],
+            [text_features[idx] for text_features in self.text_features_list],
+            self.labels[idx],
+            self.targets_org[idx]
+        )
+    
+    def dataloader(self, batch_size=32, shuffle=True):
+        """
+        Creates a DataLoader for this dataset.
+        
+        Args:
+            batch_size: int, number of samples per batch
+            shuffle: bool, whether to shuffle the data
+            num_workers: int, number of worker processes for data loading
+        
+        Returns:
+            DataLoader: PyTorch DataLoader object
+        """
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=0,
+            pin_memory=True,
+            drop_last=False
+        )
+    
+    @property
+    def n_text_features(self):
+        """Returns the number of text feature sets"""
+        return len(self.text_features_list)
+    
+    @property
+    def feature_dims(self):
+        """Returns the dimensions of features"""
+        return {
+            'ts_dim': self.ts_features.size(1),
+            'text_dims': [text_features.size(1) for text_features in self.text_features_list]
+        } 
 
 class TSFeature(Dataset):
     def __init__(self, ts_df, encoder_model_name, normalize=True, encode_ts=False):
@@ -116,12 +201,13 @@ class TXTFeature(Dataset):
 
 
 
-def get_ts_txt_org(df):
-    # df must have columns: 
-    # VitalID, VitalTime, 
-    # '1', '2', ..., '300' 
-    # 'text'
-    # 'label'
+def get_ts_txt_org(df, text_col = 'text'):
+    # raise error if any of the columns are not in the dataframe
+    df.columns = df.columns.astype(str)
+    required_columns = ['VitalID', 'VitalTime', '1', '300', 'text', 'label']
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' is required but not found in the dataframe.")
     
     df = df.assign(id_time='id_' + df['VitalID'].astype(str) + '_' + df['VitalTime'].astype(str))
     df = df.set_index('id_time')
@@ -130,8 +216,8 @@ def get_ts_txt_org(df):
     # get normalized time series dataframe norm_ts_df
     ts_df = df.loc[:,'1':'300']
     # get text list txt_ls
-    txt_ls = df.loc[:,'text'].tolist()
-    labels = df.loc[:,'label'].tolist()
+    txt_ls = df.loc[:,text_col].tolist()
+    labels = df.loc[:,'label'].tolist() # id of target matrix, indicating observations with the same id.
 
     return ts_df, txt_ls, labels
 
@@ -140,14 +226,41 @@ def get_features(df,
                  ts_encoder_name='hr_vae_linear_medium', 
                  text_encoder_name='sentence-transformers/all-mpnet-base-v2',
                  normalize=True,
-                 encode_ts=True):
-    ts_df, txt_ls, labels = get_ts_txt_org(df)
+                 encode_ts=True,
+                 text_col='text'):
+    ts_df, txt_ls, labels = get_ts_txt_org(df, text_col = text_col)
+    # --- ts_f ---
     ts_f = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=normalize, encode_ts=encode_ts).features
+
+    # --- tx_f ---
+    # unique_txt_ls = list(set(txt_ls))
+    # print(f"Number of unique texts: {len(unique_txt_ls)} out of {len(txt_ls)} total")
+    # tx_f_unique = TXTFeature(unique_txt_ls, encoder_model_name='sentence-transformers/all-mpnet-base-v2').features
+    # tx_f = torch.stack([ tx_f_unique[unique_txt_ls.index(txt)] for txt in txt_ls])
     tx_f = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features
+
+    # --- labels ---
     labels = torch.tensor(labels)
     
     return ts_f, tx_f, labels
 
+
+def get_features3d(df, 
+                 ts_encoder_name='hr_vae_linear_medium', 
+                 text_encoder_name='sentence-transformers/all-mpnet-base-v2',
+                 normalize=True,
+                 encode_ts=True,
+                 text_col_ls=['demo', 'cl_event', 'ts_description']):
+    
+    ts_df, _, labels = get_ts_txt_org(df)
+    ts_f = TSFeature(ts_df, encoder_model_name=ts_encoder_name, normalize=normalize, encode_ts=encode_ts).features
+    labels = torch.tensor(labels)
+    tx_f_list = []
+    for text_col in text_col_ls:
+        _, txt_ls, _ = get_ts_txt_org(df, text_col = text_col)
+        tx_f = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features
+        tx_f_list.append(tx_f)
+    return ts_f, tx_f_list, labels
 
 
 # def get_dataloaders(ts_f, tx_f, labels, train_ratio=0.8, batch_size=32):
@@ -170,6 +283,7 @@ def get_features(df,
 #     return train_loader, test_loader
 
 
+# --------------------------general data engineering----------------------------------
 def label_death7d(df, df_y, id_col='VitalID'):
     
     # df_y must have columns ID, DiedNICU, DeathAge
