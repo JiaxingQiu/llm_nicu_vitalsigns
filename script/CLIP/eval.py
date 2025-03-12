@@ -13,8 +13,14 @@ class EvalInputs:
                  ts_encode,
                  y_true_cols = ['true1', 'true2'],
                  y_pred_cols = ['text1', 'text2'],
+                 y_pred_cols_ls = [['demo', 'text1', 'ts_description'], 
+                                   ['demo', 'text2', 'ts_description']],
                  clip_type="2d"):
-        
+        # true1 column is one-hot indicator of true text of first level of outcome, "this infant will die in 7 days"
+        # true2 column is one-hot indicator of true text of second level of outcome, "this infant will survive"
+        # text1 column is text of first level of predicted outcome, "this infant will die in 7 days"
+        # text2 column is text of second level of predicted outcome, "this infant will survive"
+
         self.y_true = torch.tensor(df_new[y_true_cols].values)
         if clip_type == "2d":
             self.ts_f_mat, self.tx_f_mat_ls, _ = get_features3d(df_new,
@@ -25,14 +31,14 @@ class EvalInputs:
                                                                 text_col_ls=y_pred_cols) # text1 is a column of "will die", text2 is a column of "will survive"
         elif clip_type == "3d":
             tx_f_mat_ls_ls = []
-            for y_pred_col in y_pred_cols:
+            for y_pred_cols in y_pred_cols_ls:
                 # replace cl_event with text1 / text2 in tx_df_mat_ls
                 ts_f_mat, tx_f_mat_ls, _ = get_features3d(df_new,
                                                           ts_encoder_name, 
                                                           text_encoder_name, 
                                                           ts_normalize, 
                                                           ts_encode,
-                                                          text_col_ls=['demo', y_pred_col, 'ts_description']) # text1 is a column of "will die", text2 is a column of "will survive"
+                                                          text_col_ls=y_pred_cols) # text1 is a column of "will die", text2 is a column of "will survive"
                 tx_f_mat_ls_ls.append(tx_f_mat_ls)
             self.tx_f_mat_ls_ls = tx_f_mat_ls_ls
             self.ts_f_mat = ts_f_mat
@@ -43,11 +49,7 @@ class EvalInputs:
 @torch.no_grad() 
 def eval_clip(model, 
               eval_inputs):
-    # true1 column is one-hot indicator of true text of first level of outcome, "this infant will die in 7 days"
-    # true2 column is one-hot indicator of true text of second level of outcome, "this infant will survive"
-    # text1 column is text of first level of predicted outcome, "this infant will die in 7 days"
-    # text2 column is text of second level of predicted outcome, "this infant will survive"
-
+    
     y_true = eval_inputs.y_true
     ts_f_mat = eval_inputs.ts_f_mat
     tx_f_mat_ls = eval_inputs.tx_f_mat_ls

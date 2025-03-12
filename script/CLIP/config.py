@@ -56,7 +56,8 @@ text_config = {
         'event1': False,
         'succ_inc': True,
         'histogram': True
-    }
+    },
+    'split': False
 }
 
 # Initialize the config dictionary with default values
@@ -65,7 +66,7 @@ config_dict = {
     'device': device,
     
     # Data settings
-    'batch_size': 128,
+    'batch_size': 512,
     'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_aug': False,
@@ -154,9 +155,13 @@ def get_true_components(config):
     
     # Flatten nested dictionary and get True values
     for category, params in config.items():
-        true_components += [
-            key for key, value in params.items() 
-            if value is True
-        ]
+        if category == 'split':
+            if params:
+                true_components += ['split']
+        else:
+            true_components += [
+                key for key, value in params.items() 
+                if value is True
+            ]
     
     return true_components

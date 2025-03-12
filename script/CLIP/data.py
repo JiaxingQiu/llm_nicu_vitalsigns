@@ -223,10 +223,10 @@ def get_ts_txt_org(df, text_col = 'text'):
 
 
 def get_features(df, 
-                 ts_encoder_name='hr_vae_linear_medium', 
-                 text_encoder_name='sentence-transformers/all-mpnet-base-v2',
-                 normalize=True,
-                 encode_ts=True,
+                 ts_encoder_name, 
+                 text_encoder_name,
+                 normalize,
+                 encode_ts,
                  text_col='text'):
     ts_df, txt_ls, labels = get_ts_txt_org(df, text_col = text_col)
     # --- ts_f ---
@@ -246,10 +246,10 @@ def get_features(df,
 
 
 def get_features3d(df, 
-                 ts_encoder_name='hr_vae_linear_medium', 
-                 text_encoder_name='sentence-transformers/all-mpnet-base-v2',
-                 normalize=True,
-                 encode_ts=True,
+                 ts_encoder_name, 
+                 text_encoder_name,
+                 normalize,
+                 encode_ts,
                  text_col_ls=['demo', 'cl_event', 'ts_description']):
     
     ts_df, _, labels = get_ts_txt_org(df)
@@ -417,7 +417,8 @@ def text_summarize_desat(text):
 def text_gen_demo(row,
              ga_bwt=True,
              gre=False, # gender_race_ethnicity
-             apgar_mage=False):
+             apgar_mage=False,
+             split=False):
     """
     Generate a demographic description string from a single row.
     
@@ -474,17 +475,21 @@ def text_gen_demo(row,
         if is_valid_number(row['Maternal Age']):
             mother_str = f"Mother is {int(round(row['Maternal Age'], 1))} years old. "
     
-    # if all _str are "", return empty string
-    if not (ga_str or weight_str or gender_str or race_str or ethnicity_str or apgar_str or mother_str):
-        return ""
-    # Combine all parts
-    return f"{ga_str}{weight_str}{gender_str}{race_str}{ethnicity_str}{apgar_str}{mother_str}"
+    
+    if not split:
+        if not (ga_str or weight_str or gender_str or race_str or ethnicity_str or apgar_str or mother_str):
+            return ""
+        else:
+            return f"{ga_str}{weight_str}{gender_str}{race_str}{ethnicity_str}{apgar_str}{mother_str}"
+    else:
+        return [ga_str, weight_str, gender_str, race_str, ethnicity_str, apgar_str, mother_str]
     
     
 
 def text_gen_cl_event(row,
                  die7d=True,
-                 fio2=False):
+                 fio2=False,
+                 split=False):
     """
     Generate a clinical event description string from a single row.
     
@@ -502,7 +507,10 @@ def text_gen_cl_event(row,
     if fio2:
         fio2_str = f"The FIO2 is {int(round(row['FIO2']))}."
     
-    return f"{die7d_str}{fio2_str}"
+    if not split:
+        return f"{die7d_str}{fio2_str}"
+    else:
+        return [die7d_str, fio2_str]
 
 
 def text_gen_ts_event(row,
@@ -570,4 +578,30 @@ def text_gen_input_column(df, text_config):
     
     print(df['text'][0])
 
+    if text_config['split']:
+        # Generate demographic descriptions
+        demo_parts = df.apply(text_gen_demo, axis=1, split=True, **text_config['demo'])
+        if text_config['demo']['ga_bwt']:
+            df['demo_ga'] = [parts[0] for parts in demo_parts]
+            df['demo_weight'] = [parts[1] for parts in demo_parts]
+        if text_config['demo']['gre']:
+            df['demo_gender'] = [parts[2] for parts in demo_parts]
+            df['demo_race'] = [parts[3] for parts in demo_parts]
+            df['demo_ethnicity'] = [parts[4] for parts in demo_parts]
+        if text_config['demo']['apgar_mage']:
+            df['demo_apgar'] = [parts[5] for parts in demo_parts]
+            df['demo_mother'] = [parts[6] for parts in demo_parts]
+
+        # Generate clinical event descriptions
+        cl_parts = df.apply(text_gen_cl_event, axis=1, split=True, **text_config['cl'])
+        if text_config['cl']['die7d']:
+            df['cl_die7d'] = [parts[0] for parts in cl_parts]
+        if text_config['cl']['fio2']:
+            df['cl_fio2'] = [parts[1] for parts in cl_parts]
+
+        print("\nAvailable text columns:")
+        text_cols = [col for col in df.columns if col.startswith(('demo_', 'cl_', 'ts_'))]
+        print(text_cols)
+    
+    
     return df

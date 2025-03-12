@@ -73,9 +73,9 @@ class CLIPModel(nn.Module):
             nn.Dropout(0.1),
             
             # Transformer blocks
-            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
-            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
-            TransformerBlock(dim=512, hidden_dim=2048, num_heads=8, dropout=0.1),
+            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=0.1),
+            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=0.1),
+            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=0.1),
             
             # Final projection
             nn.Linear(512, output_dim)

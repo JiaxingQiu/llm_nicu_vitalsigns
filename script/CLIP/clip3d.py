@@ -110,13 +110,55 @@ class CLIP3DModel(nn.Module):
 # plt.colorbar()
 # plt.show()
 
+# custom_config = {
+#     'small': {'hidden_dim': 256, 'n_heads': 2, 'n_layers': 1, 'dropout': 0.1},
+#     'medium': {'hidden_dim': 512, 'n_heads': 4, 'n_layers': 2, 'dropout': 0.1},
+#     'large': {'hidden_dim': 1024, 'n_heads': 8, 'n_layers': 3, 'dropout': 0.1}
+# }
 class TextEncoderWithAttention(nn.Module):
-    def __init__(self, text_dim, n_text, output_dim):
+    def __init__(self, text_dim, n_text, output_dim, encoder_config=None):
         super().__init__()
+
+        # Default encoder configurations
+        self.encoder_config = {
+            '5': {
+                'hidden_dim': 128,
+                'n_heads': 1,
+                'n_layers': 1,
+                'dropout': 0.1
+            },
+            '4': {
+                'hidden_dim': 256,
+                'n_heads': 1,
+                'n_layers': 1,
+                'dropout': 0.1
+            },
+            '3': {
+                'hidden_dim': 512,
+                'n_heads': 4,
+                'n_layers': 1,
+                'dropout': 0.1
+            },
+            '2': {
+                'hidden_dim': 1024,
+                'n_heads': 4,
+                'n_layers': 2,
+                'dropout': 0.1
+            },
+            '1': {
+                'hidden_dim': 1024,
+                'n_heads': 8,
+                'n_layers': 3,
+                'dropout': 0.1
+            }
+        } if encoder_config is None else encoder_config
         
+        # Select configuration based on n_text
+        self.config = self.encoder_config[str(n_text)]
+
         # Create n_text copies of the encoder
         self.text_encoders = nn.ModuleList([
-            self._single_text_encoder(text_dim, output_dim) 
+            self._single_text_encoder(text_dim, output_dim, self.config) 
             for _ in range(n_text)
         ])
         
@@ -130,18 +172,28 @@ class TextEncoderWithAttention(nn.Module):
         # Trainable query vector
         self.query = nn.Parameter(torch.randn(1, 1, output_dim))
         
-    def _single_text_encoder(self, text_dim, output_dim):
-        return nn.Sequential(
+    
+    def _single_text_encoder(self, text_dim, output_dim, config):
+        layers = [
             nn.Linear(text_dim, 512),
             nn.LayerNorm(512),
             nn.GELU(),
-            nn.Dropout(0.1),
-            TransformerBlock(dim=512, hidden_dim=512, num_heads=2, dropout=0.1),
-            TransformerBlock(dim=512, hidden_dim=512, num_heads=2, dropout=0.1),
-            TransformerBlock(dim=512, hidden_dim=512, num_heads=2, dropout=0.1),
-            nn.Linear(512, output_dim)
-        )
+            nn.Dropout(config['dropout'])
+        ]
+        # Add transformer blocks
+        for _ in range(config['n_layers']):
+            layers.append(
+                TransformerBlock(
+                    dim=512,
+                    hidden_dim=config['hidden_dim'],
+                    num_heads=config['n_heads'],
+                    dropout=config['dropout']
+                )
+            )
+        layers.append(nn.Linear(512, output_dim))
+        return nn.Sequential(*layers)
     
+
     def forward(self, text_features):
         # Encode each text input
         encoded_texts = []
