@@ -257,7 +257,7 @@ class Lambda(nn.Module):
         return self.func(x) 
 
 class CNNEncoder(nn.Module):
-    def __init__(self, ts_dim, output_dim, num_channels=[32, 64], kernel_size=5, dropout=0.2):
+    def __init__(self, ts_dim, output_dim, num_channels=[64, 64, 128, 256], kernel_size=5, dropout=0.2):
         """
         CNN encoder for time series.
         

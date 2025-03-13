@@ -154,7 +154,7 @@ class TextEncoderWithAttention(nn.Module):
         } if encoder_config is None else encoder_config
         
         # Select configuration based on n_text
-        self.config = self.encoder_config[str(n_text)]
+        self.config = self.encoder_config[str(min(n_text, 5))]
 
         # Create n_text copies of the encoder
         self.text_encoders = nn.ModuleList([
