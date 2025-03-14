@@ -159,11 +159,6 @@ def plot_shapelets(shapelets, title="Discovered Shapelets"):
 plot_shapelets(shapelets)
 """ 
 
-
-from multiprocessing import Pool
-from functools import partial
-from tqdm import tqdm
-
 class FastShapeletClassifier(ShapeletClassifier):
     def __init__(self, min_length=10, max_length=50, n_shapelets=5, 
                  random_state=42, n_jobs=-1):
@@ -222,3 +217,57 @@ clf = FastShapeletClassifier(
 clf.fit(X_train, y_train)
 y_pred = clf.predict(X_test)
 """
+
+
+
+# from joblib import Parallel, delayed
+# from tqdm import tqdm
+
+# class FastShapeletClassifier(ShapeletClassifier):
+#     def __init__(self, min_length=10, max_length=50, n_shapelets=5, 
+#                  random_state=42, n_jobs=-1):
+#         super().__init__(min_length, max_length, n_shapelets, random_state)
+#         self.n_jobs = n_jobs
+    
+#     def _evaluate_candidate(self, candidate_tuple, X, y):
+#         """Evaluate a single shapelet candidate"""
+#         shapelet, length, start = candidate_tuple
+#         # Calculate distances to this shapelet
+#         distances = np.array([self._calculate_distance(shapelet, ts) for ts in X])
+#         # Calculate information gain
+#         gain, threshold = self._calculate_information_gain(distances, y)
+#         return (shapelet, gain, threshold)
+    
+#     def fit(self, X, y):
+#         """
+#         Parallel version of shapelet fitting using joblib
+#         """
+#         print("Extracting candidates...")
+#         candidates = self._extract_candidates(X)
+        
+#         print(f"Evaluating {len(candidates)} shapelets in parallel...")
+#         shapelet_scores = Parallel(n_jobs=self.n_jobs, verbose=1)(
+#             delayed(self._evaluate_candidate)(candidate, X, y) 
+#             for candidate in candidates
+#         )
+        
+#         print("Selecting top shapelets...")
+#         shapelet_scores.sort(key=lambda x: x[1], reverse=True)
+#         self.shapelets = shapelet_scores[:self.n_shapelets]
+        
+#         print("Training classifier...")
+#         X_transformed = self._transform(X)
+#         self.classifier.fit(X_transformed, y)
+#         return self
+
+# # Usage:
+# """
+# clf = FastShapeletClassifier(
+#     min_length=30,    # 30 seconds
+#     max_length=300,   # 5 minutes
+#     n_shapelets=5,
+#     n_jobs=-1  # Use all available cores
+# )
+# clf.fit(X_train, y_train)
+# y_pred = clf.predict(X_test)
+# """
