@@ -48,7 +48,8 @@ class EvalInputs:
 
 @torch.no_grad() 
 def eval_clip(model, 
-              eval_inputs):
+              eval_inputs,
+              return_probs=False):
     
     y_true = eval_inputs.y_true
     ts_f_mat = eval_inputs.ts_f_mat
@@ -61,7 +62,10 @@ def eval_clip(model,
     y_true = y_true.to(device) # y_true is a tensor of size (obs, num_classes)
     y_prob = y_prob.to(device) # y_prob is a tensor of size (obs, num_classes)
     eval_metrics = get_eval_metrics(y_true, y_prob)
-    return eval_metrics
+    if return_probs:
+        return eval_metrics, y_prob
+    else:
+        return eval_metrics
 
 
 
@@ -98,7 +102,8 @@ def get_logit(model,
 
 @torch.no_grad() 
 def eval_clip3d(model, # model of CLIP3DModel
-                eval_inputs):
+                eval_inputs,
+                return_probs=False):
     # true1 column is one-hot indicator of true text of first level of outcome, "this infant will die in 7 days"
     # true2 column is one-hot indicator of true text of second level of outcome, "this infant will survive"
     # text1 column is text of first level of predicted outcome, "this infant will die in 7 days"
@@ -124,7 +129,11 @@ def eval_clip3d(model, # model of CLIP3DModel
     y_true = y_true.to(device) # y_true is a tensor of size (obs, num_classes)
     y_prob = y_prob.to(device) # y_prob is a tensor of size (obs, num_classes)
     eval_metrics = get_eval_metrics(y_true, y_prob)
-    return eval_metrics
+
+    if return_probs:
+        return eval_metrics, y_prob
+    else:
+        return eval_metrics
 
 
 

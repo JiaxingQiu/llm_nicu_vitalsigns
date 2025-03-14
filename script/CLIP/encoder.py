@@ -368,3 +368,130 @@ class MLPEncoder(nn.Module):
 # )
 # # Create classifiers
 # model = GeneralBinaryClassifier(mlp)
+
+class LSTMEncoder(nn.Module):
+    def __init__(self, ts_dim, output_dim, hidden_dim=128, num_layers=2, dropout=0.1, bidirectional=False):
+        super().__init__()
+        
+        self.lstm = nn.LSTM(
+            input_size=ts_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+            bidirectional=bidirectional
+        )
+        
+        # Account for bidirectional in final dimension
+        lstm_output_dim = hidden_dim * 2 if bidirectional else hidden_dim
+        
+        self.projection = nn.Sequential(
+            nn.Linear(lstm_output_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim),
+            nn.BatchNorm1d(output_dim)
+        )
+    
+    def forward(self, x):
+        # x shape: (batch_size, sequence_length, ts_dim)
+        # If input is (batch_size, ts_dim), unsqueeze to add sequence dimension
+        if len(x.shape) == 2:
+            x = x.unsqueeze(1)
+            
+        # Get LSTM output
+        lstm_out, (hidden, cell) = self.lstm(x)
+        
+        # Use last hidden state from all layers
+        if self.lstm.bidirectional:
+            # Concatenate forward and backward last hidden states
+            hidden = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=1)
+        else:
+            hidden = hidden[-1]
+            
+        # Project to final dimension
+        output = self.projection(hidden)
+        
+        return output
+
+# Usage:
+# lstm_encoder = LSTMEncoder(ts_dim=300, output_dim=128)
+# model = GeneralBinaryClassifier(lstm_encoder)
+# model = CLIPModel(ts_encoder=lstm_encoder, text_encoder=None)
+
+
+
+class MultiLSTMEncoder(nn.Module):
+    def __init__(self, 
+                 ts_dim, 
+                 output_dim, 
+                 hidden_dims=[128, 256, 64],  # Multiple LSTM sizes
+                 num_layers=2, 
+                 dropout=0.1, 
+                 bidirectional=False):
+        super().__init__()
+        
+        # Create multiple LSTM modules
+        self.lstms = nn.ModuleList([
+            nn.LSTM(
+                input_size=ts_dim,
+                hidden_size=hidden_dim,
+                num_layers=num_layers,
+                batch_first=True,
+                dropout=dropout,
+                bidirectional=bidirectional
+            ) for hidden_dim in hidden_dims
+        ])
+        
+        # Total dimension from all LSTMs
+        total_lstm_dim = sum(hidden_dim * 2 if bidirectional else hidden_dim 
+                           for hidden_dim in hidden_dims)
+        
+        # Projection layers
+        self.projection = nn.Sequential(
+            nn.Linear(total_lstm_dim, total_lstm_dim // 2),
+            nn.BatchNorm1d(total_lstm_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(dropout),
+            nn.Linear(total_lstm_dim // 2, output_dim),
+            nn.BatchNorm1d(output_dim)
+        )
+        
+        self.bidirectional = bidirectional
+        
+    def forward(self, x):
+        # x shape: (batch_size, sequence_length, ts_dim)
+        if len(x.shape) == 2:
+            x = x.unsqueeze(1)
+            
+        # Process through each LSTM
+        lstm_outputs = []
+        for lstm in self.lstms:
+            _, (hidden, _) = lstm(x)
+            
+            if self.bidirectional:
+                # Concatenate forward and backward last hidden states
+                hidden = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=1)
+            else:
+                hidden = hidden[-1]
+                
+            lstm_outputs.append(hidden)
+        
+        # Concatenate all LSTM outputs
+        combined = torch.cat(lstm_outputs, dim=1)
+        
+        # Project to final dimension
+        output = self.projection(combined)
+        
+        return output
+
+# Usage:
+# multi_lstm_encoder = MultiLSTMEncoder(
+#     ts_dim=300, 
+#     output_dim=128,
+#     hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
+#     num_layers=2
+# )
+# model = GeneralBinaryClassifier(multi_lstm_encoder)
+# model = CLIPModel(ts_encoder=multi_lstm_encoder, text_encoder=None)
