@@ -451,77 +451,145 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
 
 
 # ------- diagnostic plots -------
-def diag_make_calibration_plot(y_prob, y_true, bins=15):
+def recalibrate_probabilities(y_true_df, y_prob_df, method='platt', n_bins=10):
     """
-    Create a calibration plot comparing predicted probabilities with actual outcomes.
+    Recalibrate probabilities using different methods.
     
     Parameters:
     -----------
-    y_prob : torch.Tensor or numpy.ndarray
-        Predicted probabilities with shape (n_samples, 2)
-    y_true : torch.Tensor or numpy.ndarray
-        True binary labels with shape (n_samples, 2)
+    y_true_df : pandas.DataFrame
+        One-hot encoded true labels
+    y_prob_df : pandas.DataFrame
+        Original predicted probabilities
+    method : str
+        Calibration method: 'platt', 'isotonic', 'beta', 'bayes', or 'histogram'
+    n_bins : int
+        Number of bins for histogram binning
         
     Returns:
     --------
-    None, displays plot and prints Brier scores
+    recal_probs : numpy array
+        Recalibrated probabilities
     """
-    from sklearn.calibration import calibration_curve
-    import matplotlib.pyplot as plt
-    from sklearn.metrics import brier_score_loss
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.linear_model import LogisticRegression
+    import numpy as np
+    import pandas as pd
     
-    # Convert tensors to numpy arrays if needed
-    if hasattr(y_prob, 'cpu'):
-        y_prob = y_prob.cpu().numpy()
-    if hasattr(y_true, 'values'):
-        y_true = y_true.values
+    # Extract first columns
+    y_true = y_true_df.iloc[:, 0].values
+    y_pred = y_prob_df.iloc[:, 0].values
+    
+    if method == 'platt':
+        # Platt Scaling (Logistic Regression)
+        lr = LogisticRegression(C=1.0)
+        # Reshape predictions to 2D array
+        lr.fit(y_pred.reshape(-1, 1), y_true)
+        recal_probs = lr.predict_proba(y_pred.reshape(-1, 1))[:, 1]
         
-    # Create figure
-    plt.figure(figsize=(10, 8))
+    elif method == 'isotonic':
+        # Isotonic Regression
+        ir = IsotonicRegression(out_of_bounds='clip')
+        recal_probs = ir.fit_transform(y_pred, y_true)
+        
+    elif method == 'histogram':
+        # Histogram Binning
+        bins = np.linspace(0, 1, n_bins + 1)
+        bin_indices = np.digitize(y_pred, bins) - 1
+        bin_sums = np.bincount(bin_indices, weights=y_true)
+        bin_counts = np.bincount(bin_indices)
+        bin_means = np.zeros(len(bins) - 1)
+        mask = bin_counts > 0
+        bin_means[mask] = bin_sums[mask] / bin_counts[mask]
+        recal_probs = bin_means[bin_indices]
+        
+    elif method == 'bayes':
+        # Bayesian recalibration (as implemented before)
+        target_prevalence = y_true.mean()
+        likelihood_ratio = y_pred / (1 - y_pred)
+        prior_ratio = target_prevalence / (1 - target_prevalence)
+        recal_probs = (likelihood_ratio * prior_ratio) / (1 + likelihood_ratio * prior_ratio)
+        
+    else:
+        raise ValueError(f"Unknown calibration method: {method}")
+        
+
+    return pd.DataFrame({'class1': recal_probs, 'class2': 1-recal_probs})
+
+
+
+def diag_cali_plot(y_true_df, y_pred_df, n_bins=10):
+    """
+    Create calibration plot using first columns of one-hot encoded dataframes.
     
-    # Calculate calibration curves for both classes
-    prob_true1, prob_pred1 = calibration_curve(y_true[:, 0], y_prob[:, 0], n_bins=bins)
-    prob_true2, prob_pred2 = calibration_curve(y_true[:, 1], y_prob[:, 1], n_bins=bins)
+    Parameters:
+    -----------
+    y_true_df : pandas.DataFrame
+        One-hot encoded true labels (uses first column)
+    y_pred_df : pandas.DataFrame
+        Predicted probabilities (uses first column)
+    n_bins : int
+        Number of bins for calibration (default=10)
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
     
-    # Plot calibration curves
-    plt.plot(prob_pred1, prob_true1, "s-", label="Class 1")
-    plt.plot(prob_pred2, prob_true2, "s-", label="Class 2")
+      
+    # Extract first columns
+    y_true01 = y_true_df.iloc[:, 0].values
+    y_pred = y_pred_df.iloc[:, 0].values
     
-    # Plot the perfectly calibrated line
-    plt.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    # Calculate base mean (prevalence)
+    base_mean_obs = y_true01.mean()
     
-    # Customize the plot
-    plt.xlabel("Mean predicted probability")
-    plt.ylabel("Fraction of positives")
-    plt.title("Calibration Plot")
+    
+    df_hat = pd.DataFrame({
+        'y_true01': y_true01,
+        'y_pred': y_pred,
+        'y_cali_groups': pd.qcut(y_pred, n_bins, labels=False, duplicates='drop')
+    })
+    
+    
+    # Calculate calibration points
+    df_cali = df_hat.groupby('y_cali_groups').agg({
+        'y_true01': 'mean',
+        'y_pred': 'mean'
+    }).reset_index()
+    
+    # Create plot
+    plt.figure(figsize=(4, 4))
+    plt.plot(df_cali['y_pred'], df_cali['y_true01'], 'o-', label='Calibration curve')
+    plt.plot([0, 1], [0, 1], ':', color='gray', label='Perfect calibration')
+    
+    plt.xlabel('Predicted probability')
+    plt.ylabel('Observed probability')
+    plt.title(f'Calibration Plot (prevalence={base_mean_obs:.3f})')
+    plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend()
-    plt.grid(True)
     
-    # Add margins to the plot
-    plt.margins(0.02)
+    # Set equal aspect ratio and limits
+    plt.gca().set_aspect('equal')
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    
     plt.tight_layout()
     plt.show()
     
-    # Calculate and print Brier scores
-    brier_1 = brier_score_loss(y_true[:, 0], y_prob[:, 0])
-    brier_2 = brier_score_loss(y_true[:, 1], y_prob[:, 1])
-    
-    print(f"Brier score for class1 prediction: {brier_1:.3f}")
-    print(f"Brier score for class2 prediction: {brier_2:.3f}")
+    return df_cali
 
+# Example usage:
+# df_cali = cali_plot(y_true_test, y_prob_test)
 
-
-
-def diag_plot_top_k_predictions(y_true, y_prob, df, K=15):
+def diag_plot_top_k_predictions(y_true_df, y_prob_df, df, K=15, plot=True):
     """
     Plot top K time series for true/false positives/negatives based on model predictions.
     
     Parameters:
     -----------
-    y_true : numpy.ndarray or pandas.DataFrame
-        True binary labels with shape (n_samples, 2)
-    y_prob : torch.Tensor
-        Predicted probabilities with shape (n_samples, 2)
+    y_true_df : pandas.DataFrame
+        One-hot encoded true labels DataFrame with shape (n_samples, 2)
+    y_prob_df : pandas.DataFrame
+        Predicted probabilities DataFrame with shape (n_samples, 2)
     df : pandas.DataFrame
         DataFrame containing the time series data
     K : int
@@ -530,76 +598,80 @@ def diag_plot_top_k_predictions(y_true, y_prob, df, K=15):
     import numpy as np
     import matplotlib.pyplot as plt
     
-    # Convert tensors to numpy if needed
-    if hasattr(y_prob, 'cpu'):
-        y_prob = y_prob.cpu().numpy()
-    if hasattr(y_true, 'values'):
-        y_true = y_true.values
-        
     # Get time series column names
     ts_cols = [str(i) for i in range(1, 301)]
     
-    # Get predictions
-    y_pred = (y_prob[:, 0] > 0.5).astype(int)
+    # Get predictions using first column probabilities
+    y_pred = (y_prob_df.iloc[:, 0] > 0.5).astype(int)
+    
+    # Get true labels from first column
+    y_true = y_true_df.iloc[:, 0]
     
     # Separate indices by prediction type
-    true_pos_idx = np.where((y_pred == 1) & (y_true[:, 0] == 1))[0]
-    false_pos_idx = np.where((y_pred == 1) & (y_true[:, 0] == 0))[0]
-    true_neg_idx = np.where((y_pred == 0) & (y_true[:, 0] == 0))[0]
-    false_neg_idx = np.where((y_pred == 0) & (y_true[:, 0] == 1))[0]
+    true_pos_idx = y_pred[(y_pred == 1) & (y_true == 1)].index
+    false_pos_idx = y_pred[(y_pred == 1) & (y_true == 0)].index
+    true_neg_idx = y_pred[(y_pred == 0) & (y_true == 0)].index
+    false_neg_idx = y_pred[(y_pred == 0) & (y_true == 1)].index
     
     # Sort indices by prediction confidence
-    true_pos_idx = true_pos_idx[np.argsort(y_prob[true_pos_idx, 0])[-K:]]
-    false_pos_idx = false_pos_idx[np.argsort(y_prob[false_pos_idx, 0])[-K:]]
-    true_neg_idx = true_neg_idx[np.argsort(y_prob[true_neg_idx, 1])[-K:]]
-    false_neg_idx = false_neg_idx[np.argsort(y_prob[false_neg_idx, 1])[-K:]]
+    true_pos_idx = true_pos_idx[np.argsort(y_prob_df.iloc[true_pos_idx, 0])[-K:]]
+    false_pos_idx = false_pos_idx[np.argsort(y_prob_df.iloc[false_pos_idx, 0])[-K:]]
+    true_neg_idx = true_neg_idx[np.argsort(y_prob_df.iloc[true_neg_idx, 1])[-K:]]
+    false_neg_idx = false_neg_idx[np.argsort(y_prob_df.iloc[false_neg_idx, 1])[-K:]]
     
-    # Create plots
-    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    fig.suptitle(f'Top {K} Predictions by Category', fontsize=16)
+    if plot:
+        # Create plots
+        fig, axes = plt.subplots(2, 2, figsize=(20, 12))
+        fig.suptitle(f'Top {K} Predictions by Category', fontsize=16)
+        
+        # Plot true positives
+        for idx in true_pos_idx:
+            ts = df.loc[idx, ts_cols].values
+            axes[0,0].plot(ts, alpha=0.7)
+        axes[0,0].set_title(f'True Positives (Class 1)\nMean prob: {y_prob_df.iloc[true_pos_idx, 0].mean():.3f}')
+        axes[0,0].set_xlabel('Time (seconds)')
+        axes[0,0].set_ylabel('Heart Rate')
+        axes[0,0].grid(True)
+        
+        # Plot false positives
+        for idx in false_pos_idx:
+            ts = df.loc[idx, ts_cols].values
+            axes[0,1].plot(ts, alpha=0.7)
+        axes[0,1].set_title(f'False Positives (Predicted Class 1 with high probability, Actually Class 2)\nMean prob: {y_prob_df.iloc[false_pos_idx, 0].mean():.3f}')
+        axes[0,1].set_xlabel('Time (seconds)')
+        axes[0,1].set_ylabel('Heart Rate')
+        axes[0,1].grid(True)
+        
+        # Plot true negatives
+        for idx in true_neg_idx:
+            ts = df.loc[idx, ts_cols].values
+            axes[1,0].plot(ts, alpha=0.7)
+        axes[1,0].set_title(f'True Negatives (Class 2)\nMean prob: {y_prob_df.iloc[true_neg_idx, 1].mean():.3f}')
+        axes[1,0].set_xlabel('Time (seconds)')
+        axes[1,0].set_ylabel('Heart Rate')
+        axes[1,0].grid(True)
+        
+        # Plot false negatives
+        for idx in false_neg_idx:
+            ts = df.loc[idx, ts_cols].values
+            axes[1,1].plot(ts, alpha=0.7)
+        axes[1,1].set_title(f'False Negatives (Predicted Class 2 with high probability, Actually Class 1)\nMean prob: {y_prob_df.iloc[false_neg_idx, 1].mean():.3f}')
+        axes[1,1].set_xlabel('Time (seconds)')
+        axes[1,1].set_ylabel('Heart Rate')
+        axes[1,1].grid(True)
+        
+        # all ax ylim 60 - 200
+        for ax in axes.flat:
+            ax.set_ylim(60, 200)
+        plt.tight_layout()
+        plt.show()
     
-    # Plot true positives
-    for idx in true_pos_idx:
-        ts = df.iloc[idx].loc[ts_cols].values
-        axes[0,0].plot(ts, alpha=0.7)
-    axes[0,0].set_title(f'True Positives (Class 1)\nMean prob: {y_prob[true_pos_idx, 0].mean():.3f}')
-    axes[0,0].set_xlabel('Time (seconds)')
-    axes[0,0].set_ylabel('Heart Rate')
-    axes[0,0].grid(True)
-    
-    # Plot false positives
-    for idx in false_pos_idx:
-        ts = df.iloc[idx].loc[ts_cols].values
-        axes[0,1].plot(ts, alpha=0.7)
-    axes[0,1].set_title(f'False Positives (Predicted Class 1, Actually Class 2)\nMean prob: {y_prob[false_pos_idx, 0].mean():.3f}')
-    axes[0,1].set_xlabel('Time (seconds)')
-    axes[0,1].set_ylabel('Heart Rate')
-    axes[0,1].grid(True)
-    
-    # Plot true negatives
-    for idx in true_neg_idx:
-        ts = df.iloc[idx].loc[ts_cols].values
-        axes[1,0].plot(ts, alpha=0.7)
-    axes[1,0].set_title(f'True Negatives (Class 2)\nMean prob: {y_prob[true_neg_idx, 1].mean():.3f}')
-    axes[1,0].set_xlabel('Time (seconds)')
-    axes[1,0].set_ylabel('Heart Rate')
-    axes[1,0].grid(True)
-    
-    # Plot false negatives
-    for idx in false_neg_idx:
-        ts = df.iloc[idx].loc[ts_cols].values
-        axes[1,1].plot(ts, alpha=0.7)
-    axes[1,1].set_title(f'False Negatives (Predicted Class 2, Actually Class 1)\nMean prob: {y_prob[false_neg_idx, 1].mean():.3f}')
-    axes[1,1].set_xlabel('Time (seconds)')
-    axes[1,1].set_ylabel('Heart Rate')
-    axes[1,1].grid(True)
-    
-    plt.tight_layout()
-    plt.show()
-    
-    # # Print summary statistics
-    # print("\nNumber of samples in each category:")
-    # print(f"True Positives: {len(true_pos_idx)}")
-    # print(f"False Positives: {len(false_pos_idx)}")
-    # print(f"True Negatives: {len(true_neg_idx)}")
-    # print(f"False Negatives: {len(false_neg_idx)}")
+    return {
+        'true_pos_idx': true_pos_idx,
+        'false_pos_idx': false_pos_idx,
+        'true_neg_idx': true_neg_idx,
+        'false_neg_idx': false_neg_idx
+    }
+
+# Example usage:
+# indices = diag_plot_top_k_predictions(y_true_test, y_prob_test, df_test, K=15)

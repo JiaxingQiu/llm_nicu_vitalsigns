@@ -605,3 +605,36 @@ def text_gen_input_column(df, text_config):
     
     
     return df
+
+
+
+def plot_ts(df, idx):
+    """
+    Plot a single time series from the DataFrame.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing time series data
+    idx : int
+        Index of the time series to plot
+    """
+    import matplotlib.pyplot as plt
+    
+    # Get time series data
+    ts_cols = [str(i) for i in range(1, 301)]
+    ts = df.loc[idx, ts_cols].values
+    
+    # Create plot
+    plt.figure(figsize=(15, 5))
+    plt.plot(ts, 'b-', linewidth=2)
+    plt.title(f'Time Series (Index: {idx})')
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Heart Rate')
+    plt.grid(True)
+    plt.show()
+    
+    return ts
+
+## Example usage:
+# ts = plot_ts(df_train, 2)
