@@ -4,6 +4,7 @@ from rpy2.robjects.packages import STAP
 import rpy2.robjects as ro
 ro.r('options(warn=-1)')  # Suppress all warnings
 import os
+import numpy as np
 from joblib import Parallel, delayed
 import multiprocessing
 
@@ -84,11 +85,13 @@ def generate_descriptions_parallel(ts_df, id_df):
     
     # Define helper functions for parallel processing
     def process_row(row):
-        succ_inc = describe_succ_inc_summ(row.values)
-        histogram = describe_hr_histogram(row.values)
-        events80 = describe_brady_events(row.values, th=80, plot=False, type=0)
-        events90 = describe_brady_events(row.values, th=90, plot=False, type=0)
-        events100 = describe_brady_events(row.values, th=100, plot=False, type=0)
+        # remove nan values from row.values
+        x = row.values[~np.isnan(row.values)]
+        succ_inc = describe_succ_inc_summ(x)
+        histogram = describe_hr_histogram(x)
+        events80 = describe_brady_events(x, th=80, plot=False, type=0)
+        events90 = describe_brady_events(x, th=90, plot=False, type=0)
+        events100 = describe_brady_events(x, th=100, plot=False, type=0)
         return {
             'succ_inc': succ_inc,
             'histogram': histogram,
@@ -125,6 +128,7 @@ def generate_descriptions_parallel(ts_df, id_df):
 
 def describe_brady_events(x, th=80, direction="<", plot=False, type=1):
     """Python wrapper to call R's describe_brady_event function"""
+    x = x[~np.isnan(x)]
     r_vector = robjects.FloatVector(x)
     description = r_functions.describe_brady_event(
         r_vector, th, direction, plot, type
@@ -178,6 +182,7 @@ def describe_hr_histogram(x):
     Returns:
         str: Description of heart rate variability
     """
+    x = x[~np.isnan(x)]
     r_vector = robjects.FloatVector(x)
     description = r_functions.describe_hr_histogram(r_vector)
     return str(description[0]) if description else ""
@@ -192,6 +197,7 @@ def describe_succ_inc(x):
     Returns:
         str: Description of consecutive increases
     """
+    x = x[~np.isnan(x)]
     r_vector = robjects.FloatVector(x)
     description = r_functions.describe_succ_inc(r_vector)
     return str(description[0]) if description else ""
@@ -206,6 +212,7 @@ def describe_succ_inc_summ(x):
     Returns:
         str: Summary description of consecutive increases
     """
+    x = x[~np.isnan(x)]
     r_vector = robjects.FloatVector(x)
     description = r_functions.describe_succ_inc_summ(r_vector)
     return str(description[0]) if description else ""
