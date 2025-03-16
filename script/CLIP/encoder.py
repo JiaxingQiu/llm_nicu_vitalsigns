@@ -495,3 +495,5 @@ class MultiLSTMEncoder(nn.Module):
 # )
 # model = GeneralBinaryClassifier(multi_lstm_encoder)
 # model = CLIPModel(ts_encoder=multi_lstm_encoder, text_encoder=None)
+
+

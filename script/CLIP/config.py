@@ -70,6 +70,7 @@ config_dict = {
     'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_aug': False,
+    'ts_subseq': False,
     'ts_normalize': False,
     'ts_encode': False,
     'block_target': False,

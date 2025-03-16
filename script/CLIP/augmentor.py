@@ -297,5 +297,10 @@ def augment_balance_data(df_sub,
     for class_label in txt_ls_org:
         print(f"Class {class_label}: {final_dist.get(class_label, 0)}")
     
+    # group by rowid, add an augid, indicating the order of each row within each rowid
+    df_balanced = df_balanced.groupby('rowid').apply(lambda x: x.assign(augid=range(len(x)))).reset_index(drop=True)
+    df_balanced['raw_aug_id'] = df_balanced['rowid'].astype(str) + '_' + df_balanced['augid'].astype(str)
+    df_balanced = df_balanced.set_index('raw_aug_id', inplace=False, drop=True).rename_axis(None)
+    
     return df_balanced
         

@@ -363,12 +363,12 @@ def text_summarize_brady(text):
               or "1 Bradycardia90 (heart rate below 90) event happened."
     """
     if not isinstance(text, str):
-        return "No Bradycardia events."
+        return ""#"No Bradycardia events."
     
     # Count events
     event_count = text.count("\n Event")
     if event_count == 0:
-        return "No Bradycardia events."
+        return ""#"No Bradycardia events."
     
     # Find the event name and threshold
     import re
@@ -394,12 +394,12 @@ def text_summarize_desat(text):
         str: Summary like "2 Desaturation90 (spo2 below 90) events happened." or "1 Desaturation90 (spo2 below 90) event happened."
     """
     if not isinstance(text, str):
-        return "No Desaturation events."
+        return ""#"No Desaturation events."
     
     # Count events
     event_count = text.count("\n Event")
     if event_count == 0:
-        return "No Desaturation events."
+        return ""#"No Desaturation events."
     
     # Find the event name and threshold
     import re
