@@ -1,4 +1,5 @@
 import numpy as np
+from data import text_gen_input_column
 
 def extract_random_subsequence(x, seq_length, random_state=333):
     """
@@ -158,7 +159,8 @@ def get_subseq_parallel(ts_df,
                        max_length_ratio=2/3,    # 300 * 2/3 = 200
                        step_size_ratio=1/30,    # 300/30 = 10
                        seq_length=None, 
-                       random_state=333):
+                       random_state=333,
+                       aug_sub = False):
     """
     Extract subsequences from multiple time series in parallel.
     
@@ -186,10 +188,15 @@ def get_subseq_parallel(ts_df,
     
     def process_row(x, id):
 
-        str_id = str(id) # string versino of id for return df index
+        str_id = str(id) # string version of id for return df index
         if '_' in str_id:
             # split id by "_", keep the fist part (id of each raw time series), convert to int
-            num_id = int(str_id.split('_')[0])
+            row_id = int(str_id.split('_')[0])
+            aug_id = int(str_id.split('_')[1])
+            if aug_sub:
+                num_id = row_id # the augmentations of the same row, share the "same" subsequence, only the subsequence are augemented version of the subsequence of the row time series.
+            else:
+                num_id = row_id + aug_id # each augmentation of row, has a unique subsequence
         else:
             num_id = int(str_id) # number version of id for random state
         """Process a single time series row"""
@@ -271,3 +278,28 @@ for subid in subids:
     plt.show()
 
 """
+
+
+def subseq_raw_df(df, config_dict):
+    import pandas as pd
+    df.index = df.index.astype(str) # index should be str for both df and combined_df, aug or not
+    ts_df = df[[str(i) for i in range(1, 301)]]
+    combined_df = get_subseq_parallel(ts_df,
+                                        n=config_dict['ts_subseq_n'], 
+                                        min_length_ratio=config_dict['ts_subseq_min_length_ratio'], 
+                                        max_length_ratio=config_dict['ts_subseq_max_length_ratio'], 
+                                        step_size_ratio=config_dict['ts_subseq_step_size_ratio'], 
+                                        random_state=config_dict['random_state'],
+                                        aug_sub=config_dict['ts_augsub'])
+    merge_cols = [col for col in df.columns if col not in combined_df.columns] # Get columns to merge (columns in df_train that aren't in combined_df)
+    merge_df = df[merge_cols].copy()# Create a temporary DataFrame with just the columns we want to merge
+    combined_df = combined_df.join(merge_df, how='left') # Merge using index
+    combined_df = text_gen_input_column(combined_df, config_dict['text_config'])
+    df['subid'] = 0
+    combined_df = combined_df[df.columns]
+    df_final = pd.concat([df, combined_df], axis=0)
+    # should be same shape as df_train and df_test (before training)
+    df_final = df_final.reset_index(drop=True)
+    print("After Subsequence Extraction:")
+    print(df_final[config_dict['y_col']].value_counts())
+    return df_final

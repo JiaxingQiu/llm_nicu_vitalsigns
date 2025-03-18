@@ -1,7 +1,83 @@
 # configurations goes here
 import torch
 
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+text_config = {
+    'cl': {
+        'die7d': True,
+        'fio2': False
+    },
+    'demo': {
+        'ga_bwt': True,
+        'gre': False, # gender_race_ethnicity
+        'apgar_mage': False
+    },
+    'ts': {
+        'sumb': True, # sum_brady
+        'sumd': False, # sum_desat
+        'simple': True,
+        'full': False,
+        'event1': False,
+        'succ_inc': True,
+        'histogram': True
+    },
+    'split': False
+}
+
+# Initialize the config dictionary with default values
+config_dict = {
+    # Device
+    'device': device,
+    'random_state': 333,
+
+    # classification outcome settings
+    'y_col': 'cl_event', # column name for the classification outcome, ie. 'cl_event'
+    'y_levels': ['This infant will die in 7 days. ', 'This infant will survive. '],
+    'y_pred_levels': ['will die', 'will survive'],
+    'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother']
+    'y_pred_cols_ls': None,
+
+
+    # Data settings
+    'downsample_levels': ['This infant will survive. '],
+    'downsample_size': 1000,
+    'ts_aug': False,
+    'balance': False,
+    'ts_subseq': False,
+    'ts_subseq_n': 1,
+    'ts_subseq_min_length_ratio':1/6,
+    'ts_subseq_max_length_ratio': 2/3,
+    'ts_subseq_step_size_ratio': 1/30,
+    'ts_augsub': False,
+    'block_target': False,
+
+    # Data loader settings
+    'batch_size': 512,
+    'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
+    'ts_encoder_name': 'hr_vae_linear_medium',
+    'ts_normalize': False,
+    'ts_encode': False,
+    
+
+    # Model settings
+    'model_name': 'hey_you_forget_to_name_your_model',
+    '3d': True,
+    'embedded_dim': 128,
+    'model_init': None,
+    
+    # Training settings
+    'init_lr': 0.0001,
+    'patience': 50,
+    'num_saves': 200,
+    'num_epochs': 50,
+    'loss_type': 'block_diagonal',
+    
+    # Text configuration
+    'text_config': text_config
+}
+
 
 def set_seed(seed: int = 333) -> None:
     """
@@ -36,70 +112,41 @@ def set_seed(seed: int = 333) -> None:
     print(f"Random seed set to {seed}")
 
 # Usage
-set_seed(333)  # or any other seed value
-
-text_config = {
-    'cl': {
-        'die7d': True,
-        'fio2': False
-    },
-    'demo': {
-        'ga_bwt': True,
-        'gre': False, # gender_race_ethnicity
-        'apgar_mage': False
-    },
-    'ts': {
-        'sumb': True, # sum_brady
-        'sumd': False, # sum_desat
-        'simple': True,
-        'full': False,
-        'event1': False,
-        'succ_inc': True,
-        'histogram': True
-    },
-    'split': False
-}
-
-# Initialize the config dictionary with default values
-config_dict = {
-    # Device
-    'device': device,
-    
-    # Data settings
-    'batch_size': 512,
-    'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
-    'ts_encoder_name': 'hr_vae_linear_medium',
-    'ts_aug': False,
-    'ts_subseq': False,
-    'ts_normalize': False,
-    'ts_encode': False,
-    'block_target': False,
-    'balance': False,
-    
-    # Model settings
-    'model_name': 'hey_you_forget_to_name_your_model',
-    'embedded_dim': 128,
-    'init_lr': 0.0001,
-    'patience': 50,
-    
-    # Training settings
-    'num_saves': 200,
-    'num_epochs': 50,
-    'loss_type': 'block_diagonal',
-    'txt_ls': None,
-    
-    # Text configuration
-    'text_config': text_config
-}
+set_seed(config_dict['random_state'])  # or any other seed value
 
 def update_config(**kwargs):
     """Update configuration with new values"""
     config_dict.update(kwargs)
     return config_dict
 
+
 def get_config_dict():
     """Get current configuration"""
-    return config_dict.copy()
+    
+    base_config = config_dict
+        
+    # Create a copy to avoid modifying the original
+    config = base_config.copy()
+    
+    # Validate y_levels and y_pred_levels match
+    assert len(config['y_levels']) == len(config['y_pred_levels'])
+    n_levels = len(config['y_levels'])
+
+    # Generate y_pred_cols_ls for 3D models
+    if config['3d']:
+        pred_cols = [f'text{i+1}' for i in range(n_levels)]
+        y_pred_cols_ls = []
+        for text_col in pred_cols:
+            new_cols = [text_col if x == config['y_col'] else x 
+                       for x in config['text_col_ls']]
+            y_pred_cols_ls.append(new_cols)
+    else:
+        y_pred_cols_ls = None
+
+    config['y_pred_cols_ls'] = y_pred_cols_ls
+
+    return config
+
 
 # Usage example:
 """

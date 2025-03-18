@@ -429,7 +429,8 @@ class MultiLSTMEncoder(nn.Module):
                  hidden_dims=[128, 256, 64],  # Multiple LSTM sizes
                  num_layers=2, 
                  dropout=0.1, 
-                 bidirectional=False):
+                 bidirectional=False,
+                 mask=-1): # it is the indicator of masked values in the time series (i.e. -1), default to -1
         super().__init__()
         
         # Create multiple LSTM modules
@@ -459,11 +460,17 @@ class MultiLSTMEncoder(nn.Module):
         )
         
         self.bidirectional = bidirectional
+        self.mask = mask
         
     def forward(self, x):
         # x shape: (batch_size, sequence_length, ts_dim)
         if len(x.shape) == 2:
             x = x.unsqueeze(1)
+        if self.mask is not None:
+            # Create mask for values != -1
+            mask = (x != self.mask).float()
+            # Apply mask to input
+            x = x * mask # zero out masked values
             
         # Process through each LSTM
         lstm_outputs = []
@@ -497,3 +504,109 @@ class MultiLSTMEncoder(nn.Module):
 # model = CLIPModel(ts_encoder=multi_lstm_encoder, text_encoder=None)
 
 
+
+# class MultiLSTMEncoder_mask(nn.Module):
+#     def __init__(self, 
+#                  ts_dim, 
+#                  output_dim, 
+#                  hidden_dims=[128, 256, 64],  # Multiple LSTM sizes
+#                  num_layers=2, 
+#                  dropout=0.1, 
+#                  bidirectional=False,
+#                  mask=-1): # it is the indicator of masked values in the time series (i.e. -1), default to -1
+#         super().__init__()
+        
+#         # Create multiple LSTM modules
+#         self.lstms = nn.ModuleList([
+#             nn.LSTM(
+#                 input_size=ts_dim, # 1 for packed sequence
+#                 hidden_size=hidden_dim,
+#                 num_layers=num_layers,
+#                 batch_first=True,
+#                 dropout=dropout,
+#                 bidirectional=bidirectional
+#             ) for hidden_dim in hidden_dims
+#         ])
+        
+#         # Total dimension from all LSTMs
+#         total_lstm_dim = sum(hidden_dim * 2 if bidirectional else hidden_dim 
+#                            for hidden_dim in hidden_dims)
+        
+#         # Projection layers
+#         self.projection = nn.Sequential(
+#             nn.Linear(total_lstm_dim, total_lstm_dim // 2),
+#             nn.BatchNorm1d(total_lstm_dim // 2),
+#             nn.LeakyReLU(0.2),
+#             nn.Dropout(dropout),
+#             nn.Linear(total_lstm_dim // 2, output_dim),
+#             nn.BatchNorm1d(output_dim)
+#         )
+        
+#         self.bidirectional = bidirectional
+#         self.mask = mask
+        
+#     def forward(self, x):
+
+        
+#         # x shape: (batch_size, ts_dim)
+#         if len(x.shape) == 2:
+#             x = x.unsqueeze(1) # x shape: (batch_size, features, ts_dim) torch.Size([2048, 1, 300])
+            
+            
+#         # Apply mask if provided
+#         if self.mask is not None:
+#             # x = x.transpose(1, 2) # Ensure correct shape [batch_size, sequence_length, features]
+#             # # print(f"x shape: {x.shape}")
+#             # Create mask for values != -1
+#             mask = (x != self.mask).float()
+#             # Apply mask to input
+#             x = x * mask
+        
+#         # # Pack sequence for masked input and higher efficiency
+#         # x = nn.utils.rnn.pack_padded_sequence(
+#         #     x, 
+#         #     lengths = [len(xx) for xx in x], 
+#         #     batch_first=True, 
+#         #     enforce_sorted=False
+#         # )
+    
+        
+#         # Process through each LSTM
+#         lstm_outputs = []
+#         for lstm in self.lstms:
+#             _, (hidden, _) = lstm(x)
+            
+#             if self.bidirectional:
+#                 hidden = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=1)
+#             else:
+#                 hidden = hidden[-1]
+                
+#             lstm_outputs.append(hidden)
+        
+#         # Concatenate all LSTM outputs
+#         combined = torch.cat(lstm_outputs, dim=1)
+        
+#         # Project to final dimension
+#         output = self.projection(combined)
+        
+        
+#         return output
+    
+
+
+# Usage:
+"""
+lstm_encoder = MultiLSTMEncoder_mask(
+    ts_dim=ts_f_dim.shape[1], 
+    output_dim=128,
+    hidden_dims=[256, 256, 256, 128, 128, 128],  # Three LSTMs with different sizes
+    num_layers=2,
+    mask=-1
+)
+
+for batch_idx, (id, ts_features, text_features, labels, targets_org) in enumerate(train_dataloader):
+
+    ts_features = ts_features.to(device)
+    print(lstm_encoder(ts_features))
+    break
+"""

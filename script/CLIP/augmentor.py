@@ -304,3 +304,23 @@ def augment_balance_data(df_sub,
     
     return df_balanced
         
+
+
+def downsample_neg_levels(df, config_dict, random_state=333):
+    neg_sample_size = config_dict['downsample_size']
+    down_levels = config_dict['downsample_levels']
+    keep_levels = [level for level in config_dict['y_levels'] if level not in down_levels]
+    df_kept = df[df[config_dict['y_col']].isin(keep_levels)]
+    # Downsample specified negative levels and combine
+    df_downsampled = pd.concat([
+        df[df[config_dict['y_col']] == level].sample(
+            n=neg_sample_size, 
+            replace=False, 
+            random_state=random_state
+        ) for level in down_levels
+    ])
+    df = pd.concat([df_kept, df_downsampled])
+    # Print class distribution after downsampling
+    print("After downsampling:")
+    print(df[config_dict['y_col']].value_counts())
+    return df
