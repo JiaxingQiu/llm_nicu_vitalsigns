@@ -133,9 +133,9 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     try:
         for epoch in range(num_epochs):
             if epoch < int(0.2 * num_epochs): # first 20% of num_epochs
-                scheduler.patience = min(int(0.1*num_epochs), 100)
+                scheduler.patience = min(int(0.1*num_epochs), 50)
             elif epoch < int(0.5 * num_epochs): # second 30% of num_epochs
-                scheduler.patience = min(int(0.05*num_epochs), 50)
+                scheduler.patience = min(int(0.05*num_epochs), 30)
             else:
                 scheduler.patience = min(int(0.01*num_epochs), 10)
             
