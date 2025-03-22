@@ -184,8 +184,8 @@ class TSVAEEncoder(nn.Module):
             # nn.LeakyReLU(0.2),
             # nn.Linear(512, 256),
             # nn.LeakyReLU(0.2),
-            nn.Linear(128, 128),
-            nn.LeakyReLU(0.2)
+            # nn.Linear(256, 128),
+            # nn.LeakyReLU(0.2)
         )
         # Latent mean and variance 
         self.mean_layer = nn.Linear(128, output_dim)
