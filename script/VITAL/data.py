@@ -44,7 +44,7 @@ class VITALDataset(Dataset):
                           batch_size=batch_size, 
                           shuffle=True,
                           num_workers=0,
-                          pin_memory=True)
+                          pin_memory=False) # they will already be in GPU
     
 
 class VITAL3DDataset(Dataset):
@@ -113,7 +113,7 @@ class VITAL3DDataset(Dataset):
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=0,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=False
         )
     
