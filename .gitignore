@@ -8,6 +8,7 @@ script/CLIP/results/
 script/CLIP/tmp/
 script/Data/tmp/
 script/WSDIST/results/
+script/VITAL/results/
 __pycache__/
 .vscode/
 clip_env/
