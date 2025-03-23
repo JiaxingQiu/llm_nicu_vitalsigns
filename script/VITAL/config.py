@@ -41,6 +41,7 @@ config_dict = {
 
 
     # Data settings
+    'downsample': True,
     'downsample_levels': ['This infant will survive. '],
     'downsample_size': 1000,
     'ts_aug': False,

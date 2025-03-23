@@ -36,8 +36,9 @@ df_test, df_leftout = train_test_split(df_test_org, test_size=0.5, stratify=df_t
 
 # df_train, df_test = train_test_split(df_train, test_size=0.2, stratify=df_train[config_dict['y_col']], random_state=config_dict['random_state']) 
 # ---- downsample negative class(es) ----
-df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
+if config_dict['downsample']:
+    df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
+    df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
 
 # ---- augment + balance train data----
 # target_event_rate = len(df_test[df_test[config_dict['y_col']]==config_dict['y_levels'][0]])/len(df_test)
