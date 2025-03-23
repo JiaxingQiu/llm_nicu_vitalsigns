@@ -84,7 +84,7 @@ def get_logit(model,
     #     tx_f = tx_f.reshape(1, -1)
     #     tx_f_mat = torch.cat([tx_f] * ts_f_mat.shape[0], dim=0) # shape = (obs, dim_tx_f)
     for tx_f_mat in tx_f_mat_ls: # shape = (obs, dim_tx_f)
-        logit, _, _ = model(ts_f_mat, tx_f_mat)
+        logit, _, _, _ = model(ts_f_mat, tx_f_mat)
         # keep the diagonal of logit
         obs_logits = torch.diag(logit)
         obs_logits = obs_logits.reshape(-1, 1)
@@ -114,7 +114,7 @@ def eval_clip3d(model, # model of CLIP3DModel
     for tx_f_mat_ls in tx_f_mat_ls_ls:
         ts_f_mat = ts_f_mat.to(device)
         tx_f_mat_ls = [tx_f_mat.to(device) for tx_f_mat in tx_f_mat_ls]
-        logits, _, _ = model(ts_f_mat, tx_f_mat_ls)
+        logits, _, _, _ = model(ts_f_mat, tx_f_mat_ls)
         obs_logits = torch.diag(logits)
         obs_logits = obs_logits.reshape(-1, 1)
         obs_ys_logits.append(obs_logits)
@@ -135,37 +135,6 @@ def eval_clip3d(model, # model of CLIP3DModel
 
 
 
-
-
-
-# @torch.no_grad() 
-# def get_logit1(model, 
-#               ts_f_mat, # ts tensor engineered by TSFeature
-#               tx_f_ls # txt tensor engineered by TXTFeature 
-#               ):
-    
-#     model.eval()
-#     # ts_f_mat = TSFeature(ts_df, encoder_model_name=ts_encoder_name).features
-#     # tx_f_ls = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features   
-
-#     # calculate the logits for all observations and outcomes, one by one
-#     obs_ys_logits = []
-#     for i in range(ts_f_mat.shape[0]):
-#         ts_f = ts_f_mat[i,:]
-#         ts_f = ts_f.reshape(1, -1)
-#         logits = [] 
-#         for tx_f in tx_f_ls:
-#             tx_f = tx_f.reshape(1, -1)
-#             with torch.no_grad():
-#                 logit, _, _ = model(ts_f, tx_f) # logit is a tensor of size (1, 1)
-#                 logits.append(logit) 
-#         logits = torch.cat(logits, dim=1)
-#         obs_ys_logits.append(logits)
-#     obs_ys_logits = torch.cat(obs_ys_logits, dim=0)
-#     exp_preds = torch.exp(obs_ys_logits)
-#     softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True)
-
-#     return obs_ys_logits, softmax_probs
 
 
 

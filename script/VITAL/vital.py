@@ -178,12 +178,16 @@ class TSVAEEncoder(nn.Module):
         self.encoder_layers = nn.Sequential(
             nn.Linear(ts_dim, 256),
             nn.LeakyReLU(0.2),
-            # nn.Linear(256, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 256),
-            # nn.LeakyReLU(0.2),
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, 128),
             nn.LeakyReLU(0.2)
         )
@@ -216,14 +220,14 @@ class TSVAEDecoder(nn.Module):
         self.decoder = nn.Sequential(
             nn.Linear(output_dim, 128),
             nn.LeakyReLU(0.2),
-            # nn.Linear(128, 256),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(256, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 256),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(256, 128),
-            # nn.LeakyReLU(0.2),
+            nn.Linear(128, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 128),
+            nn.LeakyReLU(0.2),
             nn.Linear(128, ts_dim)
         )
     
@@ -329,8 +333,8 @@ class TextEncoderWithAttention(nn.Module):
     
     def _single_text_encoder(self, text_dim, output_dim, config):
         layers = [
-            nn.Linear(text_dim, 512),
-            nn.LayerNorm(512),
+            nn.Linear(text_dim, 256),
+            nn.LayerNorm(256),
             nn.GELU(),
             nn.Dropout(config['dropout'])
         ]
@@ -338,13 +342,13 @@ class TextEncoderWithAttention(nn.Module):
         for _ in range(config['n_layers']):
             layers.append(
                 TransformerBlock(
-                    dim=512,
+                    dim=256,
                     hidden_dim=config['hidden_dim'],
                     num_heads=config['n_heads'],
                     dropout=config['dropout']
                 )
             )
-        layers.append(nn.Linear(512, output_dim))
+        layers.append(nn.Linear(256, output_dim))
         return nn.Sequential(*layers)
     
 

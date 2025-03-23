@@ -46,6 +46,7 @@ def compute_vae_loss(ts, ts_hat, mean, log_var, beta=1.0):
     # reconstruction_loss = F.mse_loss(ts_hat, ts)
     # kl_loss = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
     vae_loss = reconstruction_loss + beta * kl_loss
+    print(f'reconstruction: {reconstruction_loss.item()}, kl: {kl_loss.item()}')
     return vae_loss
 
   
@@ -132,12 +133,12 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     best_model_state = None
     try:
         for epoch in range(num_epochs):
-            if epoch < int(0.2 * num_epochs): # first 20% of num_epochs
-                scheduler.patience = min(int(0.1*num_epochs), 50)
-            elif epoch < int(0.5 * num_epochs): # second 30% of num_epochs
-                scheduler.patience = min(int(0.05*num_epochs), 30)
-            else:
-                scheduler.patience = min(int(0.01*num_epochs), 10)
+            # if epoch < int(0.2 * num_epochs): # first 20% of num_epochs
+            #     scheduler.patience = min(int(0.1*num_epochs), 50)
+            # elif epoch < int(0.5 * num_epochs): # second 30% of num_epochs
+            #     scheduler.patience = min(int(0.05*num_epochs), 30)
+            # else:
+            #     scheduler.patience = min(int(0.01*num_epochs), 10)
             
 
             beta = kl_annealer.get_beta(epoch)
