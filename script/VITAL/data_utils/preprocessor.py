@@ -391,6 +391,7 @@ def text_gen_ts_event(row,
                  full=False,
                  event1=False,
                  succ_inc=True,
+                 succ_unc=True,
                  histogram=True):
     """
     Generate a time series event description string from a single row.
@@ -410,6 +411,7 @@ def text_gen_ts_event(row,
     event1_str = ""
     histogram_str = ""
     succ_inc_str = ""
+    succ_unc_str = ""
 
     if sumb:
         sum_str = text_summarize_brady(row['description_ts_event'])
@@ -433,7 +435,10 @@ def text_gen_ts_event(row,
     if succ_inc:
         succ_inc_str = row['description_succ_inc']
         succ_inc_str = succ_inc_str + " "
-    return f"{sum_str}{simple_str}{full_str}{event1_str}{histogram_str}{succ_inc_str}"
+    if succ_unc:
+        succ_unc_str = row['description_succ_unc']
+        succ_unc_str = succ_unc_str + " "
+    return f"{sum_str}{simple_str}{full_str}{event1_str}{histogram_str}{succ_inc_str}{succ_unc_str}"
 
 def text_gen_input_column(df, text_config):
     df.columns = df.columns.astype(str)

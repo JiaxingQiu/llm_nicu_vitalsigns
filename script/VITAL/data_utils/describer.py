@@ -54,7 +54,10 @@ def generate_descriptions(ts_df, id_df):
     df_desc['description_succ_inc'] = [
         describe_succ_inc_summ(row.values) for _, row in ts_df.iterrows()
     ]
-    
+    # Generate successive unchange summaries
+    df_desc['description_succ_unc'] = [
+        describe_succ_unc_summ(row.values) for _, row in ts_df.iterrows()
+    ]
     # Generate histogram descriptions
     df_desc['description_histogram'] = [
         describe_hr_histogram(row.values) for _, row in ts_df.iterrows()
@@ -88,12 +91,14 @@ def generate_descriptions_parallel(ts_df, id_df):
         # remove nan values from row.values
         x = row.values[~np.isnan(row.values)]
         succ_inc = describe_succ_inc_summ(x)
+        succ_unc = describe_succ_unc_summ(x)
         histogram = describe_hr_histogram(x)
         events80 = describe_brady_events(x, th=80, plot=False, type=0)
         events90 = describe_brady_events(x, th=90, plot=False, type=0)
         events100 = describe_brady_events(x, th=100, plot=False, type=0)
         return {
             'succ_inc': succ_inc,
+            'succ_unc': succ_unc,
             'histogram': histogram,
             'events': (events80, events90, events100)
         }
@@ -111,6 +116,7 @@ def generate_descriptions_parallel(ts_df, id_df):
     
     # Extract results
     df_desc['description_succ_inc'] = [r['succ_inc'] for r in results]
+    df_desc['description_succ_unc'] = [r['succ_unc'] for r in results]
     df_desc['description_histogram'] = [r['histogram'] for r in results]
     
     # Process events
@@ -218,4 +224,18 @@ def describe_succ_inc_summ(x):
     return str(description[0]) if description else ""
 
 
+def describe_succ_unc_summ(x):
+    """
+    Python wrapper to call R's describe_succ_unc_summ function
+    
+    Args:
+        x (np.ndarray): Time series data
+    
+    Returns:
+        str: Summary description of consecutive unchanges
+    """
+    x = x[~np.isnan(x)]
+    r_vector = robjects.FloatVector(x)
+    description = r_functions.describe_succ_unc_summ(r_vector)
+    return str(description[0]) if description else ""
 

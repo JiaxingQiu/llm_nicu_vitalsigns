@@ -21,6 +21,7 @@ text_config = {
         'full': False,
         'event1': False,
         'succ_inc': True,
+        'succ_unc': True,
         'histogram': True
     },
     'split': False

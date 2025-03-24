@@ -26,7 +26,7 @@ def cross_entropy(preds, targets):
     batch_size = preds.shape[0]
     exp_preds = torch.exp(preds)
     softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # sum over the columns, keep the rows
-    log_probs = torch.log(softmax_probs)
+    log_probs = torch.log(softmax_probs + 1e-8)
     loss = -torch.sum(targets * log_probs) / batch_size
     return loss
 
@@ -47,8 +47,6 @@ class KLAnnealer:
 def compute_vae_loss(ts, ts_hat, mean, log_var, beta=1.0):
     reconstruction_loss = F.mse_loss(ts_hat, ts, reduction='sum') / ts.size(0)
     kl_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
-    # reconstruction_loss = F.mse_loss(ts_hat, ts)
-    # kl_loss = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
     vae_loss = reconstruction_loss + beta * kl_loss
     print(f'reconstruction: {reconstruction_loss.item()}, kl: {kl_loss.item()}')
     return vae_loss
