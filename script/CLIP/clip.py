@@ -151,13 +151,16 @@ def loss_block_diagonal(logits, labels): # symmetric cross-entropy loss calculat
     # labels = pd.factorize(labels)[0]
     # labels = torch.tensor(labels, device=logits.device)
 
-    batch_size = logits.shape[0]
-    # build block-diagonal target matrix based on labels
-    targets = torch.zeros((batch_size, batch_size), device=logits.device)
-    for i in range(batch_size):
-        for j in range(batch_size):
-            if labels[i] == labels[j]:
-                targets[i,j] = 1
+    # batch_size = logits.shape[0]
+    # # build block-diagonal target matrix based on labels
+    # targets = torch.zeros((batch_size, batch_size), device=logits.device)
+    # for i in range(batch_size):
+    #     for j in range(batch_size):
+    #         if labels[i] == labels[j]:
+    #             targets[i,j] = 1
+    # Vectorized operation on GPU!!
+    labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
+    targets = labels_equal.float()
     loss_ts = cross_entropy(logits, targets)
     loss_tx = cross_entropy(logits.T, targets.T)
     loss = (loss_ts + loss_tx) / 2

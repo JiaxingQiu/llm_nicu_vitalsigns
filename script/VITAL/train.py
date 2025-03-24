@@ -4,13 +4,18 @@ import torch.nn.functional as F
  
 def compute_clip_loss(logits, labels): 
 
-    batch_size = logits.shape[0]
-    # build block-diagonal target matrix based on labels
-    targets = torch.zeros((batch_size, batch_size), device=logits.device)
-    for i in range(batch_size):
-        for j in range(batch_size):
-            if labels[i] == labels[j]:
-                targets[i,j] = 1
+    # # build block-diagonal target matrix based on labels
+    # batch_size = logits.shape[0]
+    # targets = torch.zeros((batch_size, batch_size), device=logits.device)
+    # for i in range(batch_size):
+    #     for j in range(batch_size):
+    #         if labels[i] == labels[j]:
+    #             targets[i,j] = 1
+
+    # Vectorized operation on GPU!!
+    labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
+    targets = labels_equal.float()
+
     loss_ts = cross_entropy(logits, targets)
     loss_tx = cross_entropy(logits.T, targets.T)
     clip_loss = (loss_ts + loss_tx) / 2

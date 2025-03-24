@@ -46,22 +46,22 @@ config_dict = {
     'downsample_size': 1000,
     'ts_aug': False,
     'balance': False,
+    'block_target': False, # only block or diagonal two types of clip targets
     'ts_subseq': False,
     'ts_subseq_n': 1,
     'ts_subseq_min_length_ratio':1/6,
     'ts_subseq_max_length_ratio': 2/3,
     'ts_subseq_step_size_ratio': 1/30,
     'ts_augsub': False,
-    'block_target': False,
 
     # Data loader settings
-    'batch_size': 512,
+    'batch_size': 2048,
     'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
-    'ts_global_normalize': True,
+    'ts_global_normalize': False, 
     'ts_normalize_mean': 150, # global normalization mean
     'ts_normalize_std': 20, # global normalization std
-    'ts_local_normalize': False,
+    'ts_local_normalize': False, # shared with ts_subseq settings to fill na
     
 
     # Model settings
@@ -75,7 +75,6 @@ config_dict = {
     'patience': 50,
     'num_saves': 200,
     'num_epochs': 50,
-    'loss_type': 'block_diagonal',
     
     # Text configuration
     'text_config': text_config
