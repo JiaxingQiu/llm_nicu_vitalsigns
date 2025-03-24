@@ -7,7 +7,7 @@ from config import *
 from model_utils.encoder import *
 from model_utils.decoder import *
 
-# Verbally Instructed Time series Augmentation Learning (VITAL)
+# Verbally Instructed Time series Augmentation Learning (VITAL)  (3d)
 class VITAL3D(nn.Module):
     def __init__(self, 
                  ts_dim: int, 
@@ -79,9 +79,7 @@ class VITAL3D(nn.Module):
         
         return logits, ts_hat, mean, log_var
 
-
-
-
+# VITAL model (2d)
 class VITAL(nn.Module):
     def __init__(self, 
                  ts_dim: int, 
@@ -165,6 +163,7 @@ class VITAL(nn.Module):
 
         return logits, ts_hat, mean, log_var
 
+# default ts vae encoder
 class LocalNorm(nn.Module):
     def __init__(self, eps=1e-5):
         super().__init__()
@@ -233,6 +232,7 @@ class TSVAEEncoder(nn.Module):
         
         return z, mean, log_var, x_mean, x_std
 
+# default ts vae decoder
 class TSVAEDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int):
         super().__init__()
@@ -260,6 +260,7 @@ class TSVAEDecoder(nn.Module):
         x_hat = x_hat * x_std + x_mean
         return x_hat
 
+# default text encoder
 class TextEncoder(nn.Module):
     def __init__(self, 
                  text_dim: int, 
@@ -298,6 +299,7 @@ class TextEncoder(nn.Module):
         """
         return self.encoder(text_features)
 
+# default text encoder with attention on text splits
 class TextEncoderWithAttention(nn.Module):
     def __init__(self, text_dim, n_text, output_dim, encoder_config=None):
         super().__init__()
@@ -420,3 +422,68 @@ class TextEncoderWithAttention(nn.Module):
 # plt.show()
 
 
+
+# ts vae encoder wrapper for custom ts encoders
+class TSVAEEncoderWrapper(nn.Module):
+    def __init__(self, ts_encoder_layers, output_dim=None):
+        super().__init__()
+        self.local_norm = LocalNorm()
+
+        # ts_encoder_layers must be a instance of a class defined similarly as belows
+        self.encoder_layers = ts_encoder_layers
+        
+        # Get the hidden dimension from the encoder's output
+        hidden_dim = ts_encoder_layers.output_dim
+        if output_dim is None:
+            output_dim = hidden_dim
+        
+        # Latent mean and variance 
+        self.mean_layer = nn.Linear(hidden_dim, output_dim)
+        self.logvar_layer = nn.Linear(hidden_dim, output_dim)
+
+    def reparameterization(self, mean, log_var):
+        std = torch.exp(0.5 * log_var)  # Convert log_var to std
+        epsilon = torch.randn_like(std).to(device)
+        z = mean + std * epsilon
+        return z
+    
+    def forward(self, x):
+        x, x_mean, x_std = self.local_norm(x)
+
+        #  ---- encode -----
+        x_encoded = self.encoder_layers(x)
+        mean = self.mean_layer(x_encoded)
+        log_var = self.logvar_layer(x_encoded)
+
+        #  ---- reparameterization -----
+        z = self.reparameterization(mean, log_var)
+        return z, mean, log_var, x_mean, x_std
+
+# usage:
+"""
+lstm_encoder = MultiLSTMEncoder(
+    ts_dim=300, 
+    output_dim=128,
+    hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
+    num_layers=2
+)
+ts_encoder = TSVAEEncoderWrapper(lstm_encoder)
+for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
+
+    ts_features = ts_features.to(device)
+    print(ts_encoder(ts_features))
+    break
+"""
+
+
+
+# ts vae decoder wrapper for custom ts decoders
+class TSVAEDecoderWrapper(nn.Module):
+    def __init__(self, ts_decoder):
+        super().__init__()
+        self.decoder = ts_decoder
+        
+    def forward(self, z, x_mean, x_std):
+        x_hat = self.decoder(z)
+        x_hat = x_hat * x_std + x_mean
+        return x_hat

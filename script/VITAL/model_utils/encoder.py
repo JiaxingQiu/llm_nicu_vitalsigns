@@ -2,55 +2,7 @@ from config import *
 import torch
 import torch.nn as nn
 
-# ------- custom ts and txt encoders (for VITAL embedding generation) -------
-class TSVAEEncoderWrapper(nn.Module):
-    def __init__(self, ts_encoder_layers, output_dim=None):
-        super().__init__()
-        # ts_encoder_layers must be a instance of a class defined similarly as belows
-        self.encoder_layers = ts_encoder_layers
-        
-        # Get the hidden dimension from the encoder's output
-        hidden_dim = ts_encoder_layers.output_dim
-        if output_dim is None:
-            output_dim = hidden_dim
-        
-        # Latent mean and variance 
-        self.mean_layer = nn.Linear(hidden_dim, output_dim)
-        self.logvar_layer = nn.Linear(hidden_dim, output_dim)
-
-    def reparameterization(self, mean, log_var):
-        std = torch.exp(0.5 * log_var)  # Convert log_var to std
-        epsilon = torch.randn_like(std).to(device)
-        z = mean + std * epsilon
-        return z
-    
-    def forward(self, x):
-        #  ---- encode -----
-        x_encoded = self.encoder_layers(x)
-        mean = self.mean_layer(x_encoded)
-        log_var = self.logvar_layer(x_encoded)
-
-        #  ---- reparameterization -----
-        z = self.reparameterization(mean, log_var)
-        return z, mean, log_var 
-
-# usage:
-"""
-lstm_encoder = MultiLSTMEncoder(
-    ts_dim=300, 
-    output_dim=128,
-    hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
-    num_layers=2
-)
-ts_encoder = TSVAEEncoderWrapper(lstm_encoder)
-for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
-
-    ts_features = ts_features.to(device)
-    print(ts_encoder(ts_features))
-    break
-"""
-
-
+# ------- custom ts encoder_layers (for VITAL embedding generation) -------
 class TransformerBlock(nn.Module):
     def __init__(self, dim, hidden_dim, num_heads=8, dropout=0.1):
         super().__init__()

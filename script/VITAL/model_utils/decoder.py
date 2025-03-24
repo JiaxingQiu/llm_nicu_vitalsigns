@@ -3,17 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .encoder import ResidualBlock, Lambda
 
-# ------- custom ts encoders -------
-class TSVAEDecoderWrapper(nn.Module):
-    def __init__(self, ts_decoder):
-        super().__init__()
-        self.decoder = ts_decoder
-        
-    def forward(self, z):   
-        x_hat = self.decoder(z)
-        return x_hat
-
-
+# ------- custom ts decoder_layers -------
 class ResNetDecoder(nn.Module):
     def __init__(self, ts_dim, output_dim, hidden_dim=128, num_blocks=2, dropout=0.1):
         super().__init__()
