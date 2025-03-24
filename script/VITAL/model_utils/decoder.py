@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from encoder import ResidualBlock, Lambda
+from .encoder import ResidualBlock, Lambda
 
 # ------- custom ts encoders -------
 class TSVAEDecoderWrapper(nn.Module):

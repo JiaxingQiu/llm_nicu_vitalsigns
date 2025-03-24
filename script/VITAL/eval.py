@@ -1,6 +1,5 @@
 from config import *
 from data import *
-from vital import *
 import torch
 
 

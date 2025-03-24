@@ -66,7 +66,7 @@ class VITAL3D(nn.Module):
 
         # ---- VAE encoder ----
         # Encode time series
-        z, mean, log_var = self.ts_encoder(ts)
+        z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
         # --- CLIP forward pass ---
         ts_embedded = F.normalize(z, dim=1)
@@ -75,8 +75,8 @@ class VITAL3D(nn.Module):
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
 
         # --- VAE decoder forward pass ---
-        ts_hat = self.ts_decoder(z)
-
+        ts_hat = self.ts_decoder(z, x_mean, x_std) # ts_hat in raw scale
+        
         return logits, ts_hat, mean, log_var
 
 
@@ -152,7 +152,7 @@ class VITAL(nn.Module):
         """
 
         # ---- VAE encoder ----
-        z, mean, log_var = self.ts_encoder(ts)
+        z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
         # --- CLIP forward pass ---
         ts_embedded = F.normalize(z, dim=1)
@@ -161,10 +161,24 @@ class VITAL(nn.Module):
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
 
         # --- VAE decoder forward pass ---
-        ts_hat = self.ts_decoder(z)
+        ts_hat = self.ts_decoder(z, x_mean, x_std)
 
         return logits, ts_hat, mean, log_var
 
+class LocalNorm(nn.Module):
+    def __init__(self, eps=1e-5):
+        super().__init__()
+        self.eps = eps
+    
+    def forward(self, x):
+        # Compute mean and std along feature dimension
+        mean = x.mean(dim=1, keepdim=True)  # [batch_size, 1]
+        std = x.std(dim=1, keepdim=True)    # [batch_size, 1]
+        
+        # Normalize
+        x_norm = (x - mean) / (std + self.eps)
+        
+        return x_norm, mean, std
     
 class TSVAEEncoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int):
@@ -175,6 +189,8 @@ class TSVAEEncoder(nn.Module):
             output_dim (int): Output embedding dimension
         """
         super().__init__()
+        # Simple normalization without learnable parameters
+        self.local_norm = LocalNorm()
 
         self.encoder_layers = nn.Sequential(
             nn.Linear(ts_dim, 256),
@@ -205,6 +221,8 @@ class TSVAEEncoder(nn.Module):
         return z
     
     def forward(self, x):
+        x, x_mean, x_std = self.local_norm(x)
+
         #  ---- encode -----
         x_encoded = self.encoder_layers(x)
         mean = self.mean_layer(x_encoded)
@@ -213,7 +231,7 @@ class TSVAEEncoder(nn.Module):
         #  ---- reparameterization -----
         z = self.reparameterization(mean, log_var)
         
-        return z, mean, log_var
+        return z, mean, log_var, x_mean, x_std
 
 class TSVAEDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int):
@@ -236,8 +254,10 @@ class TSVAEDecoder(nn.Module):
             nn.Linear(128, ts_dim)
         )
     
-    def forward(self, z):
+    def forward(self, z, x_mean, x_std):
         x_hat = self.decoder(z)
+        # scale back to raw scale
+        x_hat = x_hat * x_std + x_mean
         return x_hat
 
 class TextEncoder(nn.Module):

@@ -1,3 +1,6 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
 # ---- ready original dataframes ----
 # Train Data
 df = pd.read_excel('../../data/PAS Challenge HR Data.xlsx', engine="calamine")
@@ -54,10 +57,24 @@ if config_dict['ts_aug']:
 if config_dict['ts_subseq']:
     df_train = subseq_raw_df(df_train,config_dict)
     df_test = subseq_raw_df(df_test,config_dict)
-    # Fill nan with -1 
-    df_train.loc[:, '1':'300'] = df_train.loc[:, '1':'300'].fillna(config_dict['ts_normalize_mean'])
-    df_test.loc[:, '1':'300'] = df_test.loc[:, '1':'300'].fillna(config_dict['ts_normalize_mean'])
+    
+    # default fill na with preset global mean
+    df_train_na = df_train.loc[:, '1':'300'].copy()
+    df_test_na = df_test.loc[:, '1':'300'].copy()
 
+    if config_dict['ts_local_normalize']:
+        # Fill NaN with row-wise means using np.nanmean
+        df_train_na = df_train_na.apply(lambda x: x.fillna(np.nanmean(x)), axis=1)
+        df_test_na = df_test_na.apply(lambda x: x.fillna(np.nanmean(x)), axis=1)
+    else:
+        # Fill NaN with global preset mean
+        df_train_na = df_train_na.fillna(config_dict['ts_normalize_mean'])
+        df_test_na = df_test_na.fillna(config_dict['ts_normalize_mean'])
+    
+    df_train.loc[:, '1':'300'] = df_train_na
+    df_test.loc[:, '1':'300'] = df_test_na
+    # remove df_train_na and df_test_na from memory
+    del df_train_na, df_test_na
 
 # ---- block or not ----
 if not config_dict['block_target']:

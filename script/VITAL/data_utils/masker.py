@@ -1,5 +1,5 @@
 import numpy as np
-from data import text_gen_input_column
+from .preprocessor import text_gen_input_column
 
 def extract_random_subsequence(x, seq_length, random_state=333):
     """
