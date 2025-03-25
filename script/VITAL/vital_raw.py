@@ -358,10 +358,10 @@ class TextEncoderWithAttention(nn.Module):
         self.query = nn.Parameter(torch.randn(1, 1, output_dim))
         
     
-    def _single_text_encoder(self, text_dim, output_dim, config):
+    def _single_text_encoder(self, text_dim, output_dim, config, hidden_dim=256):
         layers = [
-            nn.Linear(text_dim, 256),
-            nn.LayerNorm(256),
+            nn.Linear(text_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(config['dropout'])
         ]
@@ -369,13 +369,13 @@ class TextEncoderWithAttention(nn.Module):
         for _ in range(config['n_layers']):
             layers.append(
                 TransformerBlock(
-                    dim=256,
+                    dim=hidden_dim,
                     hidden_dim=config['hidden_dim'],
                     num_heads=config['n_heads'],
                     dropout=config['dropout']
                 )
             )
-        layers.append(nn.Linear(256, output_dim))
+        layers.append(nn.Linear(hidden_dim, output_dim))
         return nn.Sequential(*layers)
     
 

@@ -224,18 +224,19 @@ def get_ts_txt_org(df, text_col = 'text'):
 
 
 def get_features(df, 
-                 text_encoder_name,
-                 normalize_mean=None,
-                 normalize_std=None,
-                 global_norm = True,
-                 local_norm = False,
+                 config_dict,
                  text_col='text'):
     ts_df, txt_ls, labels = get_ts_txt_org(df, text_col = text_col)
     # --- ts_f ---
-    ts_f = TSFeature(ts_df, normalize_mean=normalize_mean, normalize_std=normalize_std, global_norm = global_norm, local_norm = local_norm).features
+    ts_f = TSFeature(ts_df,
+                    normalize_mean=config_dict['ts_normalize_mean'], 
+                    normalize_std=config_dict['ts_normalize_std'], 
+                    global_norm = config_dict['ts_global_normalize'], 
+                    local_norm = config_dict['ts_local_normalize']).features
 
     # --- tx_f ---
-    tx_f = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features
+    tx_f = TXTFeature(txt_ls, 
+                      encoder_model_name=config_dict['text_encoder_name']).features
 
     # --- labels ---
     labels = torch.tensor(labels)
@@ -244,20 +245,21 @@ def get_features(df,
 
 
 def get_features3d(df, 
-                 text_encoder_name,
-                 normalize_mean=None,
-                 normalize_std=None,
-                 global_norm = True,
-                 local_norm = False,
+                 config_dict,
                  text_col_ls=['demo', 'cl_event', 'ts_description']):
     
     ts_df, _, labels = get_ts_txt_org(df)
-    ts_f = TSFeature(ts_df, normalize_mean=normalize_mean, normalize_std=normalize_std, global_norm = global_norm, local_norm = local_norm).features
+    ts_f = TSFeature(ts_df, 
+                     normalize_mean=config_dict['ts_normalize_mean'],
+                     normalize_std=config_dict['ts_normalize_std'],
+                     global_norm = config_dict['ts_global_normalize'], 
+                     local_norm = config_dict['ts_local_normalize']).features
     labels = torch.tensor(labels)
     tx_f_list = []
     for text_col in text_col_ls:
         _, txt_ls, _ = get_ts_txt_org(df, text_col = text_col)
-        tx_f = TXTFeature(txt_ls, encoder_model_name=text_encoder_name).features
+        tx_f = TXTFeature(txt_ls, 
+                          encoder_model_name=config_dict['text_encoder_name']).features
         tx_f_list.append(tx_f)
     return ts_f, tx_f_list, labels
 
