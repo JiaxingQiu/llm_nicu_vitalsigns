@@ -163,22 +163,7 @@ class VITAL(nn.Module):
 
         return logits, ts_hat, mean, log_var
 
-# default ts vae encoder
-class LocalNorm(nn.Module):
-    def __init__(self, eps=1e-5):
-        super().__init__()
-        self.eps = eps
-    
-    def forward(self, x):
-        # Compute mean and std along feature dimension
-        mean = x.mean(dim=1, keepdim=True)  # [batch_size, 1]
-        std = x.std(dim=1, keepdim=True)    # [batch_size, 1]
-        
-        # Normalize
-        x_norm = (x - mean) / (std + self.eps)
-        
-        return x_norm, mean, std
-    
+
 class TSVAEEncoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int):
         """Time series encoder with progressive architecture
@@ -188,28 +173,16 @@ class TSVAEEncoder(nn.Module):
             output_dim (int): Output embedding dimension
         """
         super().__init__()
-        # Simple normalization without learnable parameters
-        self.local_norm = LocalNorm()
-
-        self.encoder_layers = nn.Sequential(
-            nn.Linear(ts_dim, 256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 128),
-            nn.LeakyReLU(0.2)
-        )
+        self.encoder_layers = MultiLSTMEncoder(
+                            ts_dim=ts_dim, 
+                            output_dim=output_dim,
+                            hidden_dims=[256, 256, 256],  # LSTMs with different sizes
+                            num_layers=2,
+                            mask=0# mask 0 with 0 to suppress the effect of masked values
+                        )
         # Latent mean and variance 
-        self.mean_layer = nn.Linear(128, output_dim)
-        self.logvar_layer = nn.Linear(128, output_dim)
+        self.mean_layer = nn.Linear(output_dim, output_dim)
+        self.logvar_layer = nn.Linear(output_dim, output_dim)
     
     def reparameterization(self, mean, log_var):
         # var = torch.exp(0.5 * log_var) # slower than using log_var directly
@@ -220,7 +193,8 @@ class TSVAEEncoder(nn.Module):
         return z
     
     def forward(self, x):
-        x, x_mean, x_std = self.local_norm(x)
+        x_mean = 0
+        x_std = 1
 
         #  ---- encode -----
         x_encoded = self.encoder_layers(x)
@@ -228,9 +202,82 @@ class TSVAEEncoder(nn.Module):
         log_var = self.logvar_layer(x_encoded)
 
         #  ---- reparameterization -----
-        z = self.reparameterization(mean, log_var)
+        # z = self.reparameterization(mean, log_var)
+        z = x_encoded
         
         return z, mean, log_var, x_mean, x_std
+  
+
+
+# # default ts vae encoder
+# class LocalNorm(nn.Module):
+#     def __init__(self, eps=1e-5):
+#         super().__init__()
+#         self.eps = eps
+    
+#     def forward(self, x):
+#         # Compute mean and std along feature dimension
+#         mean = x.mean(dim=1, keepdim=True)  # [batch_size, 1]
+#         std = x.std(dim=1, keepdim=True)    # [batch_size, 1]
+        
+#         # Normalize
+#         x_norm = (x - mean) / (std + self.eps)
+        
+#         return x_norm, mean, std
+# class TSVAEEncoder(nn.Module):
+#     def __init__(self, ts_dim: int, output_dim: int):
+#         """Time series encoder with progressive architecture
+        
+#         Args:
+#             ts_dim (int): Input time series dimension
+#             output_dim (int): Output embedding dimension
+#         """
+#         super().__init__()
+
+
+#         # Simple normalization without learnable parameters
+#         self.local_norm = LocalNorm()
+
+#         self.encoder_layers = nn.Sequential(
+#             nn.Linear(ts_dim, 256),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(256, 512),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(512, 512),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(512, 512),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(512, 512),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(512, 256),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(256, 128),
+#             nn.LeakyReLU(0.2)
+#         )
+#         # Latent mean and variance 
+#         self.mean_layer = nn.Linear(128, output_dim)
+#         self.logvar_layer = nn.Linear(128, output_dim)
+    
+#     def reparameterization(self, mean, log_var):
+#         # var = torch.exp(0.5 * log_var) # slower than using log_var directly
+#         var = log_var
+#         epsilon = torch.randn_like(var).to(device)      
+#         z = mean + var*epsilon  # Using var directly
+#         # z = F.softmax(z,dim=1) # This variable follows a Dirichlet distribution
+#         return z
+    
+#     def forward(self, x):
+#         x, x_mean, x_std = self.local_norm(x)
+
+#         #  ---- encode -----
+#         x_encoded = self.encoder_layers(x)
+#         mean = self.mean_layer(x_encoded)
+#         log_var = self.logvar_layer(x_encoded)
+
+#         #  ---- reparameterization -----
+#         z = self.reparameterization(mean, log_var)
+        
+#         return z, mean, log_var, x_mean, x_std
 
 # default ts vae decoder
 class TSVAEDecoder(nn.Module):
@@ -319,8 +366,8 @@ class TextEncoderWithAttention(nn.Module):
                 'dropout': 0.1
             },
             '3': {
-                'hidden_dim': 512,
-                'n_heads': 4,
+                'hidden_dim': 256,
+                'n_heads': 2,
                 'n_layers': 1,
                 'dropout': 0.1
             },
