@@ -170,6 +170,10 @@ class LocalNorm(nn.Module):
         self.eps = eps
     
     def forward(self, x):
+        # Add batch dimension if input is single sample
+        if x.dim() == 1:
+            x = x.unsqueeze(0)  # Add batch dimension
+          
         # Compute mean and std along feature dimension
         mean = x.mean(dim=1, keepdim=True)  # [batch_size, 1]
         std = x.std(dim=1, keepdim=True)    # [batch_size, 1]

@@ -97,7 +97,7 @@ else:
 
 
 # ---- ready eval inputs for CLIP ----
-# ts to txt prediction evaluation (truei and texti are reserved names) 
+# 1. ts to txt prediction evaluation (truei and texti are reserved names) 
 n_levels = len(config_dict['y_levels'])
 for i in range(n_levels):
     df_train[f'true{i+1}'] = df_train[config_dict['y_col']].apply(lambda x: 1 if x == config_dict['y_levels'][i] else 0)
@@ -116,18 +116,22 @@ evalclipts2txt_test = EvalCLIPTS2TXT(df_test,
                                         y_pred_cols = [f'text{i+1}' for i in range(n_levels)],
                                         y_pred_cols_ls = config_dict['y_pred_cols_ls'])
 
-# txt to ts prediction evaluation (caption is reserved name)
-# txt_tsid_mapping = {'text1':[559, 560, 561],
-#                     'text2':[562, 563, 564], 
-#                     'text3':[565, 566, 832], 
-#                     'text4':[1153, 65148, 65149]}
-# evalcliptxt2ts_train = EvalCLIPTXT2TS(df = df_train, 
-#                                       txt_tsid_mapping = txt_tsid_mapping_train,
-#                                       config_dict = config_dict)
-# evalcliptxt2ts_test = EvalCLIPTXT2TS(df = df_test, 
-#                                      txt_tsid_mapping = txt_tsid_mapping_test,
-#                                      config_dict = config_dict)
+# 2. txt to ts prediction evaluation (caption is reserved name)
+txt_tsid_mapping_train = []
+for col in ['description_histogram', 'description_succ_unc', 'description_succ_inc']:
+    txt_tsid_mapping_train_sub = gen_txt_tsid_mapping(df_train, col)
+    txt_tsid_mapping_train.extend(txt_tsid_mapping_train_sub)
+txt_tsid_mapping_test = []
+for col in ['description_histogram', 'description_succ_unc', 'description_succ_inc']:
+    txt_tsid_mapping_test_sub = gen_txt_tsid_mapping(df_test, col)
+    txt_tsid_mapping_test.extend(txt_tsid_mapping_test_sub)
+evalcliptxt2ts_train = EvalCLIPTXT2TS(df_train, txt_tsid_mapping_train, config_dict)
+evalcliptxt2ts_test = EvalCLIPTXT2TS(df_test, txt_tsid_mapping_test, config_dict)
 
+
+
+print(df_train[config_dict['y_col']].value_counts())
+print(df_test[config_dict['y_col']].value_counts())
 
 output_dir = './results/'+model_name
 model_path = output_dir+'/model.pth' 
@@ -153,4 +157,3 @@ if overwrite:
         ts_f_test, tx_f_test, labels_test = get_features(df_test,
                                                          config_dict)
         test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test).dataloader(batch_size=config_dict['batch_size'])
- 

@@ -50,7 +50,7 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
         distances: List of noise variances to add to latent space (default=[0, 5e-4, 7.5e-4, 1e-3, 2e-3])
     """
     model.eval()
-    x, _, _ = dataloader.dataset[sample_idx]
+    x, text_features, _ = dataloader.dataset[sample_idx]
 
     # Create figure and subplots
     fig, axs = plt.subplots(2, 3, figsize=(15, 8))
@@ -69,10 +69,24 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
         # Plot reconstructions with different distances
         for i, distance in enumerate(distances, 1):
             # Get embeddings and reconstruction
-            _, z_mean, z_log_var = model.ts_encoder(x)
+            try:
+                _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(x)
+            except:
+                _, z_mean, z_log_var = model.ts_encoder(x)
+
             z = model.ts_encoder.reparameterization(z_mean, z_log_var + distance)
-            x_hat = model.ts_decoder(z)
-            _, z_mean_hat, _ = model.ts_encoder(x_hat)
+            # decode new z
+            try:
+                x_hat = model.ts_decoder(z, x_mean, x_std)
+            except:
+                x_hat = model.ts_decoder(z)
+            if x_hat.dim() == 2:
+                x_hat = x_hat[0]
+                
+            try:
+                _, z_mean_hat, _, _, _ = model.ts_encoder(x_hat)
+            except:
+                _, z_mean_hat, _ = model.ts_encoder(x_hat)
 
             # Calculate Euclidean distance between original and reconstructed latents
             z_mean = z_mean.cpu().detach().numpy()
