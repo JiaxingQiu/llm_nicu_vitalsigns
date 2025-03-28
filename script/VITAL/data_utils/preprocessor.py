@@ -438,7 +438,7 @@ def text_gen_ts_event(row,
     if succ_unc:
         succ_unc_str = row['description_succ_unc']
         succ_unc_str = succ_unc_str + " "
-    return f"{sum_str}{simple_str}{full_str}{event1_str}{histogram_str}{succ_inc_str}{succ_unc_str}"
+    return f"{histogram_str}{succ_inc_str}{succ_unc_str}{sum_str}{simple_str}{event1_str}{full_str}"
 
 def text_gen_input_column(df, text_config):
     df.columns = df.columns.astype(str)

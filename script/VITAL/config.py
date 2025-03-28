@@ -19,7 +19,7 @@ text_config = {
         'sumd': False, # sum_desat
         'simple': True,
         'full': False,
-        'event1': False,
+        'event1': True,
         'succ_inc': True,
         'succ_unc': True,
         'histogram': True

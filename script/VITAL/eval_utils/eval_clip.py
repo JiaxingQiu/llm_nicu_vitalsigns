@@ -232,17 +232,28 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         plt.tight_layout()
         plt.subplots_adjust(right=0.85)
 
+    def get_even_indices(length, n=20):
+        """Get n evenly spaced indices from 0 to length-1"""
+        if length <= n:
+            return list(range(length))
+        return [i * (length-1) // (n-1) for i in range(n)]
     if plot_confusion_matrices:
-        # plot confusion matrices
+        # Select 20 evenly spaced matrices
         n_matrices = len(confusion_matrices_train)
-        n_cols = min(10, n_matrices)  # max 10 columns
-        n_rows = (n_matrices + n_cols - 1) // n_cols  # ceiling division
-
-        plt.figure(figsize=(20, 4*n_rows))
-        for i, conf_matrix in enumerate(confusion_matrices_train):
+        selected_indices = get_even_indices(n_matrices, n=20)
+        selected_matrices_train = [confusion_matrices_train[i] for i in selected_indices]
+        selected_matrices_test = [confusion_matrices_test[i] for i in selected_indices]
+        
+        # Plot settings
+        n_cols = 5  # 5x4 grid
+        n_rows = 4
+        
+        # Plot training matrices
+        plt.figure(figsize=(20, 16))
+        for i, conf_matrix in enumerate(selected_matrices_train):
             plt.subplot(n_rows, n_cols, i+1)
             plt.imshow(conf_matrix, cmap='Blues')
-            plt.title(f'Epoch {i+1}', fontsize=12)
+            plt.title(f'Epoch {selected_indices[i]+1}', fontsize=12)
             plt.tick_params(axis='both', which='major', labelsize=2)
             for x in range(conf_matrix.shape[0]):
                 for y in range(conf_matrix.shape[1]):
@@ -250,18 +261,49 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         plt.tight_layout()
         plt.show()
 
-        plt.figure(figsize=(20, 4*n_rows))
-        for i, conf_matrix in enumerate(confusion_matrices_test):
+        # Plot test matrices
+        plt.figure(figsize=(20, 16))
+        for i, conf_matrix in enumerate(selected_matrices_test):
             plt.subplot(n_rows, n_cols, i+1)
             plt.imshow(conf_matrix, cmap='Blues')
-            plt.title(f'Epoch {i+1}', fontsize=12)
+            plt.title(f'Epoch {selected_indices[i]+1}', fontsize=12)
             plt.tick_params(axis='both', which='major', labelsize=2)
-            # Add numbers to the cells
             for x in range(conf_matrix.shape[0]):
                 for y in range(conf_matrix.shape[1]):
                     plt.text(y, x, str(conf_matrix[x, y]), ha='center', va='center', fontsize=10)
         plt.tight_layout()
         plt.show()
+        
+    # if plot_confusion_matrices:
+    #     # plot confusion matrices
+    #     n_matrices = len(confusion_matrices_train)
+    #     n_cols = min(10, n_matrices)  # max 10 columns
+    #     n_rows = (n_matrices + n_cols - 1) // n_cols  # ceiling division
+
+    #     plt.figure(figsize=(20, 4*n_rows))
+    #     for i, conf_matrix in enumerate(confusion_matrices_train):
+    #         plt.subplot(n_rows, n_cols, i+1)
+    #         plt.imshow(conf_matrix, cmap='Blues')
+    #         plt.title(f'Epoch {i+1}', fontsize=12)
+    #         plt.tick_params(axis='both', which='major', labelsize=2)
+    #         for x in range(conf_matrix.shape[0]):
+    #             for y in range(conf_matrix.shape[1]):
+    #                 plt.text(y, x, str(conf_matrix[x, y]), ha='center', va='center', fontsize=10)
+    #     plt.tight_layout()
+    #     plt.show()
+
+    #     plt.figure(figsize=(20, 4*n_rows))
+    #     for i, conf_matrix in enumerate(confusion_matrices_test):
+    #         plt.subplot(n_rows, n_cols, i+1)
+    #         plt.imshow(conf_matrix, cmap='Blues')
+    #         plt.title(f'Epoch {i+1}', fontsize=12)
+    #         plt.tick_params(axis='both', which='major', labelsize=2)
+    #         # Add numbers to the cells
+    #         for x in range(conf_matrix.shape[0]):
+    #             for y in range(conf_matrix.shape[1]):
+    #                 plt.text(y, x, str(conf_matrix[x, y]), ha='center', va='center', fontsize=10)
+    #     plt.tight_layout()
+    #     plt.show()
 
     
     

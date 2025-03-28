@@ -14,7 +14,7 @@ def plot_reconstructions(model, dataloader, num_samples=20, start_idx=0, title="
     """
     model.eval()
     rows = num_samples // 5
-    fig, axes = plt.subplots(rows, 5, figsize=(20, 4*rows), facecolor='white')
+    fig, axes = plt.subplots(rows, 5, figsize=(20, 2*rows), facecolor='white')
     
     with torch.no_grad():
         for i in range(start_idx, start_idx + num_samples):
@@ -37,7 +37,6 @@ def plot_reconstructions(model, dataloader, num_samples=20, start_idx=0, title="
     plt.tight_layout()
     fig.suptitle(title, y=1.02, fontsize=16)
     plt.show()
-
 
 def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distances=[0, 5e-4, 7.5e-4, 1e-3, 2e-3]):
     """
@@ -68,6 +67,8 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
     with torch.no_grad():
         # Plot reconstructions with different distances
         for i, distance in enumerate(distances, 1):
+            if x.dim() == 1:
+                x = x.unsqueeze(0) # add batch dimension
             # Get embeddings and reconstruction
             try:
                 _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(x)
@@ -80,8 +81,7 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
                 x_hat = model.ts_decoder(z, x_mean, x_std)
             except:
                 x_hat = model.ts_decoder(z)
-            if x_hat.dim() == 2:
-                x_hat = x_hat[0]
+            
                 
             try:
                 _, z_mean_hat, _, _, _ = model.ts_encoder(x_hat)
@@ -94,6 +94,9 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
             euc_dist = np.sqrt(np.sum((z_mean - z_mean_hat) ** 2))
 
             # Plot reconstruction
+            if x_hat.dim() == 2:
+                x_hat = x_hat[0]
+                x = x[0]
             axs[i].plot(x_hat.cpu().detach().numpy(), 'r-', label='Reconstruction')
             axs[i].plot(x.cpu().detach().numpy(), 'b--', alpha=0.5, label='Original')
             axs[i].set_title(f'Noise var={distance:.1e}\nLatent space distance={euc_dist:.4f}')
@@ -104,7 +107,6 @@ def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distance
 
     plt.tight_layout()
     plt.show()
-
 # Usage example:
 # plot_reconstruction_noise_analysis(model, train_dataloader)
 # 

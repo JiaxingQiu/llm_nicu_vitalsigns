@@ -41,14 +41,13 @@ class KLAnnealer:
     def get_beta(self, epoch):
         beta = min(self.end, self.start + (self.end - self.start) * epoch / self.epochs)
         # beta = np.exp(beta)-1
-        print(f'beta: {beta}')
         return beta
 
 def compute_vae_loss(ts, ts_hat, mean, log_var, beta=1.0):
     reconstruction_loss = F.mse_loss(ts_hat, ts, reduction='sum') / ts.size(0)
     kl_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
     vae_loss = reconstruction_loss + beta * kl_loss
-    print(f'reconstruction: {reconstruction_loss.item()}, kl: {kl_loss.item()}')
+    # print(f'reconstruction: {reconstruction_loss.item()}, kl: {kl_loss.item()}')
     return vae_loss
 
   
@@ -169,10 +168,12 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             current_lr = optimizer.param_groups[0]['lr']
 
             # Print progress
-            print(f'Epoch [{epoch+1}/{num_epochs}]')
-            print(f'\tTraining Loss: {train_loss:.6f}')
-            print(f'\tTesting Loss: {test_loss:.6f}')
-            print(f'\tLearning Rate: {current_lr:.9f}')
+            if epoch % 10 == 0:
+                print(f'Epoch [{epoch+1}/{num_epochs}]')
+                print(f'\tTraining Loss: {train_loss:.6f}')
+                print(f'\tTesting Loss: {test_loss:.6f}')
+                print(f'\tLearning Rate: {current_lr:.9f}')
+                print(f'beta: {beta}')
             
             # Early stopping if learning rate becomes too small
             if current_lr <= scheduler.min_lrs[0]:

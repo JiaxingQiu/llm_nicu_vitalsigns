@@ -133,7 +133,7 @@ evalcliptxt2ts_test = EvalCLIPTXT2TS(df_test, txt_tsid_mapping_test, config_dict
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
 
-output_dir = './results/'+model_name
+output_dir = './results/'+config_dict['model_name']
 model_path = output_dir+'/model.pth' 
 eval_path = output_dir+'/evals.pth'
 config_path = output_dir+'/config.pth'
