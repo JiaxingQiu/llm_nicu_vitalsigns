@@ -16,6 +16,9 @@ df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
 df = text_gen_input_column(df, config_dict['text_config'])
 df['rowid'] = df.index.to_series() 
 df_train = df
+# filter out rows where unique_values <= 5
+df_train['unique_values'] = df_train.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)
+df_train = df_train[df_train['unique_values'] > 5]
 
 # Test Data
 df_y_test = pd.read_excel('../../data/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
@@ -29,6 +32,9 @@ df_test['VitalTime'] = df_test['Age']*24*60*60 # convert to second since birth
 df_test['VitalTime'] = df_test['VitalTime'].astype(int)
 rename_dict = {'TestID': 'VitalID'}
 df_test = df_test.rename(columns=rename_dict)
+# filter out rows where unique_values <= 5
+df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)
+df_test = df_test[df_test['unique_values'] > 5]
 
 df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
 df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
@@ -139,21 +145,20 @@ eval_path = output_dir+'/evals.pth'
 config_path = output_dir+'/config.pth'
 
 
-if overwrite:
-    # ------------------------- ready dataloaders ------------------------- 
-    if config_dict['3d']:
-        ts_f_train, tx_f_train_ls, labels_train = get_features3d(df_train, 
-                                                                config_dict,
-                                                                text_col_ls = config_dict['text_col_ls'])
-        train_dataloader = VITAL3DDataset(ts_f_train, tx_f_train_ls, labels_train).dataloader(batch_size=config_dict['batch_size'])
-        ts_f_test, tx_f_test_ls, labels_test = get_features3d(df_test, 
-                                                              config_dict,
-                                                              text_col_ls = config_dict['text_col_ls'])
-        test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test).dataloader(batch_size=config_dict['batch_size'])
-    else: 
-        ts_f_train, tx_f_train, labels_train = get_features(df_train,
-                                                            config_dict)
-        train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train).dataloader(batch_size=config_dict['batch_size'])
-        ts_f_test, tx_f_test, labels_test = get_features(df_test,
-                                                         config_dict)
-        test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test).dataloader(batch_size=config_dict['batch_size'])
+# ------------------------- ready dataloaders ------------------------- 
+if config_dict['3d']:
+    ts_f_train, tx_f_train_ls, labels_train = get_features3d(df_train, 
+                                                            config_dict,
+                                                            text_col_ls = config_dict['text_col_ls'])
+    train_dataloader = VITAL3DDataset(ts_f_train, tx_f_train_ls, labels_train).dataloader(batch_size=config_dict['batch_size'])
+    ts_f_test, tx_f_test_ls, labels_test = get_features3d(df_test, 
+                                                            config_dict,
+                                                            text_col_ls = config_dict['text_col_ls'])
+    test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test).dataloader(batch_size=config_dict['batch_size'])
+else: 
+    ts_f_train, tx_f_train, labels_train = get_features(df_train,
+                                                        config_dict)
+    train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train).dataloader(batch_size=config_dict['batch_size'])
+    ts_f_test, tx_f_test, labels_test = get_features(df_test,
+                                                        config_dict)
+    test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test).dataloader(batch_size=config_dict['batch_size'])

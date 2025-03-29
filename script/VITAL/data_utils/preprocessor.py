@@ -507,7 +507,5 @@ def plot_ts(df, idx):
     plt.grid(True)
     plt.show()
     
-    return ts
-
 ## Example usage:
 # ts = plot_ts(df_train, 2)
