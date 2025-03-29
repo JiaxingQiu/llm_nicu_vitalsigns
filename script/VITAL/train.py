@@ -63,6 +63,7 @@ def compute_loss(model, ts, text_features, labels, train_type='joint', alpha=1.0
         loss = clip_loss + alpha * vae_loss
     elif train_type == 'vae':
         loss = compute_vae_loss(ts, ts_hat, mean, log_var, beta)
+        loss = alpha * loss
     elif train_type == 'clip':
         loss = compute_clip_loss(logits, labels)
     else:

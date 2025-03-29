@@ -313,7 +313,7 @@ def downsample_neg_levels(df, config_dict, random_state=333):
     # Downsample specified negative levels and combine
     df_downsampled = pd.concat([
         df[df[config_dict['y_col']] == level].sample(
-            n=neg_sample_size, 
+            n=min(neg_sample_size, len(df[df[config_dict['y_col']] == level])), # min(neg_sample_size, len(df[df[config_dict['y_col']] == level]))
             replace=False, 
             random_state=random_state
         ) for level in down_levels

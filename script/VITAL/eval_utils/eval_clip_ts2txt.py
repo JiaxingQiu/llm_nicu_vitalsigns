@@ -58,6 +58,8 @@ def eval_clip_ts2txt(model,
             obs_logits = torch.diag(logit)
             obs_logits = obs_logits.reshape(-1, 1)
             obs_ys_logits.append(obs_logits)
+            del logit, obs_logits
+
         # concat by columns
         obs_ys_logits = torch.cat(obs_ys_logits, dim=1)
         exp_preds = torch.exp(obs_ys_logits)
@@ -66,6 +68,10 @@ def eval_clip_ts2txt(model,
 
 
         eval_metrics = get_eval_metrics(y_true, y_prob)
+        # Delete large tensors
+        del obs_ys_logits, exp_preds, softmax_probs
+        torch.cuda.empty_cache()
+
     if return_probs:
         return eval_metrics, y_prob
     else:
@@ -94,6 +100,7 @@ def eval_clip3d_ts2txt(model, # model of CLIP3DModel
             obs_logits = torch.diag(logits)
             obs_logits = obs_logits.reshape(-1, 1)
             obs_ys_logits.append(obs_logits)
+            del logits, obs_logits 
         
         # concat by columns
         obs_ys_logits = torch.cat(obs_ys_logits, dim=1)
@@ -102,6 +109,9 @@ def eval_clip3d_ts2txt(model, # model of CLIP3DModel
         
 
         eval_metrics = get_eval_metrics(y_true, y_prob)
+
+        del obs_ys_logits, exp_preds
+        torch.cuda.empty_cache()
 
     if return_probs:
         return eval_metrics, y_prob

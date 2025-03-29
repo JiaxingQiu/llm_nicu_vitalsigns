@@ -100,8 +100,13 @@ def eval_clip_txt2ts(model,
             exp_preds = torch.exp(logit)
             y_prob_row = exp_preds / exp_preds.sum(dim=1, keepdim=True)
             y_prob[cap_id,:] = y_prob_row
+            # Delete intermediate tensors
+            del logits, logit, exp_preds, y_prob_row
 
     eval_metrics = get_eval_metrics(y_true, y_prob)
+    # Clear memory
+    torch.cuda.empty_cache()
+    
     if return_probs:
         return eval_metrics, y_prob
     else:
@@ -132,7 +137,14 @@ def eval_clip3d_txt2ts(model,
             y_prob_row = exp_preds / exp_preds.sum(dim=1, keepdim=True)
             y_prob[cap_id,:] = y_prob_row
 
+            # Delete intermediate tensors
+            del logits, logit, exp_preds, y_prob_row, tx_f_mat_ls
+            
+
     eval_metrics = get_eval_metrics(y_true, y_prob)
+    # Clear memory
+    torch.cuda.empty_cache()
+
     if return_probs:
         return eval_metrics, y_prob
     else:

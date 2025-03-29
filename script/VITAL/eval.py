@@ -7,7 +7,7 @@ from data import get_features3d, get_features
 # df = df_train.iloc[:1,].copy()
 def vital_infer(df, model, config_dict,
                 text_col = 'text', text_col_ls = ['demo', 'cl_event', 'ts_description'],
-                K = 100, top = 10, 
+                K = 100, top = 8, 
                 distance_ratios = [0, 1, 50, 100]):
     
     model.eval()
@@ -74,6 +74,7 @@ def plot_vital_reconstructions(ts, top_probs, top_ts_hats, top_distance_ratios):
     axs[0].set_title('Original Signal')
     axs[0].set_xlabel('Time')
     axs[0].set_ylabel('Value')
+    axs[0].set_ylim(50, 200)
     axs[0].grid(True)
     axs[0].legend()
 
@@ -90,6 +91,7 @@ def plot_vital_reconstructions(ts, top_probs, top_ts_hats, top_distance_ratios):
         axs[i].set_title(f'var distance ratio={distance_ratio:.1e}\nprob={prob:.3f}')
         axs[i].set_xlabel('Time')
         axs[i].set_ylabel('Value')
+        axs[i].set_ylim(50, 200)
         axs[i].grid(True)
         axs[i].legend()
 
