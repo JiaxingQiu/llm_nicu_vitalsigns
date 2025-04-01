@@ -5,6 +5,9 @@ from sklearn.model_selection import train_test_split
 # Train Data
 df = pd.read_excel('../../data/PAS Challenge HR Data.xlsx', engine="calamine")
 df.columns = df.columns.astype(str)
+df['unique_values'] = df.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
+df = df[df['unique_values'] > 5]
+df = df.reset_index(drop=True)
 df_y = pd.read_excel('../../data/PAS Challenge Outcome Data.xlsx', engine="calamine")[['VitalID', 'DiedNICU', 'DeathAge']]
 df_demo = pd.read_excel('../../data/PAS Challenge Demographic Data.xlsx', engine="calamine")
 df_x = pd.read_excel('../../data/PAS Challenge Model Data.xlsx', engine="calamine")
@@ -16,14 +19,15 @@ df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
 df = text_gen_input_column(df, config_dict['text_config'])
 df['rowid'] = df.index.to_series() 
 df_train = df
-# filter out rows where unique_values <= 5
-df_train['unique_values'] = df_train.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)
-df_train = df_train[df_train['unique_values'] > 5]
+
 
 # Test Data
 df_y_test = pd.read_excel('../../data/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
 df_test = pd.read_excel('../../data/Test Data/Test HR Data.xlsx', sheet_name=0, engine="calamine") # test hr with description
 df_test.columns = df_test.columns.astype(str)
+df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
+df_test = df_test[df_test['unique_values'] > 5]
+df_test = df_test.reset_index(drop=True)
 df_test = label_death7d(df_test, df_y_test, id_col='TestID')
 df_demo_test = pd.read_excel('../../data/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
 df_test = df_test.merge(df_demo_test, on='TestID', how='left')
@@ -32,10 +36,6 @@ df_test['VitalTime'] = df_test['Age']*24*60*60 # convert to second since birth
 df_test['VitalTime'] = df_test['VitalTime'].astype(int)
 rename_dict = {'TestID': 'VitalID'}
 df_test = df_test.rename(columns=rename_dict)
-# filter out rows where unique_values <= 5
-df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)
-df_test = df_test[df_test['unique_values'] > 5]
-
 df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
 df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
 df_test = text_gen_input_column(df_test, config_dict['text_config'])
@@ -138,12 +138,6 @@ evalcliptxt2ts_test = EvalCLIPTXT2TS(df_test, txt_tsid_mapping_test, config_dict
 
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
-
-output_dir = './results/'+config_dict['model_name']
-model_path = output_dir+'/model.pth' 
-eval_path = output_dir+'/evals.pth'
-config_path = output_dir+'/config.pth'
-
 
 # ------------------------- ready dataloaders ------------------------- 
 if config_dict['3d']:

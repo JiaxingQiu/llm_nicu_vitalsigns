@@ -17,7 +17,8 @@ class VITAL3D(nn.Module):
                  temperature: float = 0.01,
                  ts_encoder = None,
                  text_encoder = None,
-                 ts_decoder = None):
+                 ts_decoder = None,
+                 clip_mu = True):
         super().__init__()
         
         # Handle ts_encoder
@@ -47,7 +48,7 @@ class VITAL3D(nn.Module):
         self.device = device
         self.to(device)
         print(nn_summary(self))
-
+        self.clip_mu = clip_mu
     def clip(self, z, text_features_list):
         ts_embedded = F.normalize(z, dim=1)
         text_embedded, _ = self.text_encoder(text_features_list)
@@ -77,7 +78,10 @@ class VITAL3D(nn.Module):
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
         # --- CLIP forward pass ---
-        logits = self.clip(z, text_features_list)
+        if self.clip_mu:
+            logits = self.clip(mean, text_features_list)
+        else:
+            logits = self.clip(z, text_features_list)
         
         # --- VAE decoder forward pass ---
         ts_hat = self.ts_decoder(z, x_mean, x_std) # ts_hat in raw scale
@@ -94,7 +98,8 @@ class VITAL(nn.Module):
                  beta: float = 1.0,
                  ts_encoder = None,
                  text_encoder = None,
-                 ts_decoder = None):
+                 ts_decoder = None,
+                 clip_mu = True):
         """Initialize VITAL model
         
         Args:
@@ -138,6 +143,7 @@ class VITAL(nn.Module):
         self.to(device)
         print(nn_summary(self))
         self.beta = beta
+        self.clip_mu = clip_mu
     
     def clip(self, z, text_features):
         ts_embedded = F.normalize(z, dim=1)
@@ -165,7 +171,10 @@ class VITAL(nn.Module):
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
         # --- CLIP forward pass ---
-        logits = self.clip(z, text_features)
+        if self.clip_mu:
+            logits = self.clip(mean, text_features)
+        else:
+            logits = self.clip(z, text_features)
         
         # --- VAE decoder forward pass ---
         ts_hat = self.ts_decoder(z, x_mean, x_std)
@@ -203,7 +212,7 @@ class TSVAEEncoder(nn.Module):
             MultiLSTMEncoder(
                 ts_dim=ts_dim, 
                 output_dim=256,
-                hidden_dims=[256, 256, 128, 128],  # LSTMs with different sizes
+                hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
                 num_layers=2,
                 mask=0  # mask 0 with 0 to suppress the effect of masked values
             ),
@@ -211,16 +220,19 @@ class TSVAEEncoder(nn.Module):
             nn.Linear(256, 512),
             nn.LeakyReLU(0.2),
             nn.LayerNorm(512),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2), 
-            nn.LayerNorm(512),
-            nn.Linear(512, 256),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2), 
+            # nn.LayerNorm(512),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2), 
+            # nn.LayerNorm(512),
+            nn.Linear(512, output_dim),
             nn.LeakyReLU(0.2),
-            nn.LayerNorm(256)
+            nn.LayerNorm(output_dim)
         )
         # Latent mean and variance 
-        self.mean_layer = nn.Linear(256, output_dim)
-        self.logvar_layer = nn.Linear(256, output_dim)
+        self.mean_layer = nn.Linear(output_dim, output_dim)
+        self.logvar_layer = nn.Linear(output_dim, output_dim)
     
     def reparameterization(self, mean, log_var):
         # var = torch.exp(0.5 * log_var) # slower than using log_var directly
@@ -258,6 +270,8 @@ class TSVAEDecoder(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(512, 512),
             nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
             nn.Linear(256, 128),
@@ -270,7 +284,7 @@ class TSVAEDecoder(nn.Module):
         # scale back to raw scale
         x_hat = x_hat * x_std + x_mean
         # round to 0 decimal places
-        x_hat = torch.round(x_hat)
+        # x_hat = torch.round(x_hat)
         return x_hat
 
 # default text encoder
@@ -502,5 +516,5 @@ class TSVAEDecoderWrapper(nn.Module):
     def forward(self, z, x_mean, x_std):
         x_hat = self.decoder(z)
         x_hat = x_hat * x_std + x_mean
-        x_hat = torch.round(x_hat)
+        # x_hat = torch.round(x_hat)
         return x_hat
