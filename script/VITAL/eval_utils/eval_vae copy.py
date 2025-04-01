@@ -1,97 +1,59 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-def plot_reconstructions(model,
-                         df, 
-                         config_dict,
-                         text_col = 'text', 
-                         text_col_ls = ['demo', 'cl_event', 'ts_description'],
-                         num_samples=20, start_idx=0, title="Data Reconstructions"):
+def plot_reconstructions(model, dataloader, num_samples=20, start_idx=0, title="Data Reconstructions"):
     """
     Plot original and reconstructed time series from a VAE model.
     
     Args:
         model: The VAE model
-        df: Dataframe containing the dataset
-        config_dict: Config dictionary
-        text_col: Text column name
-        text_col_ls: List of text column names
+        dataloader: DataLoader containing the dataset
         num_samples: Number of samples to plot (default=20)
         start_idx: Starting index for samples (default=0)
         title: Title for the plot (default="Data Reconstructions")
     """
     model.eval()
-    # get row start_idx:start_idx + num_samples
-    df = df.iloc[start_idx:(start_idx + num_samples)]  
-    if config_dict['3d']:
-        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
-        ts_f = ts_f.to(device)
-        tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
-        _, ts_hat, _, _ = model(ts_f, tx_f_ls)
-    else:
-        ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
-        ts_f = ts_f.to(device)
-        tx_f = tx_f.to(device)
-        _, ts_hat, _, _ = model(ts_f, tx_f)
-
-
     rows = num_samples // 5
     fig, axes = plt.subplots(rows, 5, figsize=(20, 2*rows), facecolor='white')
-
+    
     with torch.no_grad():
-        for i in range(num_samples):
+        for i in range(start_idx, start_idx + num_samples):
+            # Get data
+            x, text_features, _ = dataloader.dataset[i]
+            x = x.unsqueeze(0).to(model.device)
+            text_features = [text_feature.unsqueeze(0).to(model.device) 
+                           for text_feature in text_features]
+            
+            # Get reconstruction
+            _, x_hat, _, _ = model(x, text_features)
+            
             # Plot
             row, col = i//5, i%5
-            axes[row, col].plot(ts_f[i].cpu().numpy(), label='Original')
-            axes[row, col].plot(ts_hat[i].cpu().detach().numpy(), label='Reconstructed')
+            axes[row, col].plot(x[0].cpu().numpy(), label='Original')
+            axes[row, col].plot(x_hat[0].cpu().detach().numpy(), label='Reconstructed')
             axes[row, col].legend()
             axes[row, col].set_title(f'Sample {i}')
-
+    
     plt.tight_layout()
     fig.suptitle(title, y=1.02, fontsize=16)
     plt.show()
 
-
-
-def plot_reconstruction_from_distances(model, 
-                                       df, 
-                                       config_dict,
-                                       text_col = 'text', 
-                                       text_col_ls = ['demo', 'cl_event', 'ts_description'],
-                                       sample_idx=1, 
-                                       distances=[0, 5e-4, 7.5e-4, 1e-3, 2e-3]):
+def plot_reconstruction_from_distances(model, dataloader, sample_idx=1, distances=[0, 5e-4, 7.5e-4, 1e-3, 2e-3]):
     """
     Visualize how different levels of latent space noise affect reconstruction quality.
     
     Args:
         model: The VAE model
-        df: Dataframe containing the dataset
-        config_dict: Config dictionary
-        text_col: Text column name
-        text_col_ls: List of text column names
+        dataloader: DataLoader containing the dataset
         sample_idx: Index of the sample to analyze (default=1)
         distances: List of noise variances to add to latent space (default=[0, 5e-4, 7.5e-4, 1e-3, 2e-3])
     """
     model.eval()
-    # x, _, _ = dataloader.dataset[sample_idx]
-
-    # get row start_idx:start_idx + num_samples
-    df = df.iloc[[sample_idx]]  
-    if config_dict['3d']:
-        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
-        ts_f = ts_f.to(device)
-        tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
-        x = ts_f[0]
-    else:
-        ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
-        ts_f = ts_f.to(device)
-        tx_f = tx_f.to(device)
-        x = ts_f[0]
-
+    x, text_features, _ = dataloader.dataset[sample_idx]
 
     # Create figure and subplots
     fig, axs = plt.subplots(2, 3, figsize=(15, 8))
-    fig.suptitle(f'Sample {sample_idx} vs Reconstructions from distances', fontsize=14)
+    fig.suptitle('Original Signal vs Reconstructions with Different Noise Levels', fontsize=14)
     axs = axs.flatten()
 
     # Plot original signal in first subplot

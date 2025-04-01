@@ -24,12 +24,12 @@ def vital_infer(df, model, config_dict,
 
         if config_dict['3d']:
             ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
-            ts_f = ts_f.to(model.device)
-            tx_f_ls = [tx_f.to(model.device) for tx_f in tx_f_ls]
+            ts_f = ts_f.to(device)
+            tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
         else:
             ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
-            ts_f = ts_f.to(model.device)
-            tx_f = tx_f.to(model.device)
+            ts_f = ts_f.to(device)
+            tx_f = tx_f.to(device)
         logits_ls = []
         x_hat_ls = []
         distance_ratio_ls = []

@@ -238,18 +238,19 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
             return list(range(length))
         return [i * (length-1) // (n-1) for i in range(n)]
     if plot_confusion_matrices:
+        n = 20
         # Select 20 evenly spaced matrices
         n_matrices = len(confusion_matrices_train)
-        selected_indices = get_even_indices(n_matrices, n=20)
+        selected_indices = get_even_indices(n_matrices, n=n)
         selected_matrices_train = [confusion_matrices_train[i] for i in selected_indices]
         selected_matrices_test = [confusion_matrices_test[i] for i in selected_indices]
         
         # Plot settings
-        n_cols = 5  # 5x4 grid
-        n_rows = 4
+        n_cols = 10  
+        n_rows = n//10
         
         # Plot training matrices
-        plt.figure(figsize=(20, 16))
+        plt.figure(figsize=(20, 8))
         for i, conf_matrix in enumerate(selected_matrices_train):
             plt.subplot(n_rows, n_cols, i+1)
             plt.imshow(conf_matrix, cmap='Blues')
@@ -262,7 +263,7 @@ def eng_eval_metrics(eval_dict, plot=True, binary=False, pos_class_index=0, plot
         plt.show()
 
         # Plot test matrices
-        plt.figure(figsize=(20, 16))
+        plt.figure(figsize=(20, 8))
         for i, conf_matrix in enumerate(selected_matrices_test):
             plt.subplot(n_rows, n_cols, i+1)
             plt.imshow(conf_matrix, cmap='Blues')
