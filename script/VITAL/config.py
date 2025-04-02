@@ -48,8 +48,9 @@ config_dict = {
     'downsample_levels': ['This infant will survive. '],
     'downsample_size': 1000,
     'ts_aug': False,
-    'balance': False,
-    'block_target': False, # only block or diagonal two types of clip targets
+    'ts_aug_max_size': None,
+    'balance': True,
+    'block_target': True, # only block or diagonal two types of clip targets
     'ts_subseq': False,
     'ts_subseq_n': 1,
     'ts_subseq_min_length_ratio':1/6,

@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import time
 
 # ---- ready original dataframes ----
 # Train Data
@@ -84,6 +85,11 @@ if config_dict['ts_subseq']:
 
 # ---- block or not ----
 if not config_dict['block_target']:
+    # reset index but keep the original index as a column 'str_index'
+    df_train['str_index'] = df_train.index.to_series()
+    df_test['str_index'] = df_test.index.to_series()
+    df_train = df_train.reset_index(drop=True)
+    df_test = df_test.reset_index(drop=True)
     df_train['label'] = df_train.index.to_series()
     df_test['label'] = df_test.index.to_series()
 else:

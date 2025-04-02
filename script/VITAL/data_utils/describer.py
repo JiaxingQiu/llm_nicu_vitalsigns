@@ -96,6 +96,8 @@ def generate_descriptions_parallel(ts_df, id_df):
         events80 = describe_brady_events(x, th=80, plot=False, type=0)
         events90 = describe_brady_events(x, th=90, plot=False, type=0)
         events100 = describe_brady_events(x, th=100, plot=False, type=0)
+        # # Clear R objects after processing each row
+        # ro.r('gc()')
         return {
             'succ_inc': succ_inc,
             'succ_unc': succ_unc,
@@ -113,7 +115,6 @@ def generate_descriptions_parallel(ts_df, id_df):
     results = Parallel(n_jobs=n_cores, verbose=1)(
         delayed(process_row)(row) for _, row in ts_df.iterrows()
     )
-    
     # Extract results
     df_desc['description_succ_inc'] = [r['succ_inc'] for r in results]
     df_desc['description_succ_unc'] = [r['succ_unc'] for r in results]
@@ -129,7 +130,10 @@ def generate_descriptions_parallel(ts_df, id_df):
         get_most_severe_event_py(idx, events80, events90, events100) 
         for idx in range(len(ts_df))
     ]
-    
+
+    # Final cleanup
+    ro.r('gc()')
+
     return df_desc
 
 def describe_brady_events(x, th=80, direction="<", plot=False, type=1):

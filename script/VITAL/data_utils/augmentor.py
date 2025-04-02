@@ -40,9 +40,59 @@ class ScaledTSDataset(Dataset):
 
 
 
+# def augment_ts_df(ts_df, pretrained_model_path, K = 50, dist = 5e-4):
 
-def augment_ts_df(ts_df, pretrained_model_path, K = 50, dist = 5e-4):
+#     # df to return
+#     df_aug = pd.DataFrame()
 
+#     # K number of augmentations for each sample
+#     model = VAE_Linear_Medium().to(device)
+#     model.load_state_dict(torch.load(pretrained_model_path))
+#     model.eval()
+#     ts_dataset = ScaledTSDataset(ts_df)
+
+#     for i in tqdm(range(len(ts_dataset))):
+#         x, ts_mean, ts_std = ts_dataset[i]
+#         ts_mean = ts_mean.cpu().detach().numpy()
+#         ts_std = ts_std.cpu().detach().numpy()
+#         ts_hat_ls = []
+#         euc_dist_ls = []
+#         for k in range(K): 
+#             # augment x k times
+#             distance = np.random.uniform(0, dist)
+#             z_mean, z_log_var = model.encode(x)
+#             z = model.reparameterization(z_mean, z_log_var + distance)
+#             x_hat = model.decode(z) # length of 300
+#             z_mean_hat, _ = model.encode(x_hat)
+
+#             # Calculate Euclidean distance
+#             z_mean = z_mean.cpu().detach().numpy()
+#             z_mean_hat = z_mean_hat.cpu().detach().numpy()
+#             euc_dist = np.sqrt(np.sum((z_mean - z_mean_hat) ** 2))
+
+#             x_hat = x_hat.cpu().detach().numpy()
+#             ts_hat = x_hat * ts_std + ts_mean
+#             ts_hat_ls.append(ts_hat)
+#             euc_dist_ls.append(euc_dist)
+
+#         # Convert to numpy array with shape (K, 300)
+#         ts_hat_ls = np.array(ts_hat_ls)
+#         euc_dist_ls = np.array(euc_dist_ls)
+
+#         #  the dataframe
+#         df_aug_i = pd.DataFrame(ts_hat_ls, columns=[str(i) for i in range(1, 301)])  # '1' to '300'
+#         # make all cells integer 
+#         df_aug_i = df_aug_i.round().astype(int)
+#         df_aug_i.insert(0, 'rowid', [i] * K)  # Add rowid at the beginning
+#         df_aug_i['euc_dist'] = euc_dist_ls     # Add euc_dist at the end
+
+#         df_aug = pd.concat([df_aug, df_aug_i], ignore_index=True)
+
+
+#     return df_aug
+
+
+def augment_ts_df(ts_df, pretrained_model_path, K=50, dist=5e-4):
     # df to return
     df_aug = pd.DataFrame()
 
@@ -53,45 +103,56 @@ def augment_ts_df(ts_df, pretrained_model_path, K = 50, dist = 5e-4):
     ts_dataset = ScaledTSDataset(ts_df)
 
     for i in tqdm(range(len(ts_dataset))):
-        x, ts_mean, ts_std = ts_dataset[i]
-        ts_mean = ts_mean.cpu().detach().numpy()
-        ts_std = ts_std.cpu().detach().numpy()
+        x, ts_mean, ts_std = ts_dataset[i]  # Already on GPU from dataset
         ts_hat_ls = []
         euc_dist_ls = []
+        
         for k in range(K): 
             # augment x k times
-            distance = np.random.uniform(0, dist)
+            distance = torch.tensor(np.random.uniform(0, dist), device=device)
             z_mean, z_log_var = model.encode(x)
             z = model.reparameterization(z_mean, z_log_var + distance)
-            x_hat = model.decode(z) # length of 300
+            x_hat = model.decode(z)
             z_mean_hat, _ = model.encode(x_hat)
 
-            # Calculate Euclidean distance
-            z_mean = z_mean.cpu().detach().numpy()
-            z_mean_hat = z_mean_hat.cpu().detach().numpy()
-            euc_dist = np.sqrt(np.sum((z_mean - z_mean_hat) ** 2))
-
-            x_hat = x_hat.cpu().detach().numpy()
+            # Calculate Euclidean distance on GPU
+            euc_dist = torch.sqrt(torch.sum((z_mean - z_mean_hat) ** 2))
+            
+            # Scale back on GPU
             ts_hat = x_hat * ts_std + ts_mean
+            
+            # Store results (only convert to CPU at the end)
             ts_hat_ls.append(ts_hat)
             euc_dist_ls.append(euc_dist)
 
-        # Convert to numpy array with shape (K, 300)
-        ts_hat_ls = np.array(ts_hat_ls)
-        euc_dist_ls = np.array(euc_dist_ls)
+            # Cleanup intermediate tensors
+            del z_mean, z_log_var, z, x_hat, z_mean_hat
+            torch.cuda.empty_cache()
 
-        #  the dataframe
-        df_aug_i = pd.DataFrame(ts_hat_ls, columns=[str(i) for i in range(1, 301)])  # '1' to '300'
-        # make all cells integer 
-        df_aug_i = df_aug_i.round().astype(int)
-        df_aug_i.insert(0, 'rowid', [i] * K)  # Add rowid at the beginning
-        df_aug_i['euc_dist'] = euc_dist_ls     # Add euc_dist at the end
+        # Stack tensors on GPU
+        ts_hat_tensor = torch.stack(ts_hat_ls)
+        euc_dist_tensor = torch.stack(euc_dist_ls)
+
+        # Only convert to numpy at the final step
+        ts_hat_np = ts_hat_tensor.round().cpu().numpy()
+        euc_dist_np = euc_dist_tensor.cpu().numpy()
+
+        # Create DataFrame
+        df_aug_i = pd.DataFrame(ts_hat_np, columns=[str(i) for i in range(1, 301)])
+        df_aug_i = df_aug_i.astype(int)
+        df_aug_i.insert(0, 'rowid', [i] * K)
+        df_aug_i['euc_dist'] = euc_dist_np
 
         df_aug = pd.concat([df_aug, df_aug_i], ignore_index=True)
 
+        # Cleanup
+        del ts_hat_ls, euc_dist_ls, ts_hat_tensor, euc_dist_tensor, df_aug_i
+        torch.cuda.empty_cache()
 
+    # Final cleanup
+    del model, ts_dataset
+    torch.cuda.empty_cache()
     return df_aug
-
 
 
 def process_single_sample(i, x, ts_mean, ts_std, model, K, dist):
@@ -129,12 +190,17 @@ def process_single_sample(i, x, ts_mean, ts_std, model, K, dist):
     df_aug_i.insert(0, 'rowid', [i] * K)
     df_aug_i['euc_dist'] = euc_dist_ls
 
+    del ts_hat_ls, euc_dist_ls
     return df_aug_i
 
 def augment_ts_df_parallel(ts_df, pretrained_model_path, K=50, dist=5e-4):
+    
+    # Clear CUDA cache 
+    torch.cuda.empty_cache()
+
     # Determine optimal number of cores
     total_cores = multiprocessing.cpu_count()
-    n_cores = max(1, int(total_cores * 0.75))  # Use 75% of available cores
+    n_cores = max(1, int(total_cores * 0.5))  # Use 50% of available cores
     print(f"Total cores available: {total_cores}")
     print(f"Using {n_cores} cores for parallel processing")
 
@@ -146,20 +212,21 @@ def augment_ts_df_parallel(ts_df, pretrained_model_path, K=50, dist=5e-4):
 
     # Process samples in parallel
     results = Parallel(n_jobs=n_cores, verbose=1)(
-        delayed(process_single_sample)(
-            i, 
-            ts_dataset[i][0],  # x
-            ts_dataset[i][1],  # ts_mean
-            ts_dataset[i][2],  # ts_std
-            model, 
-            K, 
-            dist
-        ) for i in range(len(ts_dataset))
-    )
-
+            delayed(process_single_sample)(
+                i, 
+                ts_dataset[i][0],  # x
+                ts_dataset[i][1],  # ts_mean
+                ts_dataset[i][2],  # ts_std
+                model, 
+                K, 
+                dist
+            ) for i in range(len(ts_dataset))
+        )
     # Combine results
     df_aug = pd.concat(results, ignore_index=True)
-    
+    # Cleanup
+    del model, ts_dataset, results
+    torch.cuda.empty_cache()
     return df_aug
 
 
@@ -227,6 +294,7 @@ def augment_ts_n_desc(df_sub,
     df_aug_sub = augment_ts_df_parallel(ts_df, pretrained_model_path, K = K)
     df_aug_desc = generate_descriptions_parallel(ts_df = df_aug_sub.loc[:, '1':'300'], id_df = df_aug_sub.loc[:, ['rowid']])
     df_aug_sub = df_aug_sub.merge(df_aug_desc, on='rowid', how='left')
+    del ts_df, df_aug_desc
 
 
     if 'rowid' in df_sub.columns:
@@ -238,11 +306,14 @@ def augment_ts_n_desc(df_sub,
         df_aug_sub = df_aug_sub.merge(df_rowid, on='rowid', how='left')
         df_aug_sub['rowid'] = df_aug_sub['raw_rowid']
         df_aug_sub.drop(columns=['raw_rowid'], inplace=True)
+        del df_rowid
 
 
     columns_to_keep = ['rowid'] + list(df_sub.columns[~df_sub.columns.isin(df_aug_sub.columns)])
     df_raw = df_sub[columns_to_keep]
     df_aug_sub = df_aug_sub.merge(df_raw, on='rowid', how='left')
+    del df_raw
+
     df_aug_sub = text_gen_input_column(df_aug_sub, config_dict['text_config'])
     # df_sub = pd.concat([df_sub, df_aug_sub])
     print(f"Augmented {len(df_aug_sub)} rows")
@@ -254,14 +325,15 @@ def augment_balance_data(df_sub,
                          y_col, 
                          config_dict, 
                          pretrained_model_path='./pretrained/hr_vae_linear_medium.pth', 
-                         K = 50,
-                         max_size = None):
+                         K = 50): # augement each time series K times
+    
     if not config_dict['balance']:
         aug_data = augment_ts_n_desc(df_sub, config_dict, pretrained_model_path, K)
         return pd.concat([df_sub, aug_data], ignore_index=True)
     
     # Get original class sizes and calculate needed augmentations
     class_sizes = df_sub[y_col].value_counts()
+    max_size = config_dict['ts_aug_max_size']
     if max_size is None:
         max_size = class_sizes.max()
     else:
