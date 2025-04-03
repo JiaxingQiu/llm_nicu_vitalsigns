@@ -34,8 +34,8 @@ config_dict = {
     'random_state': 333,
 
     # ts2txt
-    'y_col': 'cl_event', # column name for the classification outcome, ie. 'cl_event'
     'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother']
+    'y_col': 'cl_event', # column name for the classification outcome, ie. 'cl_event'
     'y_levels': ['This infant will die in 7 days. ', 'This infant will survive. '],
     'y_pred_levels': ['will die in 7 days', 'will survive'],
     'y_pred_cols_ls': None,

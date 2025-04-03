@@ -135,11 +135,11 @@ if overwrite or not os.path.exists(model_path):
                                             y_pred_cols_ls = config_dict['y_pred_cols_ls'])
     # 2. txt to ts prediction evaluation (caption is reserved name)
     txt_tsid_mapping_train = []
-    for col in ['description_histogram', 'description_succ_unc', 'description_succ_inc']:
+    for col in ['description_succ_unc', 'description_succ_inc']: # 'description_histogram', 
         txt_tsid_mapping_train_sub = gen_txt_tsid_mapping(df_train, col)
         txt_tsid_mapping_train.extend(txt_tsid_mapping_train_sub)
     txt_tsid_mapping_test = []
-    for col in ['description_histogram', 'description_succ_unc', 'description_succ_inc']:
+    for col in ['description_succ_unc', 'description_succ_inc']: #'description_histogram',
         txt_tsid_mapping_test_sub = gen_txt_tsid_mapping(df_test, col)
         txt_tsid_mapping_test.extend(txt_tsid_mapping_test_sub)
     evalcliptxt2ts_train = EvalCLIPTXT2TS(df_train, txt_tsid_mapping_train, config_dict)
