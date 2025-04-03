@@ -17,7 +17,7 @@ df = label_death7d(df, df_y, id_col='VitalID')
 df = df.merge(df_demo, on='VitalID', how='left')
 df_desc = generate_descriptions_parallel(ts_df = df.loc[:, '1':'300'], id_df = df.loc[:, ['VitalID', 'VitalTime']])
 df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
-df = text_gen_input_column(df, config_dict['text_config'])
+df = text_gen_input_column(df, config_dict)
 df['rowid'] = df.index.to_series() 
 df_train = df
 
@@ -39,7 +39,7 @@ rename_dict = {'TestID': 'VitalID'}
 df_test = df_test.rename(columns=rename_dict)
 df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
 df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
-df_test = text_gen_input_column(df_test, config_dict['text_config'])
+df_test = text_gen_input_column(df_test, config_dict)
 df_test_org = df_test[df.columns]
 df_test, df_leftout = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
 

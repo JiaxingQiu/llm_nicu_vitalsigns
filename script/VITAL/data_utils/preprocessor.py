@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch.nn as nn
+import re
 from config import *
 
 # ------- pretrained ts and txt encoders (for feature generation) -------
@@ -222,7 +223,8 @@ def text_extract_event1(text):
     
     # Return text between markers
     event1_str = text[start_pos:end_pos].strip()
-    
+    event1_str = re.sub(r'\s+', ' ', event1_str).strip() # remove extra spaces
+
     return event1_str
 
 def text_summarize_brady(text):
@@ -335,26 +337,29 @@ def text_gen_demo(row,
     # Format each component
     if ga_bwt:
         if is_valid_number(row['EGA']): 
-            ga_str = f"This infant has gestational age {int(round(row['EGA'], 1))} weeks. "
+            ga_str = f"This infant has gestational age {int(round(row['EGA'], 1))} weeks."
         if is_valid_number(row['BWT']):
-            weight_str = f"Birth weight is {int(round(row['BWT'], 1))} grams. "
+            weight_str = f"Birth weight is {int(round(row['BWT'], 1))} grams."
     
     if gre:
         gender_str = "This infant is Male " if row['Male'] == 1 else "This infant is Female "
         race_str = "Black " if row['Black'] == 1 else "non-Black "
-        ethnicity_str = "Hispanic. " if row['Hispanic'] == 1 else "non-Hispanic. "
+        ethnicity_str = "Hispanic." if row['Hispanic'] == 1 else "non-Hispanic."
     if apgar_mage:
         if is_valid_number(row['Apgar5']):
             apgar_str = f"The Apgar5 scores {int(round(row['Apgar5'], 1))}. "
         if is_valid_number(row['Maternal Age']):
-            mother_str = f"Mother is {int(round(row['Maternal Age'], 1))} years old. "
+            mother_str = f"Mother is {int(round(row['Maternal Age'], 1))} years old."
     
     
     if not split:
         if not (ga_str or weight_str or gender_str or race_str or ethnicity_str or apgar_str or mother_str):
             return ""
         else:
-            return f"{ga_str}{weight_str}{gender_str}{race_str}{ethnicity_str}{apgar_str}{mother_str}"
+            return_str = f"{ga_str} {weight_str} {gender_str} {race_str} {ethnicity_str} {apgar_str} {mother_str}"
+            return_str = return_str.strip()
+            return_str = re.sub(r'\s+', ' ', return_str).strip() # remove extra spaces
+            return return_str
     else:
         return [ga_str, weight_str, gender_str, race_str, ethnicity_str, apgar_str, mother_str]
 
@@ -374,13 +379,16 @@ def text_gen_cl_event(row,
     fio2_str = ""
 
     if die7d:
-        die7d_str = 'This infant will die in 7 days. ' if row['Died'] == 1 else 'This infant will survive. '
+        die7d_str = 'This infant will die in 7 days.' if row['Died'] == 1 else 'This infant will survive.'
     
     if fio2:
         fio2_str = f"The FIO2 is {int(round(row['FIO2']))}."
     
+    return_str = f"{die7d_str} {fio2_str}"
+    return_str = return_str.strip()
+    return_str = re.sub(r'\s+', ' ', return_str).strip() # remove extra spaces
     if not split:
-        return f"{die7d_str}{fio2_str}"
+        return return_str
     else:
         return [die7d_str, fio2_str]
 
@@ -415,35 +423,38 @@ def text_gen_ts_event(row,
 
     if sumb:
         sum_str = text_summarize_brady(row['description_ts_event'])
-        sum_str = sum_str + " "
+        # sum_str = sum_str + " "
     if sumd:
         sum_str = text_summarize_desat(row['description_ts_event'])
-        sum_str = sum_str + " "
+        # sum_str = sum_str + " "
     if simple:
         x = row['description_ts_event']
         simple_str = '\n'.join(x.split('\n')[1:]) if isinstance(x, str) else x
-        simple_str = simple_str + " "
+        # simple_str = simple_str + " "
     if full:
         full_str = row['description_ts_event']
-        full_str = full_str + " "
+        # full_str = full_str + " "
     if event1:
         event1_str = text_extract_event1(row['description_ts_event'])
-        event1_str = event1_str + " "
+        # event1_str = event1_str + " "
     if histogram:
         histogram_str = row['description_histogram']
-        histogram_str = histogram_str + " "
+        # histogram_str = histogram_str + " "
     if succ_inc:
         succ_inc_str = row['description_succ_inc']
-        succ_inc_str = succ_inc_str + " "
+        # succ_inc_str = succ_inc_str + " "
     if succ_unc:
         succ_unc_str = row['description_succ_unc']
-        succ_unc_str = succ_unc_str + " "
+        # succ_unc_str = succ_unc_str + " "
     
-    text_str = f"{histogram_str}{succ_inc_str}{succ_unc_str}{sum_str}{simple_str}{event1_str}{full_str}"
+    text_str = f"{histogram_str} {succ_inc_str} {succ_unc_str} {sum_str} {simple_str} {event1_str} {full_str}"
     text_str = text_str.strip()
+    text_str = re.sub(r'\s+', ' ', text_str).strip() # remove extra spaces
     return text_str
 
-def text_gen_input_column(df, text_config):
+def text_gen_input_column(df, config_dict):
+
+    text_config = config_dict['text_config']
     df.columns = df.columns.astype(str)
     # demographic description
     df['demo'] = df.apply(text_gen_demo, axis=1, **text_config['demo'])
@@ -452,10 +463,14 @@ def text_gen_input_column(df, text_config):
     # time series events
     df['ts_description'] = df.apply(text_gen_ts_event, axis=1, **text_config['ts'])
     
+    # create reserved text column for 2d clip
     df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']
+    df['text'] = df['text'].apply(lambda x: x.strip())
+    if not config_dict['3d']:
+        print("replace 'text' with 'text_col': ", config_dict['text_col'])
+        df['text'] = df[config_dict['text_col']]
+    print(df['text'].value_counts().nlargest(5)) # head 5 only
     
-    print(df['text'][0])
-
     if text_config['split']:
         # Generate demographic descriptions
         demo_parts = df.apply(text_gen_demo, axis=1, split=True, **text_config['demo'])

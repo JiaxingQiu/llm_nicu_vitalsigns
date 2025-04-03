@@ -380,7 +380,9 @@ def augment_balance_data(df_sub,
 def downsample_neg_levels(df, config_dict, random_state=333):
     neg_sample_size = config_dict['downsample_size']
     down_levels = config_dict['downsample_levels']
-    keep_levels = [level for level in config_dict['y_levels'] if level not in down_levels]
+    # y_levels = df[config_dict['y_col']].unique()
+    y_levels = config_dict['y_levels'] # important: only y_levels are kept in the data after downsampling. (i.e. high, low, moderate need to be explicitly listed in the config)
+    keep_levels = [level for level in y_levels if level not in down_levels]
     df_kept = df[df[config_dict['y_col']].isin(keep_levels)]
     # Downsample specified negative levels and combine
     df_downsampled = pd.concat([

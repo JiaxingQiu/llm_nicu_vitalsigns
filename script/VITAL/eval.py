@@ -41,9 +41,11 @@ def vital_infer(df, model, config_dict,
                 z = model.ts_encoder.reparameterization(z_mean, z_log_var*distance_ratio)
                 
                 if config_dict['3d']:
-                    logits = model.clip(z, tx_f_ls)
+                    tx_embedded = model.text_encoder(tx_f_ls)
+                    logits = model.clip(z, tx_embedded)
                 else:
-                    logits = model.clip(z, tx_f)
+                    tx_embedded = model.text_encoder(tx_f)
+                    logits = model.clip(z, tx_embedded)
 
                 logits = torch.diag(logits).reshape(-1, 1)
                 logits_ls.append(logits)

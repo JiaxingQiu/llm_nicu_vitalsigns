@@ -33,19 +33,24 @@ config_dict = {
     'device': device,
     'random_state': 333,
 
+    # Eval (clip)
     # ts2txt
-    'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother']
     'y_col': 'cl_event', # column name for the classification outcome, ie. 'cl_event'
-    'y_levels': ['This infant will die in 7 days. ', 'This infant will survive. '],
+    'y_levels': ['This infant will die in 7 days.', 'This infant will survive.'], # important: only y_levels are kept in the data after downsampling. (i.e. high, low, moderate need to be explicitly listed here)
     'y_pred_levels': ['will die in 7 days', 'will survive'],
     'y_pred_cols_ls': None,
     # txt2ts
     'sub_text_col': 'ts_description', 
 
 
+
     # Data settings
+    # text features to be embedded
+    'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother']
+    'text_col': 'text',
+    # ts features to be embedded
     'downsample': True,
-    'downsample_levels': ['This infant will survive. '],
+    'downsample_levels': ['This infant will survive.'],
     'downsample_size': 1000,
     'ts_aug': False,
     'ts_aug_max_size': None,
@@ -57,6 +62,7 @@ config_dict = {
     'ts_subseq_max_length_ratio': 2/3,
     'ts_subseq_step_size_ratio': 1/30,
     'ts_augsub': False,
+    
 
     # Data loader settings
     'batch_size': 2048,

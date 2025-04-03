@@ -49,9 +49,9 @@ class VITAL3D(nn.Module):
         self.to(device)
         print(nn_summary(self))
         self.clip_mu = clip_mu
-    def clip(self, z, text_features_list):
+    
+    def clip(self, z, text_embedded):
         ts_embedded = F.normalize(z, dim=1)
-        text_embedded, _ = self.text_encoder(text_features_list)
         text_embedded = F.normalize(text_embedded, dim=1)
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
         return logits
@@ -77,11 +77,14 @@ class VITAL3D(nn.Module):
         # Encode time series
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
+        # --- Text encoder forward pass ---
+        text_embedded, _ = self.text_encoder(text_features_list)
+
         # --- CLIP forward pass ---
         if self.clip_mu:
-            logits = self.clip(mean, text_features_list)
+            logits = self.clip(mean, text_embedded)
         else:
-            logits = self.clip(z, text_features_list)
+            logits = self.clip(z, text_embedded)
         
         # --- VAE decoder forward pass ---
         ts_hat = self.ts_decoder(z, x_mean, x_std) # ts_hat in raw scale
@@ -145,9 +148,8 @@ class VITAL(nn.Module):
         self.to(device)
         print(nn_summary(self))
     
-    def clip(self, z, text_features):
+    def clip(self, z, text_embedded):
         ts_embedded = F.normalize(z, dim=1)
-        text_embedded = self.text_encoder(text_features)
         text_embedded = F.normalize(text_embedded, dim=1)
         logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
         return logits
@@ -170,11 +172,14 @@ class VITAL(nn.Module):
         # ---- VAE encoder ----
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
 
+        # --- Text encoder forward pass ---
+        text_embedded = self.text_encoder(text_features)
+
         # --- CLIP forward pass ---
         if self.clip_mu:
-            logits = self.clip(mean, text_features)
+            logits = self.clip(mean, text_embedded)
         else:
-            logits = self.clip(z, text_features)
+            logits = self.clip(z, text_embedded)
         
         # --- VAE decoder forward pass ---
         ts_hat = self.ts_decoder(z, x_mean, x_std)
