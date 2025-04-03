@@ -504,6 +504,7 @@ def plot_ts(df, idx):
     plt.title(f'Time Series (Index: {idx})')
     plt.xlabel('Time (seconds)')
     plt.ylabel('Heart Rate')
+    plt.ylim(50, 200)
     plt.grid(True)
     plt.show()
     

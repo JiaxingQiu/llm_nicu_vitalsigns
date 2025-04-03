@@ -32,7 +32,7 @@ r_functions = load_r_functions()
 
 
 
-def generate_descriptions(ts_df, id_df):
+def generate_descriptions(ts_df, id_df, type=0):
     """
     Generate various descriptions for time series data.
     
@@ -64,9 +64,9 @@ def generate_descriptions(ts_df, id_df):
     ]
     
     # Generate brady events descriptions for different thresholds
-    events80 = [describe_brady_events(row.values, th=80, plot=False, type=0) for _, row in ts_df.iterrows()]
-    events90 = [describe_brady_events(row.values, th=90, plot=False, type=0) for _, row in ts_df.iterrows()]
-    events100 = [describe_brady_events(row.values, th=100, plot=False, type=0) for _, row in ts_df.iterrows()]
+    events80 = [describe_brady_events(row.values, th=80, plot=False, type=type) for _, row in ts_df.iterrows()]
+    events90 = [describe_brady_events(row.values, th=90, plot=False, type=type) for _, row in ts_df.iterrows()]
+    events100 = [describe_brady_events(row.values, th=100, plot=False, type=type) for _, row in ts_df.iterrows()]
     
     # Get most severe events - using enumerate to get the correct index
     df_desc['description_ts_event'] = [
@@ -79,7 +79,7 @@ def generate_descriptions(ts_df, id_df):
 
 
 
-def generate_descriptions_parallel(ts_df, id_df):
+def generate_descriptions_parallel(ts_df, id_df, type=2):
     """
     Generate various descriptions for time series data using parallel processing.
     """
@@ -93,9 +93,9 @@ def generate_descriptions_parallel(ts_df, id_df):
         succ_inc = describe_succ_inc_summ(x)
         succ_unc = describe_succ_unc_summ(x)
         histogram = describe_hr_histogram(x)
-        events80 = describe_brady_events(x, th=80, plot=False, type=0)
-        events90 = describe_brady_events(x, th=90, plot=False, type=0)
-        events100 = describe_brady_events(x, th=100, plot=False, type=0)
+        events80 = describe_brady_events(x, th=80, plot=False, type=type)
+        events90 = describe_brady_events(x, th=90, plot=False, type=type)
+        events100 = describe_brady_events(x, th=100, plot=False, type=type)
         # # Clear R objects after processing each row
         # ro.r('gc()')
         return {

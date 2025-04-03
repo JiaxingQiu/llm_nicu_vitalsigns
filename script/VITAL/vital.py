@@ -140,10 +140,10 @@ class VITAL(nn.Module):
         
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
         self.device = device
-        self.to(device)
-        print(nn_summary(self))
         self.beta = beta
         self.clip_mu = clip_mu
+        self.to(device)
+        print(nn_summary(self))
     
     def clip(self, z, text_features):
         ts_embedded = F.normalize(z, dim=1)
@@ -324,7 +324,9 @@ class TextEncoder(nn.Module):
         Returns:
             torch.Tensor: Encoded text of shape [batch_size, output_dim]
         """
-        return self.encoder(text_features)
+
+        output = self.encoder(text_features)
+        return output
 
 # default text encoder with attention on text splits
 class TextEncoderWithAttention(nn.Module):
