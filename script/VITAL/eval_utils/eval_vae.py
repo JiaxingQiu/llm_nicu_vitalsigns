@@ -1,6 +1,9 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
+from data import get_features, get_features3d
+from config import *
+
 def plot_reconstructions(model,
                          df, 
                          config_dict,

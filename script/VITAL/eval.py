@@ -1,8 +1,9 @@
+import torch
+from data import get_features3d, get_features
+from config import *
 from eval_utils.eval_vae import *
 from eval_utils.eval_clip_ts2txt import *
 from eval_utils.eval_clip_txt2ts import *
-import torch
-from data import get_features3d, get_features
 
 # df = df_train.iloc[:1,].copy()
 def vital_infer(df, model, config_dict,
