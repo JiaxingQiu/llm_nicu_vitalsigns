@@ -40,6 +40,7 @@ config_dict = {
     'y_pred_levels': ['will die in 7 days', 'will survive'],
     'y_pred_cols_ls': None,
     # txt2ts
+    'txt2ts_y_cols': ['description_histogram', 'description_succ_unc', 'description_succ_inc'],
     'sub_text_col': 'ts_description', 
 
 

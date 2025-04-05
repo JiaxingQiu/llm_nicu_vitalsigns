@@ -467,7 +467,7 @@ def text_gen_input_column(df, config_dict):
     df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']
     df['text'] = df['text'].apply(lambda x: x.strip())
     if not config_dict['3d']:
-        print("replace 'text' with 'text_col': ", config_dict['text_col'])
+        print("replace 'text' with: ", config_dict['text_col'])
         df['text'] = df[config_dict['text_col']]
     print(df['text'].value_counts().nlargest(5)) # head 5 only
     

@@ -152,7 +152,7 @@ def eval_clip3d_txt2ts(model,
 
 
 
-def gen_txt_tsid_mapping(df, text_col, k=50, n_neg=3):
+def gen_txt_tsid_mapping(df, text_col, k=500, n_neg=3):
     import numpy as np
     import pandas as pd
     np.random.seed(333)

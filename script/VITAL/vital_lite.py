@@ -50,10 +50,10 @@ class VITAL3D(nn.Module):
         print(nn_summary(self))
         self.clip_mu = clip_mu
     
-    def clip(self, ts_embedded, text_embedded):
-        # ts_embedded = F.normalize(ts_embedded, dim=1)
-        # text_embedded = F.normalize(text_embedded, dim=1)
-        logits = torch.matmul(ts_embedded, text_embedded.T) #* torch.exp(self.temperature)
+    def clip(self, z, text_embedded):
+        ts_embedded = F.normalize(z, dim=1)
+        text_embedded = F.normalize(text_embedded, dim=1)
+        logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
         return logits
 
 
@@ -148,10 +148,10 @@ class VITAL(nn.Module):
         self.to(device)
         print(nn_summary(self))
     
-    def clip(self, ts_embedded, text_embedded):
-        # ts_embedded = F.normalize(ts_embedded, dim=1)
-        # text_embedded = F.normalize(text_embedded, dim=1)
-        logits = torch.matmul(ts_embedded, text_embedded.T) #* torch.exp(self.temperature)
+    def clip(self, z, text_embedded):
+        ts_embedded = F.normalize(z, dim=1)
+        text_embedded = F.normalize(text_embedded, dim=1)
+        logits = torch.matmul(ts_embedded, text_embedded.T) * torch.exp(self.temperature)
         return logits
     
     def forward(self, ts, text_features):
@@ -216,22 +216,16 @@ class TSVAEEncoder(nn.Module):
         self.encoder_layers = nn.Sequential(
             MultiLSTMEncoder(
                 ts_dim=ts_dim, 
-                output_dim=256,
-                hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
+                output_dim=128,
+                hidden_dims=[256, 256],  # LSTMs with different sizes
                 num_layers=2,
                 mask=0  # mask 0 with 0 to suppress the effect of masked values
             ),
-            nn.LayerNorm(256),  # Add LayerNorm at the end
-            nn.Linear(256, 512),
+            nn.LayerNorm(128),  # Add LayerNorm at the end
+            nn.Linear(128, 128),
             nn.LeakyReLU(0.2),
-            nn.LayerNorm(512),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2), 
-            # nn.LayerNorm(512),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2), 
-            # nn.LayerNorm(512),
-            nn.Linear(512, output_dim),
+            nn.LayerNorm(128),
+            nn.Linear(128, output_dim),
             nn.LeakyReLU(0.2),
             nn.LayerNorm(output_dim)
         )
@@ -296,8 +290,7 @@ class TSVAEDecoder(nn.Module):
 class TextEncoder(nn.Module):
     def __init__(self, 
                  text_dim: int, 
-                 output_dim: int,
-                 dropout: float = 0.0):
+                 output_dim: int):
         """Text encoder using transformer blocks
         
         Args:
@@ -307,18 +300,18 @@ class TextEncoder(nn.Module):
         super().__init__()
         self.encoder = nn.Sequential(
             # Initial projection
-            nn.Linear(text_dim, 512),
-            nn.LayerNorm(512),
+            nn.Linear(text_dim, 256),
+            nn.LayerNorm(256),
             nn.GELU(),
-            nn.Dropout(dropout),
+            nn.Dropout(0.1),
             
             # Transformer blocks
-            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
-            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
-            TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
+            TransformerBlock(dim=256, hidden_dim=512, num_heads=4, dropout=0.1),
+            # TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=0.1),
+            # TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=0.1),
             
             # Final projection
-            nn.Linear(512, output_dim)
+            nn.Linear(256, output_dim)
         )
 
     def forward(self, text_features):

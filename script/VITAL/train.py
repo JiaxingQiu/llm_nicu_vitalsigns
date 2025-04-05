@@ -2,23 +2,32 @@ import torch
 import torch.nn.functional as F
 
  
-def compute_clip_loss(logits, labels): 
+def compute_clip_loss(logits, labels, 
+                      loss_type = 'block_diagonal', ts_embedded=None, text_embedded=None): # embedded or features
+    if loss_type == 'block_diagonal':
+        # # build block-diagonal target matrix based on labels
+        # batch_size = logits.shape[0]
+        # targets = torch.zeros((batch_size, batch_size), device=logits.device)
+        # for i in range(batch_size):
+        #     for j in range(batch_size):
+        #         if labels[i] == labels[j]:
+        #             targets[i,j] = 1
+        # Vectorized operation on GPU!!
+        labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
+        targets = labels_equal.float()
+        loss_ts = cross_entropy(logits, targets)
+        loss_tx = cross_entropy(logits.T, targets.T)
+        clip_loss = (loss_ts + loss_tx) / 2
+    
+    if loss_type == 'similarity':
+        batch_size = logits.shape[0]
+        with torch.no_grad():  # Detach the similarity computation
+            targets = get_similarity_target(ts_embedded, text_embedded)
+        assert targets.shape == (batch_size, batch_size)
+        loss_ts = cross_entropy(logits, targets)
+        loss_tx = cross_entropy(logits.T, targets.T)
+        clip_loss = (loss_ts + loss_tx) / 2
 
-    # # build block-diagonal target matrix based on labels
-    # batch_size = logits.shape[0]
-    # targets = torch.zeros((batch_size, batch_size), device=logits.device)
-    # for i in range(batch_size):
-    #     for j in range(batch_size):
-    #         if labels[i] == labels[j]:
-    #             targets[i,j] = 1
-
-    # Vectorized operation on GPU!!
-    labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
-    targets = labels_equal.float()
-
-    loss_ts = cross_entropy(logits, targets)
-    loss_tx = cross_entropy(logits.T, targets.T)
-    clip_loss = (loss_ts + loss_tx) / 2
     return clip_loss
 
 def cross_entropy(preds, targets):
@@ -26,9 +35,24 @@ def cross_entropy(preds, targets):
     batch_size = preds.shape[0]
     exp_preds = torch.exp(preds)
     softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # sum over the columns, keep the rows
-    log_probs = torch.log(softmax_probs + 1e-8)
+    log_probs = torch.log(softmax_probs + 1e-16)
     loss = -torch.sum(targets * log_probs) / batch_size
     return loss
+
+def get_similarity_target(ts_embedded, text_embedded):
+    ts_embedded = F.normalize(ts_embedded, p=2, dim=1)  # dim=1 for row-wise normalization
+    text_embedded = F.normalize(text_embedded, p=2, dim=1)
+    ts_similarity = torch.matmul(ts_embedded, ts_embedded.T) # cosine similarity
+    texts_similarity = torch.matmul(text_embedded, text_embedded.T) # cosine similarity
+    target = (ts_similarity + texts_similarity)/2
+    # # scale each rwo to sum up to 1
+    # # targets = F.softmax(targets, dim=-1)
+    # # scale each row to [0,1]
+    # row_min = targets.min(dim=1, keepdim=True)[0]
+    # row_max = targets.max(dim=1, keepdim=True)[0]
+    # targets = (targets - row_min) / (row_max - row_min)
+    # targets = (targets + targets.T)/2  # re-symmetrize again after scaling
+    return target
 
 class KLAnnealer:
     def __init__(self, start, end, epochs):

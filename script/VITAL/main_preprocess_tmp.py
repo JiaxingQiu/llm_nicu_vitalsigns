@@ -108,6 +108,12 @@ else:
         df_test['label'] = df_test['rowid'].astype(int)
 
 
+label_mapping = {cat: idx+1 for idx, cat in enumerate(sorted(df_train[config_dict['y_col']].unique()))}
+df_train['label'] = df_train[config_dict['y_col']].map(label_mapping).astype(int)
+df_test['label'] = df_test[config_dict['y_col']].map(label_mapping).astype(int)
+
+
+
 print('final distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
