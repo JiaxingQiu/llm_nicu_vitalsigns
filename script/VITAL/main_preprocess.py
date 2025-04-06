@@ -84,7 +84,7 @@ if config_dict['ts_subseq']:
     del df_train_na, df_test_na
 
 # ---- block or not ----
-if not config_dict['block_target']:
+if not config_dict['block_label']:
     # reset index but keep the original index as a column 'str_index'
     df_train['str_index'] = df_train.index.to_series()
     df_test['str_index'] = df_test.index.to_series()
@@ -107,11 +107,17 @@ else:
         df_train['label'] = df_train['rowid'].astype(int)
         df_test['label'] = df_test['rowid'].astype(int)
 
+# ---- prepare target matrix ----
+if len(config_dict['custom_target_cols']) > 0:
+    target_train = gen_target(df_train, config_dict['custom_target_cols'])
+    target_test = gen_target(df_test, config_dict['custom_target_cols'])
+else:
+    target_train = None
+    target_test = None
 
-print('final distribution of text prediction')
+print('\n\nfinal distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
-
 
 if overwrite or not os.path.exists(model_path):
     # ------------------------- ready eval inputs for CLIP -------------------------
@@ -150,15 +156,15 @@ if overwrite or not os.path.exists(model_path):
         ts_f_train, tx_f_train_ls, labels_train = get_features3d(df_train, 
                                                                 config_dict,
                                                                 text_col_ls = config_dict['text_col_ls'])
-        train_dataloader = VITAL3DDataset(ts_f_train, tx_f_train_ls, labels_train).dataloader(batch_size=config_dict['batch_size'])
+        train_dataloader = VITAL3DDataset(ts_f_train, tx_f_train_ls, labels_train, target_train).dataloader(batch_size=config_dict['batch_size'])
         ts_f_test, tx_f_test_ls, labels_test = get_features3d(df_test, 
                                                                 config_dict,
                                                                 text_col_ls = config_dict['text_col_ls'])
-        test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test).dataloader(batch_size=config_dict['batch_size'])
+        test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])
     else: 
         ts_f_train, tx_f_train, labels_train = get_features(df_train,
                                                             config_dict)
-        train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train).dataloader(batch_size=config_dict['batch_size'])
+        train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train, target_train).dataloader(batch_size=config_dict['batch_size'])
         ts_f_test, tx_f_test, labels_test = get_features(df_test,
                                                             config_dict)
-        test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test).dataloader(batch_size=config_dict['batch_size'])
+        test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])

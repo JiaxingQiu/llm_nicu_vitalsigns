@@ -30,7 +30,7 @@ class EvalCLIPTXT2TS:
 
         elif config_dict['3d']:
             text_cols = config_dict['text_col_ls']
-            sub_text_col = config_dict['sub_text_col']
+            sub_text_col = config_dict['sub_caption_col']
             # substitute sub_text_col with 'caption' in text_cols
             text_cols = [col if col != sub_text_col else 'caption' for col in text_cols]
             self.ts_f_mat, self.tx_f_mat_ls, _ = get_features3d(df_new, 

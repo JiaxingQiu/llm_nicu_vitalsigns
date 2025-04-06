@@ -13,8 +13,7 @@ def vital_infer(df, model, config_dict,
                 top = 10, # get the top number of reconstructions
                 distance_ratios = [0, 1, 50, 100],
                 threshold = None,
-                poptop=False,
-                keep = 3):
+                poptop=False):
     
     if threshold is None:
         threshold = 1/top
@@ -104,11 +103,6 @@ def vital_infer(df, model, config_dict,
             top_ts_hats = top_ts_hats[1:]
             top_distance_ratios = top_distance_ratios[1:]
 
-        keep = min(keep, len(top_probs))
-        top_probs = top_probs[:keep]
-        top_ts_hats = top_ts_hats[:keep]
-        top_distance_ratios = top_distance_ratios[:keep]
-
         if top_probs[0] > threshold:# and top_probs[0][0] < threshold+0.1:
             topp_above_threshold = True
     
@@ -117,7 +111,13 @@ def vital_infer(df, model, config_dict,
 
 
 
-def plot_vital_reconstructions(ts, top_probs, top_ts_hats, top_distance_ratios, title=''):
+def plot_vital_reconstructions(ts, top_probs, top_ts_hats, top_distance_ratios, keep=3, title=''):
+    
+    keep = min(keep, len(top_probs))
+    top_probs = top_probs[:keep]
+    top_ts_hats = top_ts_hats[:keep]
+    top_distance_ratios = top_distance_ratios[:keep]
+
     if ts.shape[0] == 1:
         ts = ts[0]
     n_reconstructions = len(top_ts_hats)  # total number of subplots

@@ -11,7 +11,7 @@ from data_utils.masker import *
 from data_utils.describer import *
 
 class VITALDataset(Dataset):
-    def __init__(self, ts_features, text_features, labels):
+    def __init__(self, ts_features, text_features, labels, targets = None):
         """
         Args:
             ts_features: time series features tensor [N, ts_dim]
@@ -25,23 +25,32 @@ class VITALDataset(Dataset):
             text_features = torch.FloatTensor(text_features)
         if not isinstance(labels, torch.Tensor):
             labels = torch.LongTensor(labels)
-            
+        
         assert len(ts_features) == len(text_features) == len(labels), "All inputs must have the same length"
         self.ts_features = ts_features
         self.text_features = text_features
         self.labels = labels
+        self.targets = targets
         self.ts_features = self.ts_features.to(device)
         self.text_features = self.text_features.to(device)
         self.labels = self.labels.to(device)
+        if targets is None:
+            labels_equal = (self.labels.unsqueeze(0) == self.labels.unsqueeze(1))
+            self.targets = labels_equal.float()
+        else:
+            self.targets = targets.float()
+        self.targets = self.targets.to(device)
     
     def __len__(self):
         return len(self.labels)
     
     def __getitem__(self, idx):
         return (
+            idx,
             self.ts_features[idx],
             self.text_features[idx],
-            self.labels[idx]
+            self.labels[idx],
+            self.targets[idx]
         )
     def dataloader(self, batch_size=32):
         return DataLoader(self, 
@@ -52,7 +61,7 @@ class VITALDataset(Dataset):
     
 
 class VITAL3DDataset(Dataset):
-    def __init__(self, ts_features, text_features_list, labels):
+    def __init__(self, ts_features, text_features_list, labels, targets = None):
         """
         Dataset for VITAL3D model handling multiple text features per time series.
         
@@ -79,6 +88,12 @@ class VITAL3DDataset(Dataset):
         self.ts_features = self.ts_features.to(device)
         self.text_features_list = [t.to(device) for t in self.text_features_list]
         self.labels = self.labels.to(device)
+        if targets is None:
+            labels_equal = (self.labels.unsqueeze(0) == self.labels.unsqueeze(1))
+            self.targets = labels_equal.float()
+        else:
+            self.targets = targets.float()
+        self.targets = self.targets.to(device)
 
     def __len__(self):
         return len(self.labels)
@@ -95,9 +110,11 @@ class VITAL3DDataset(Dataset):
             )
         """
         return (
+            idx,
             self.ts_features[idx],
             [text_features[idx] for text_features in self.text_features_list],
-            self.labels[idx]
+            self.labels[idx],
+            self.targets[idx]
         )
     
     def dataloader(self, batch_size=32, shuffle=True):
@@ -262,4 +279,23 @@ def get_features3d(df,
                           encoder_model_name=config_dict['text_encoder_name']).features
         tx_f_list.append(tx_f)
     return ts_f, tx_f_list, labels
+
+
+
+def gen_target(df, 
+               cluster_cols = ['label']):
+    targets = {}
+    for cluster_col in cluster_cols:
+        label_mapping = {cat: idx+1 for idx, cat in enumerate(sorted(df[cluster_col].unique()))}
+        df['cluster'] = df[cluster_col].map(label_mapping).astype(int)
+        labels = torch.tensor(df['cluster'].values).to(device)
+        labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
+        target = labels_equal.float()
+        targets[cluster_col] = target
+
+    # Sum all target matrices element-wise
+    target_sum = sum(targets.values())
+    # Method 2: Normalize by count
+    target_normalized = target_sum / len(cluster_cols)
+    return target_normalized
 

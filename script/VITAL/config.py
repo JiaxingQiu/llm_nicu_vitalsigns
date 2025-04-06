@@ -41,7 +41,7 @@ config_dict = {
     'y_pred_cols_ls': None,
     # txt2ts
     'txt2ts_y_cols': ['description_histogram', 'description_succ_unc', 'description_succ_inc'],
-    'sub_text_col': 'ts_description', 
+    'sub_caption_col': 'ts_description', 
 
 
 
@@ -56,13 +56,15 @@ config_dict = {
     'ts_aug': False,
     'ts_aug_max_size': None,
     'balance': True,
-    'block_target': True, # only block or diagonal two types of clip targets
     'ts_subseq': False,
     'ts_subseq_n': 1,
     'ts_subseq_min_length_ratio':1/6,
     'ts_subseq_max_length_ratio': 2/3,
     'ts_subseq_step_size_ratio': 1/30,
     'ts_augsub': False,
+    # target matrix settings
+    'block_label': True, # only block or diagonal two types of clip targets
+    'custom_target_cols': [], # 'label' is the same as the default "by_label" target
     
 
     # Data loader settings

@@ -2,9 +2,10 @@ import torch
 import torch.nn.functional as F
 
  
-def compute_clip_loss(logits, labels, 
-                      loss_type = 'block_diagonal', ts_embedded=None, text_embedded=None): # embedded or features
-    if loss_type == 'block_diagonal':
+def compute_clip_loss(logits, labels, targets, 
+                      target_type = 'by_label', 
+                      ts_embedded=None, text_embedded=None): # embedded or features
+    if target_type == 'by_label':
         # # build block-diagonal target matrix based on labels
         # batch_size = logits.shape[0]
         # targets = torch.zeros((batch_size, batch_size), device=logits.device)
@@ -18,8 +19,13 @@ def compute_clip_loss(logits, labels,
         loss_ts = cross_entropy(logits, targets)
         loss_tx = cross_entropy(logits.T, targets.T)
         clip_loss = (loss_ts + loss_tx) / 2
+
+    if target_type == 'by_target':
+        loss_ts = cross_entropy(logits, targets)
+        loss_tx = cross_entropy(logits.T, targets.T)
+        clip_loss = (loss_ts + loss_tx) / 2
     
-    if loss_type == 'similarity':
+    if target_type == 'by_similarity':
         batch_size = logits.shape[0]
         with torch.no_grad():  # Detach the similarity computation
             targets = get_similarity_target(ts_embedded, text_embedded)
@@ -27,7 +33,8 @@ def compute_clip_loss(logits, labels,
         loss_ts = cross_entropy(logits, targets)
         loss_tx = cross_entropy(logits.T, targets.T)
         clip_loss = (loss_ts + loss_tx) / 2
-
+    # default
+        
     return clip_loss
 
 def cross_entropy(preds, targets):
@@ -45,13 +52,6 @@ def get_similarity_target(ts_embedded, text_embedded):
     ts_similarity = torch.matmul(ts_embedded, ts_embedded.T) # cosine similarity
     texts_similarity = torch.matmul(text_embedded, text_embedded.T) # cosine similarity
     target = (ts_similarity + texts_similarity)/2
-    # # scale each rwo to sum up to 1
-    # # targets = F.softmax(targets, dim=-1)
-    # # scale each row to [0,1]
-    # row_min = targets.min(dim=1, keepdim=True)[0]
-    # row_max = targets.max(dim=1, keepdim=True)[0]
-    # targets = (targets - row_min) / (row_max - row_min)
-    # targets = (targets + targets.T)/2  # re-symmetrize again after scaling
     return target
 
 class KLAnnealer:
@@ -73,7 +73,7 @@ def compute_vae_loss(ts, ts_hat, mean, log_var, beta=1.0):
     return vae_loss
 
   
-def compute_loss(model, ts, text_features, labels, train_type='joint', alpha=1.0, beta=0.1):
+def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_label', train_type='joint', alpha=1.0, beta=0.1):
     # initialized to return
     loss = 0
     clip_loss = 0
@@ -82,21 +82,21 @@ def compute_loss(model, ts, text_features, labels, train_type='joint', alpha=1.0
     logits, ts_hat, mean, log_var = model(ts, text_features)
     # compute losses
     if train_type == 'joint':
-        clip_loss = compute_clip_loss(logits, labels)
+        clip_loss = compute_clip_loss(logits, labels, targets, target_type)
         vae_loss = compute_vae_loss(ts, ts_hat, mean, log_var, beta)
         loss = clip_loss + alpha * vae_loss
     elif train_type == 'vae':
         loss = compute_vae_loss(ts, ts_hat, mean, log_var, beta)
         loss = alpha * loss
     elif train_type == 'clip':
-        loss = compute_clip_loss(logits, labels)
+        loss = compute_clip_loss(logits, labels, targets, target_type)
     else:
         raise ValueError(f"Invalid model type: {train_type}")
     return loss, clip_loss, vae_loss
 
 
 
-def train_epoch(model, train_dataloader, optimizer, train_type='joint', alpha=1.0, beta=0.1): 
+def train_epoch(model, train_dataloader, optimizer, target_type = 'by_label', train_type='joint', alpha=1.0, beta=0.1): 
     # alpha controls the balance between vae loss and clip loss
     # beta controls the balance between reconstruction loss and kl loss
     model.train()
@@ -105,9 +105,9 @@ def train_epoch(model, train_dataloader, optimizer, train_type='joint', alpha=1.
     total_vae_loss = 0 # only updated for joint training
     num_batches = 0
     
-    for _, (ts, text_features, labels) in enumerate(train_dataloader):
-        
-        loss, clip_loss, vae_loss = compute_loss(model, ts, text_features, labels, train_type, alpha, beta)
+    for _, (idx, ts, text_features, labels, targets) in enumerate(train_dataloader):
+        targets = targets[:,idx]
+        loss, clip_loss, vae_loss = compute_loss(model, ts, text_features, labels, targets, target_type, train_type, alpha, beta)
 
         # Clear gradients
         optimizer.zero_grad()
@@ -134,7 +134,7 @@ def train_epoch(model, train_dataloader, optimizer, train_type='joint', alpha=1.
 
 
 
-def test_epoch(model, test_dataloader, train_type='joint', alpha=1.0, beta=0.1):
+def test_epoch(model, test_dataloader, target_type = 'by_label', train_type='joint', alpha=1.0, beta=0.1):
     model.eval()
     total_loss = 0
     total_clip_loss = 0 # only updated for joint training
@@ -142,8 +142,9 @@ def test_epoch(model, test_dataloader, train_type='joint', alpha=1.0, beta=0.1):
     num_batches = 0
     
     with torch.no_grad():
-        for batch_idx, (ts, text_features, labels) in enumerate(test_dataloader):
-            loss, clip_loss, vae_loss = compute_loss(model, ts, text_features, labels, train_type, alpha, beta)
+        for _, (idx, ts, text_features, labels, targets) in enumerate(test_dataloader):
+            targets = targets[:,idx]
+            loss, clip_loss, vae_loss = compute_loss(model, ts, text_features, labels, targets, target_type, train_type, alpha, beta)
             
             total_loss += loss.item()
             if train_type == 'joint':
@@ -158,7 +159,8 @@ def test_epoch(model, test_dataloader, train_type='joint', alpha=1.0, beta=0.1):
     return avg_loss, avg_clip_loss, avg_vae_loss
 
 
-def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, kl_annealer, num_epochs, train_type='joint', alpha=1.0):
+def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, kl_annealer, num_epochs, 
+                target_type = 'by_label', train_type='joint', alpha=1.0):
     train_losses = []
     test_losses = []
     
@@ -172,10 +174,10 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             beta = kl_annealer.get_beta(epoch)
 
             # Train for one epoch
-            train_loss, train_clip_loss, train_vae_loss = train_epoch(model, train_dataloader, optimizer, train_type, alpha, beta)
+            train_loss, train_clip_loss, train_vae_loss = train_epoch(model, train_dataloader, optimizer, target_type, train_type, alpha, beta)
             
             # Test for one epoch
-            test_loss, test_clip_loss, test_vae_loss = test_epoch(model, test_dataloader, train_type, alpha, beta)
+            test_loss, test_clip_loss, test_vae_loss = test_epoch(model, test_dataloader, target_type, train_type, alpha, beta)
             
             # Store losses
             train_losses.append(train_loss)
