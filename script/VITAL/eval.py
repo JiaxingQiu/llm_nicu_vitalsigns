@@ -6,6 +6,169 @@ from eval_utils.eval_clip_ts2txt import *
 from eval_utils.eval_clip_txt2ts import *
 from eval_utils.eval_conditions import *
 
+
+
+def vital_contrast_infer(df, model, config_dict,
+                         text_cols = ['text', 'text1', 'text2'], # i.e text1 text2 columns as 'low consecutive increases' and 'moderate consecutive increases'
+                         var_ratio = 2,
+                         K=1000):
+    model.eval() # 2d vital model
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device)
+    tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+
+    ts_f_repeated = ts_f.repeat(K, 1)  # Adjust dimensions as needed
+    tx_f_ls_repeated = [tx_f.repeat(K, 1) for tx_f in tx_f_ls]
+
+    # Forward pass for the batch
+    _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(ts_f_repeated)
+    z = model.ts_encoder.reparameterization(z_mean, z_log_var * var_ratio)
+    ts_hat = model.ts_decoder(z, x_mean, x_std)
+        
+    logits_ls = []
+    # get the logits for each text (condition)
+    for tx_f in tx_f_ls_repeated:
+        tx_embedded = model.text_encoder(tx_f)
+        logits = model.clip(z, tx_embedded)
+        logits = torch.diag(logits).reshape(-1, 1)
+        logits_ls.append(logits)
+
+    # get the softmax probabilities
+    logits_ls = torch.cat(logits_ls, dim=1)
+    exp_preds = torch.exp(logits_ls)
+    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # each row corresponds to a z, each column corresponds to the probability of a text condition given z
+
+    text_conditioned_ts_hat = {}
+    text_conditioned_ts_hat_probs = {}
+    # For each text condition, get the time series where it has the highest probability
+    for i, text_col in enumerate(text_cols):
+        # Get the probabilities for this text condition
+        probs = softmax_probs[:, i]
+        # Get the indices where this text condition has the highest probability
+        mask = torch.argmax(softmax_probs, dim=1) == i
+        # Store the time series and their corresponding probabilities
+        text_col_string = df[text_col].iloc[0]
+        text_conditioned_ts_hat[text_col_string] = ts_hat[mask]
+        text_conditioned_ts_hat_probs[text_col_string] = probs[mask]
+
+    return text_conditioned_ts_hat, text_conditioned_ts_hat_probs
+
+
+
+
+
+def vital1_contrast_infer(df, model, config_dict,
+                         text_cols = ['text', 'text1', 'text2'], # i.e text1 text2 columns as 'low consecutive increases' and 'moderate consecutive increases'
+                         var_ratio = 2,
+                         K=100):
+    model.eval() # 2d vital model
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device)
+    tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+
+    ts_f_repeated = ts_f.repeat(K, 1)  # Adjust dimensions as needed
+    tx_f_ls_repeated = [tx_f.repeat(K, 1) for tx_f in tx_f_ls]
+
+    # Forward pass for the batch
+    _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(ts_f_repeated)
+    z = model.ts_encoder.reparameterization(z_mean, z_log_var * var_ratio)
+    
+    ts_hat_ls = []
+    logits_ls = []
+    # get the logits for each text (condition)
+    for tx_f in tx_f_ls_repeated:
+        tx_embedded = model.text_encoder(tx_f)
+        
+        z_tx_embedded = torch.cat([z, tx_embedded], dim=1)
+        ts_hat = model.ts_decoder(z_tx_embedded, x_mean, x_std)
+        
+        logits = model.clip(z, tx_embedded)
+        logits = torch.diag(logits).reshape(-1, 1)
+        logits_ls.append(logits)
+        ts_hat_ls.append(ts_hat)
+
+    # get the softmax probabilities
+    logits_ls = torch.cat(logits_ls, dim=1)
+    exp_preds = torch.exp(logits_ls)
+    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # each row corresponds to a z, each column corresponds to the probability of a text condition given z
+
+    text_conditioned_ts_hat = {}
+    text_conditioned_ts_hat_probs = {}
+    # For each text condition, get the time series where it has the highest probability
+    for i, text_col in enumerate(text_cols):
+        ts_hat = ts_hat_ls[i]
+        # Get the probabilities for this text condition
+        probs = softmax_probs[:, i]
+        # Get the indices where this text condition has the highest probability
+        mask = torch.argmax(softmax_probs, dim=1) == i
+        # Store the time series and their corresponding probabilities
+        text_conditioned_ts_hat[text_col] = ts_hat[mask]
+        text_conditioned_ts_hat_probs[text_col] = probs[mask]
+
+    return text_conditioned_ts_hat, text_conditioned_ts_hat_probs
+
+
+
+def plot_vital_contrast_reconstructions(raw_ts, text_conditioned_ts_hat, text_conditioned_ts_hat_probs, n=3, title=''):
+    """
+    Plot the top n time series reconstructions for each text condition.
+    
+    Args:
+        raw_ts (torch.Tensor): Original time series
+        text_conditioned_ts_hat (dict): Dictionary mapping text conditions to their corresponding time series
+        text_conditioned_ts_hat_probs (dict): Dictionary mapping text conditions to their probabilities
+        n (int): Number of top reconstructions to plot for each condition
+        title (str): Title for the plot
+    """
+    n_conditions = len(text_conditioned_ts_hat)
+    n_cols = n
+    n_rows = n_conditions
+    
+    # Create figure and subplots
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols*4, n_rows*3))
+    fig.suptitle(title, fontsize=18)
+    
+    # If only one condition, make axs 2D
+    if n_conditions == 1:
+        axs = axs.reshape(1, -1)
+    
+    # Plot reconstructions for each text condition
+    for i, (text_condition, ts_hats) in enumerate(text_conditioned_ts_hat.items()):
+        probs = text_conditioned_ts_hat_probs[text_condition]
+        
+        # Sort by probability and get top n
+        sorted_indices = torch.argsort(probs, descending=True)
+        top_n_indices = sorted_indices[:n]
+        top_n_ts_hats = ts_hats[top_n_indices]
+        top_n_probs = probs[top_n_indices]
+        
+        # Plot each of the top n reconstructions
+        for j in range(n):
+            if j < len(top_n_ts_hats):  # Check if we have enough reconstructions
+                ts_hat = top_n_ts_hats[j]
+                prob = top_n_probs[j].item()
+                
+                # Plot reconstruction
+                if ts_hat.dim() == 2:
+                    ts_hat = ts_hat[0]
+                axs[i, j].plot(ts_hat.cpu().detach().numpy(), 'r-', label='Reconstruction')
+                axs[i, j].plot(raw_ts, 'b--', alpha=0.5, label='Original')
+                axs[i, j].set_title(f'{text_condition}\nprob={prob:.3f}')
+                axs[i, j].set_xlabel('Time')
+                axs[i, j].set_ylabel('Value')
+                axs[i, j].set_ylim(50, 200)  # Adjust y-limits as needed
+                axs[i, j].grid(True)
+                axs[i, j].legend()
+            else:
+                # Hide empty subplots
+                axs[i, j].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+
+
 # df = df_train.iloc[:1,].copy()
 def vital_infer(df, model, config_dict,
                 text_col = 'text', text_col_ls = ['demo', 'cl_event', 'ts_description'],

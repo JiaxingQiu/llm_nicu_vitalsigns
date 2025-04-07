@@ -135,9 +135,9 @@ class VITAL(nn.Module):
             self.text_encoder = text_encoder
         
         if ts_decoder is None:
-            self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = output_dim) #default decoder
+            self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = 2*output_dim) #default decoder
         elif isinstance(ts_decoder, type):
-            self.ts_decoder = ts_decoder(ts_dim = ts_dim, output_dim = output_dim)
+            self.ts_decoder = ts_decoder(ts_dim = ts_dim, output_dim = 2*output_dim)
         else:
             self.ts_decoder = ts_decoder
         
@@ -182,7 +182,9 @@ class VITAL(nn.Module):
             logits = self.clip(z, text_embedded)
         
         # --- VAE decoder forward pass ---
-        ts_hat = self.ts_decoder(z, x_mean, x_std)
+        # concate z and text_embedded 
+        z_text_embedded = torch.cat([z, text_embedded], dim=1)
+        ts_hat = self.ts_decoder(z_text_embedded, x_mean, x_std)
 
         return logits, ts_hat, mean, log_var
 
@@ -275,12 +277,8 @@ class TSVAEDecoder(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(512, 512),
             nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2),
             nn.Linear(256, 128),
