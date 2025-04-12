@@ -397,3 +397,33 @@ def downsample_neg_levels(df, config_dict, random_state=333):
     print("After downsampling:")
     print(df[config_dict['y_col']].value_counts())
     return df
+
+
+
+def add_linear_trend(df, slope=0.5, text_condition="High amount of consecutive increases."):
+    """
+    Add a linear trend y = slope * x to time series columns for rows matching text_condition
+    
+    Args:
+        df (pd.DataFrame): Input dataframe with time series columns '1' to '300'
+        slope (float): Slope of the linear trend to add (default 0.5)
+        text_condition (str): Text condition to match in 'text' column
+        
+    Returns:
+        pd.DataFrame: Modified copy of input dataframe
+    """
+    # Create a copy of the input dataframe
+    df_modified = df.copy()
+    
+    # Create x values array [1, 2, ..., 300]
+    x = np.arange(1, 301)
+    
+    # Calculate linear trend
+    y = np.round(slope * x)
+    
+    # Add trend to matching rows
+    mask = df_modified['text'] == text_condition
+    for col in map(str, range(1, 301)):
+        df_modified.loc[mask, col] = df_modified.loc[mask, col] + y[int(col)-1]
+    
+    return df_modified

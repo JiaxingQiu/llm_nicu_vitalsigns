@@ -84,11 +84,13 @@ def plot_reconstruction_from_distances(model,
         ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
         ts_f = ts_f.to(device)
         tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+        tx_emb, _ = model.text_encoder(tx_f_ls)
         x = ts_f[0]
     else:
         ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
         ts_f = ts_f.to(device)
         tx_f = tx_f.to(device)
+        tx_emb = model.text_encoder(tx_f)
         x = ts_f[0]
 
 
@@ -119,9 +121,12 @@ def plot_reconstruction_from_distances(model,
             z = model.ts_encoder.reparameterization(z_mean, z_log_var + distance)
             # decode new z
             try:
+                # vital
                 x_hat = model.ts_decoder(z, x_mean, x_std)
             except:
-                x_hat = model.ts_decoder(z)
+                # vital1
+                z_text_embedded = torch.cat([z, tx_emb], dim=1)
+                x_hat = model.ts_decoder(z_text_embedded, x_mean, x_std)
             
                 
             try:

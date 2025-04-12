@@ -53,10 +53,6 @@ def vital_contrast_infer(df, model, config_dict,
 
     return text_conditioned_ts_hat, text_conditioned_ts_hat_probs
 
-
-
-
-
 def vital1_contrast_infer(df, model, config_dict,
                          text_cols = ['text', 'text1', 'text2'], # i.e text1 text2 columns as 'low consecutive increases' and 'moderate consecutive increases'
                          var_ratio = 2,
@@ -102,12 +98,62 @@ def vital1_contrast_infer(df, model, config_dict,
         # Get the indices where this text condition has the highest probability
         mask = torch.argmax(softmax_probs, dim=1) == i
         # Store the time series and their corresponding probabilities
-        text_conditioned_ts_hat[text_col] = ts_hat[mask]
-        text_conditioned_ts_hat_probs[text_col] = probs[mask]
+        text_col_string = df[text_col].iloc[0]
+        text_conditioned_ts_hat[text_col_string] = ts_hat[mask]
+        text_conditioned_ts_hat_probs[text_col_string] = probs[mask]
 
     return text_conditioned_ts_hat, text_conditioned_ts_hat_probs
 
+def vital3_contrast_infer(df, model, config_dict,
+                         text_cols = ['text', 'text1', 'text2'], # i.e text1 text2 columns as 'low consecutive increases' and 'moderate consecutive increases'
+                         var_ratio = 2,
+                         K=100):
+    model.eval() # 2d vital model
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device)
+    tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
 
+    ts_f_repeated = ts_f.repeat(K, 1)  # Adjust dimensions as needed
+    tx_f_ls_repeated = [tx_f.repeat(K, 1) for tx_f in tx_f_ls]
+
+    # Forward pass for the batch
+    _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(ts_f_repeated)
+    z = model.ts_encoder.reparameterization(z_mean, z_log_var, var_ratio)
+    
+    ts_hat_ls = []
+    logits_ls = []
+    # get the logits for each text (condition)
+    for tx_f in tx_f_ls_repeated:
+        tx_embedded = model.text_encoder(tx_f)
+        
+        z_tx_embedded = torch.cat([z, tx_embedded], dim=1)
+        ts_hat = model.ts_decoder(z_tx_embedded, x_mean, x_std)
+        
+        logits = model.clip(z, tx_embedded)
+        logits = torch.diag(logits).reshape(-1, 1)
+        logits_ls.append(logits)
+        ts_hat_ls.append(ts_hat)
+
+    # get the softmax probabilities
+    logits_ls = torch.cat(logits_ls, dim=1)
+    exp_preds = torch.exp(logits_ls)
+    softmax_probs = exp_preds / exp_preds.sum(dim=1, keepdim=True) # each row corresponds to a z, each column corresponds to the probability of a text condition given z
+
+    text_conditioned_ts_hat = {}
+    text_conditioned_ts_hat_probs = {}
+    # For each text condition, get the time series where it has the highest probability
+    for i, text_col in enumerate(text_cols):
+        ts_hat = ts_hat_ls[i]
+        # Get the probabilities for this text condition
+        probs = softmax_probs[:, i]
+        # Get the indices where this text condition has the highest probability
+        mask = torch.argmax(softmax_probs, dim=1) == i
+        # Store the time series and their corresponding probabilities
+        text_col_string = df[text_col].iloc[0]
+        text_conditioned_ts_hat[text_col_string] = ts_hat[mask]
+        text_conditioned_ts_hat_probs[text_col_string] = probs[mask]
+
+    return text_conditioned_ts_hat, text_conditioned_ts_hat_probs
 
 def plot_vital_contrast_reconstructions(raw_ts, text_conditioned_ts_hat, text_conditioned_ts_hat_probs, n=3, title=''):
     """
@@ -165,6 +211,129 @@ def plot_vital_contrast_reconstructions(raw_ts, text_conditioned_ts_hat, text_co
     
     plt.tight_layout()
     plt.show()
+
+def cal_embeddings_distances(df, text_cols, model, config_dict):
+    
+    model.eval() # 2d vital model
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device)
+    tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+
+    # ----- ts_embeddings -----
+    ts_emb, ts_emb_mean, _, _, _ = model.ts_encoder(ts_f)
+        
+
+    # ----- ts_embeddings distances to tx_embeddings -----
+    simi = {}
+    l1 = {}
+    l2 = {}
+    for txid in range(len(tx_f_ls)):
+        tx_emb = model.text_encoder(tx_f_ls[txid])
+        
+        # calculate dot product similarity between all ts and this txt_emb
+        logits = torch.matmul(ts_emb_mean, tx_emb.T) 
+        simi[df[text_cols[txid]].iloc[0]] = torch.exp(torch.diag(logits))
+        
+        # calculate L1/L2 norm distance between all ts and this txt_emb
+        l2[df[text_cols[txid]].iloc[0]] = torch.norm(ts_emb_mean - tx_emb, dim=1, p=2)
+        l1[df[text_cols[txid]].iloc[0]] = torch.norm(ts_emb_mean - tx_emb, dim=1, p=1)
+    # # nicer print dict
+    # for key, value in simi.items():
+    #     print(f'{key}: {value}')
+    # for key, value in l1.items():
+    #     print(f'{key}: {value}')
+    # for key, value in l2.items():
+    #     print(f'{key}: {value}')
+    ts2tx_distances = {'simi': simi, 'l1': l1, 'l2': l2}
+
+        
+    # ----- pairwise similary / l2/ l1 distances between all embeddings (concate ts and tx_unqiue) -----
+    tx_emb = None
+    for txid in range(len(tx_f_ls)):
+        tx_emb_1 = model.text_encoder(tx_f_ls[txid])[0].reshape(1,-1) # [1, tx_emb_dim]
+        if tx_emb is None:
+            tx_emb = tx_emb_1
+        else:
+            tx_emb = torch.cat([tx_emb, tx_emb_1], dim=0)
+
+    # concate txt embeddings (one for each text) and all ts embeddings
+    all_emb = torch.cat([tx_emb, ts_emb_mean], dim=0)
+    # calculate pairwise similary / l2/ l1 distance between all embeddings
+    simi_mat = torch.exp(torch.matmul(all_emb, all_emb.T))
+    l1_dist_mat = torch.cdist(all_emb, all_emb, p=1) # L1 norm
+    l2_dist_mat = torch.cdist(all_emb, all_emb, p=2) # L2 norm
+
+    pairwise_distances = {'simi': simi_mat, 'l1': l1_dist_mat, 'l2': l2_dist_mat}
+
+    return pairwise_distances, ts2tx_distances
+
+def plot_embeddings_graph(adj_mat):
+    # Create a network graph
+    import networkx as nx
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # zero out lower than 50 percentile
+    adj_mat[adj_mat < np.percentile(adj_mat, 50)] = 0
+    np.fill_diagonal(adj_mat, 0)  # Remove self-loops
+
+    # Create and draw network
+    G = nx.from_numpy_array(adj_mat)
+    pos = nx.spring_layout(G, k=0.5, iterations=5000)
+
+    plt.figure(figsize=(6, 4))
+
+    # Create color list with three groups
+    n_nodes = len(G.nodes())
+    n_remaining = n_nodes - 2
+    half_remaining = n_remaining // 2
+
+    # Draw edges first
+    nx.draw_networkx_edges(G, pos,
+                          edge_color='grey',
+                          width=0.1)
+
+    # Draw first two nodes as triangles
+    first_two_nodes = list(G.nodes())[:2]
+    first_two_colors = ['darkgreen', 'blue']
+    nx.draw_networkx_nodes(G, pos,
+                          nodelist=first_two_nodes,
+                          node_color=first_two_colors,
+                          node_shape='^',
+                          node_size=100)
+
+    # Draw remaining nodes as circles, split into two color groups
+    remaining_nodes_first_half = list(G.nodes())[2:2+half_remaining]
+    remaining_nodes_second_half = list(G.nodes())[2+half_remaining:]
+    
+    nx.draw_networkx_nodes(G, pos,
+                          nodelist=remaining_nodes_first_half,
+                          node_color='darkgreen',
+                          node_size=10)
+    
+    nx.draw_networkx_nodes(G, pos,
+                          nodelist=remaining_nodes_second_half,
+                          node_color='blue',
+                          node_size=10)
+    
+    # Add node indices as labels
+    labels = {i: str(i) for i in G.nodes()}
+    nx.draw_networkx_labels(G, pos, labels, font_size=3)
+    
+    plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -320,3 +489,32 @@ def plot_vital_reconstructions(ts, top_probs, top_ts_hats, top_distance_ratios, 
 
     plt.tight_layout()
     plt.show()
+
+
+
+def net_emb(df, model, config_dict, top=100, text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] ):
+    
+    df_ls = []
+    for i in range(len(text_levels)):
+        df_sub = df[df['text'] == text_levels[i]].reset_index(drop=True)
+        df_sub = df_sub.iloc[range(top)].copy()
+        df_ls.append(df_sub)
+    df = pd.concat(df_ls, ignore_index=True)
+
+    text_cols = []
+    for i in range(len(text_levels)):
+        df['text'+str(i)] = text_levels[i]
+        text_cols.append('text'+str(i))
+
+    pairwise_distances, ts2tx_distances = cal_embeddings_distances(df, text_cols, model, config_dict)
+
+
+    adj_mat = pairwise_distances['l2'].detach().cpu().numpy()
+    adj_mat = 1/(adj_mat+1e-8)
+    plot_embeddings_graph(adj_mat)
+
+
+    adj_mat = pairwise_distances['simi'].detach().cpu().numpy()
+    plot_embeddings_graph(adj_mat)
+
+    return pairwise_distances, ts2tx_distances

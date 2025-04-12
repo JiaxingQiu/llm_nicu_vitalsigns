@@ -1,7 +1,10 @@
 import torch
 import torch.nn.functional as F
+import random
+import numpy as np
 
- 
+
+
 def compute_clip_loss(logits, labels, targets, 
                       target_type = 'by_label', 
                       ts_embedded=None, text_embedded=None): # embedded or features
@@ -57,7 +60,7 @@ def get_similarity_target(ts_embedded, text_embedded):
 class KLAnnealer:
     def __init__(self, start, end, epochs):
         self.start = start
-        self.end = min(end,1)
+        self.end = end#min(end,1)
         self.epochs = epochs
         
     def get_beta(self, epoch):
@@ -161,6 +164,13 @@ def test_epoch(model, test_dataloader, target_type = 'by_label', train_type='joi
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, kl_annealer, num_epochs, 
                 target_type = 'by_label', train_type='joint', alpha=1.0):
+    
+    # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
+    torch.manual_seed(333)
+    random.seed(333)
+    np.random.seed(333)
+
+
     train_losses = []
     test_losses = []
     
