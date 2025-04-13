@@ -82,7 +82,9 @@ config_dict = {
     '3d': True,
     'embedded_dim': 128,
     'model_init': None,
-    
+    'concat_embeddings': False,
+    'clip_mu': False,
+    'variational': True,
     # Training settings
     'init_lr': 0.0001,
     'patience': 50,

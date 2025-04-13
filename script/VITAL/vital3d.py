@@ -20,7 +20,8 @@ class VITAL3D(nn.Module):
                  text_encoder = None,
                  ts_decoder = None,
                  clip_mu = True,
-                 concat_embeddings = True):
+                 concat_embeddings = True,
+                 variational = True):
         super().__init__()
         
         # Handle ts_encoder
@@ -56,6 +57,7 @@ class VITAL3D(nn.Module):
         print(nn_summary(self))
         self.clip_mu = clip_mu
         self.concat_embeddings = concat_embeddings
+        self.variational = variational
     def clip(self, ts_embedded, text_embedded):
         # ts_embedded = F.normalize(ts_embedded, dim=1)
         # text_embedded = F.normalize(text_embedded, dim=1)
@@ -82,7 +84,8 @@ class VITAL3D(nn.Module):
         # ---- VAE encoder ----
         # Encode time series
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
-
+        if not self.variational: # if not variational (AE instead of VAE), use the mean as the latent variable, 
+            z = mean
         # --- Text encoder forward pass ---
         text_embedded, _ = self.text_encoder(text_features_list)
 

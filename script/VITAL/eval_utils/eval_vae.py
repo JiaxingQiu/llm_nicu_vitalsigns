@@ -113,27 +113,17 @@ def plot_reconstruction_from_distances(model,
             if x.dim() == 1:
                 x = x.unsqueeze(0) # add batch dimension
             # Get embeddings and reconstruction
-            try:
-                _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(x)
-            except:
-                _, z_mean, z_log_var = model.ts_encoder(x)
-
+            _, z_mean, z_log_var, x_mean, x_std = model.ts_encoder(x)
             z = model.ts_encoder.reparameterization(z_mean, z_log_var + distance)
             # decode new z
-            try:
-                # vital
-                x_hat = model.ts_decoder(z, x_mean, x_std)
-            except:
-                # vital1
+            if model.concat_embeddings:
                 z_text_embedded = torch.cat([z, tx_emb], dim=1)
-                x_hat = model.ts_decoder(z_text_embedded, x_mean, x_std)
+            else:
+                z_text_embedded = z
+            x_hat = model.ts_decoder(z_text_embedded, x_mean, x_std)
             
-                
-            try:
-                _, z_mean_hat, _, _, _ = model.ts_encoder(x_hat)
-            except:
-                _, z_mean_hat, _ = model.ts_encoder(x_hat)
-
+            _, z_mean_hat, _, _, _ = model.ts_encoder(x_hat)
+            
             # Calculate Euclidean distance between original and reconstructed latents
             z_mean = z_mean.cpu().detach().numpy()
             z_mean_hat = z_mean_hat.cpu().detach().numpy()

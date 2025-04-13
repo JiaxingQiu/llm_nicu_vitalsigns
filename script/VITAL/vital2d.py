@@ -18,8 +18,9 @@ class VITAL(nn.Module):
                  ts_encoder = None,
                  text_encoder = None,
                  ts_decoder = None,
-                 clip_mu = True,
-                 concat_embeddings = True):
+                 variational = True,
+                 clip_mu = False,
+                 concat_embeddings = False):
         """Initialize VITAL model
         
         Args:
@@ -67,6 +68,7 @@ class VITAL(nn.Module):
         self.beta = beta
         self.clip_mu = clip_mu
         self.concat_embeddings = concat_embeddings
+        self.variational = variational
         self.to(device)
         print(nn_summary(self))
     
@@ -93,10 +95,12 @@ class VITAL(nn.Module):
 
         # ---- VAE encoder ----
         z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
-
+        if not self.variational: # if not variational (AE instead of VAE), use the mean as the latent variable, 
+            z = mean
+        
         # --- Text encoder forward pass ---
         text_embedded = self.text_encoder(text_features)
-
+        
         # --- CLIP forward pass ---
         if self.clip_mu:
             logits = self.clip(mean, text_embedded)
@@ -196,25 +200,25 @@ class TSVAEDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int):
         super().__init__()
         self.decoder = nn.Sequential(
-            nn.Linear(output_dim, 128),
+            nn.Linear(output_dim, 256),
             nn.LeakyReLU(0.2),
-            nn.Linear(128, 256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(0.2),
+            # nn.Linear(256, 512),
+            # nn.LeakyReLU(0.2),
             # nn.Linear(512, 512),
             # nn.LeakyReLU(0.2),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(512, 512),
+            # nn.LeakyReLU(0.2),
+            # nn.Linear(512, 256),
+            # nn.LeakyReLU(0.2),
             nn.Linear(256, 256),
             nn.LeakyReLU(0.2),
-            nn.Linear(256, 128),
-            nn.LeakyReLU(0.2),
-            nn.Linear(128, ts_dim)
+            nn.Linear(256, ts_dim)
         )
     
     def forward(self, z, x_mean, x_std):
