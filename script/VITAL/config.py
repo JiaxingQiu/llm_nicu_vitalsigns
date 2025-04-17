@@ -41,7 +41,7 @@ config_dict = {
     'y_pred_cols_ls': None,
     # txt2ts
     'txt2ts_y_cols': ['description_histogram', 'description_succ_unc', 'description_succ_inc'],
-    'sub_caption_col': 'ts_description', 
+    'sub_caption_col': 'ts_description', # only used for 3d models
 
 
 

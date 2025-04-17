@@ -15,8 +15,8 @@ class VITAL(nn.Module):
                  output_dim: int,
                  temperature: float = 0.01,
                  beta: float = 1.0,
-                 ts_encoder = None,
-                 text_encoder = None,
+                 ts_encoder_custom = None,
+                 text_encoder_type = 'mlp',
                  ts_decoder = None,
                  variational = True,
                  clip_mu = False,
@@ -36,22 +36,13 @@ class VITAL(nn.Module):
 
         super().__init__()
         
-        # Handle ts_encoder
-        if ts_encoder is None:
-            self.ts_encoder = TSVAEEncoder(ts_dim, output_dim) #default encoder
-        elif isinstance(ts_encoder, type):
-            self.ts_encoder = ts_encoder(ts_dim, output_dim)
-        else:
-            self.ts_encoder = ts_encoder
+        # ts_encoder
+        self.ts_encoder = TSVAEEncoder(ts_dim, output_dim, encoder_layers = ts_encoder_custom) #default encoder
         
-        # Handle text_encoder with attention
-        if text_encoder is None:
-            self.text_encoder = TextEncoder(text_dim, output_dim)
-        elif isinstance(text_encoder, type):
-            self.text_encoder = text_encoder(text_dim, output_dim)
-        else:
-            self.text_encoder = text_encoder
+        # text_encoder
+        self.text_encoder = TextEncoder(text_dim, output_dim, text_encoder_type = text_encoder_type)
         
+        # ts_decoder
         if concat_embeddings:
             decode_dim = 2*output_dim
         else:
@@ -117,7 +108,6 @@ class VITAL(nn.Module):
 
         return logits, ts_hat, mean, log_var
 
-
 class LocalNorm(nn.Module):
     def __init__(self, eps=1e-5):
         super().__init__()
@@ -132,9 +122,9 @@ class LocalNorm(nn.Module):
         x_norm = (x - mean) / (std + self.eps)
         
         return x_norm, mean, std
-    
+
 class TSVAEEncoder(nn.Module):
-    def __init__(self, ts_dim: int, output_dim: int):
+    def __init__(self, ts_dim: int, output_dim: int, encoder_layers = None):
         """Time series encoder with progressive architecture
         
         Args:
@@ -143,29 +133,29 @@ class TSVAEEncoder(nn.Module):
         """
         super().__init__()
         self.local_norm = LocalNorm()
+        if encoder_layers is None:
+            # default encoder layers
+            self.encoder_layers = nn.Sequential(
+                MultiLSTMEncoder(
+                    ts_dim=ts_dim, 
+                    output_dim=256,
+                    hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
+                    num_layers=2,
+                    dropout=0,
+                    bidirectional=False,
+                    mask=0  # mask 0 with 0 to suppress the effect of masked values
+                ),
+                nn.LayerNorm(256),  # Add LayerNorm at the end
+                nn.Linear(256, 512),
+                nn.LeakyReLU(0.2),
+                nn.LayerNorm(512),
+                nn.Linear(512, output_dim),
+                nn.LeakyReLU(0.2),
+                nn.LayerNorm(output_dim)
+            )
+        else:
+            self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
-        self.encoder_layers = nn.Sequential(
-            MultiLSTMEncoder(
-                ts_dim=ts_dim, 
-                output_dim=256,
-                hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
-                num_layers=2,
-                mask=0  # mask 0 with 0 to suppress the effect of masked values
-            ),
-            nn.LayerNorm(256),  # Add LayerNorm at the end
-            nn.Linear(256, 512),
-            nn.LeakyReLU(0.2),
-            nn.LayerNorm(512),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2), 
-            # nn.LayerNorm(512),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2), 
-            # nn.LayerNorm(512),
-            nn.Linear(512, output_dim),
-            nn.LeakyReLU(0.2),
-            nn.LayerNorm(output_dim)
-        )
         # Latent mean and variance 
         self.mean_layer = nn.Linear(output_dim, output_dim)
         self.logvar_layer = nn.Linear(output_dim, output_dim)
@@ -194,32 +184,34 @@ class TSVAEEncoder(nn.Module):
         
         return z, mean, log_var, x_mean, x_std
 
-
 # default ts vae decoder
 class TSVAEDecoder(nn.Module):
-    def __init__(self, ts_dim: int, output_dim: int):
+    def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
-        self.decoder = nn.Sequential(
-            nn.Linear(output_dim, 256),
-            nn.LeakyReLU(0.2),
-            # nn.Linear(256, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 512),
-            # nn.LeakyReLU(0.2),
-            # nn.Linear(512, 256),
-            # nn.LeakyReLU(0.2),
-            nn.Linear(256, 256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, ts_dim)
-        )
+        if decoder_layers is None:
+            self.decoder = nn.Sequential(
+                nn.Linear(output_dim, 256),
+                nn.LeakyReLU(0.2),
+                # nn.Linear(256, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 512),
+                # nn.LeakyReLU(0.2),
+                # nn.Linear(512, 256),
+                # nn.LeakyReLU(0.2),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(0.2),
+                nn.Linear(256, ts_dim)
+            )
+        else:
+            self.decoder = decoder_layers
     
     def forward(self, z, x_mean, x_std):
         x_hat = self.decoder(z)
@@ -229,141 +221,28 @@ class TSVAEDecoder(nn.Module):
         # x_hat = torch.round(x_hat)
         return x_hat
 
-# # default text encoder
-# class TextEncoder(nn.Module):
-#     def __init__(self, 
-#                  text_dim: int, 
-#                  output_dim: int,
-#                  dropout: float = 0.0):
-#         """Text encoder using transformer blocks
-        
-#         Args:
-#             text_dim (int): Input text embedding dimension
-#             output_dim (int): Output embedding dimension
-#         """
-#         super().__init__()
-#         self.encoder = nn.Sequential(
-#             # Initial projection
-#             nn.Linear(text_dim, 512),
-#             # nn.LayerNorm(512),
-#             nn.GELU(),
-#             nn.Dropout(dropout),
-            
-#             # Transformer blocks
-#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
-#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
-#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
-            
-#             # Final projection
-#             nn.Linear(512, output_dim)
-#         )
-
-#     def forward(self, text_features):
-#         """Forward pass
-        
-#         Args:
-#             text_features (torch.Tensor): Input tensor of shape [batch_size, text_dim]
-            
-#         Returns:
-#             torch.Tensor: Encoded text of shape [batch_size, output_dim]
-#         """
-
-#         tx_emb = self.encoder(text_features)
-#         tx_emb = F.normalize(tx_emb, dim=1)
-#         return tx_emb
-
-
-# Simple text encoder
 class TextEncoder(nn.Module):
-    def __init__(self, 
-                 text_dim: int, 
-                 output_dim: int):
+    def __init__(self, text_dim: int, output_dim: int, text_encoder_type = 'mlp'):
+        """Text encoder that can use either MLP or CNN architecture.
+        
+        Args:
+            text_dim (int): Input text embedding dimension
+            output_dim (int): Output embedding dimension
+            text_encoder_type (str): Type of encoder to use ('mlp' or 'cnn')
+        """
         super().__init__()
         
-        # Simple MLP with 3 layers
-        self.encoder = nn.Sequential(
-            nn.Linear(text_dim, 512),
-            nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, output_dim)
-        )
-
+        if text_encoder_type == 'mlp':
+            self.text_encoder = TextEncoderMLP(text_dim, output_dim)
+        elif text_encoder_type == 'cnn':
+            self.text_encoder = TextEncoderCNN(output_dim)
+        else:
+            raise ValueError(f"Unknown text encoder type: {text_encoder_type}")
+        
     def forward(self, text_features):
-        tx_emb = self.encoder(text_features)
+        tx_emb = self.text_encoder(text_features)
         tx_emb = F.normalize(tx_emb, dim=1)
         return tx_emb
-
-# ts vae encoder wrapper for custom ts encoders
-class TSVAEEncoderWrapper(nn.Module):
-    def __init__(self, ts_encoder_layers, output_dim=None):
-        super().__init__()
-        self.local_norm = LocalNorm()
-
-        # ts_encoder_layers must be a instance of a class defined similarly as belows
-        self.encoder_layers = ts_encoder_layers
-        
-        # Get the hidden dimension from the encoder's output
-        hidden_dim = ts_encoder_layers.output_dim
-        if output_dim is None:
-            output_dim = hidden_dim
-        
-        # Latent mean and variance 
-        self.mean_layer = nn.Linear(hidden_dim, output_dim)
-        self.logvar_layer = nn.Linear(hidden_dim, output_dim)
-
-
-    def reparameterization(self, mean, log_var, lam=1):
-        var = lam * torch.exp(0.5 * log_var) # calculate the variance from the log_var 
-        # var = log_var
-        epsilon = torch.randn_like(var).to(device)      
-        z = mean + var*epsilon  # Using var directly
-        # z = F.softmax(z,dim=1) # This variable follows a Dirichlet distribution
-        return z
-    
-    
-    def forward(self, x):
-        _, x_mean, x_std = self.local_norm(x)
-
-        #  ---- encode -----
-        x_encoded = self.encoder_layers(x)
-        mean = self.mean_layer(x_encoded)
-        log_var = self.logvar_layer(x_encoded)
-
-        #  ---- reparameterization -----
-        z = self.reparameterization(mean, log_var)
-        return z, mean, log_var, x_mean, x_std
-
-# usage:
-"""
-lstm_encoder = MultiLSTMEncoder(
-    ts_dim=300, 
-    output_dim=128,
-    hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
-    num_layers=2
-)
-ts_encoder = TSVAEEncoderWrapper(lstm_encoder)
-for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
-
-    ts_features = ts_features.to(device)
-    print(ts_encoder(ts_features))
-    break
-"""
-
-
-# ts vae decoder wrapper for custom ts decoders
-class TSVAEDecoderWrapper(nn.Module):
-    def __init__(self, ts_decoder):
-        super().__init__()
-        self.decoder = ts_decoder
-        
-    def forward(self, z, x_mean, x_std):
-        x_hat = self.decoder(z)
-        x_hat = x_hat * x_std + x_mean
-        # x_hat = torch.round(x_hat)
-        return x_hat
-
-
 
 # # test text encoder
 # # Initialize text encoder

@@ -1,4 +1,4 @@
-from config import *
+# from config import *
 import torch
 import torch.nn as nn
 
@@ -386,3 +386,181 @@ class MultiLSTMEncoder(nn.Module):
 # model = GeneralBinaryClassifier(multi_lstm_encoder)
 # model = CLIPModel(ts_encoder=multi_lstm_encoder, text_encoder=None)
 
+
+# # ts vae encoder wrapper for custom ts encoders
+# class TSVAEEncoderWrapper(nn.Module):
+#     def __init__(self, ts_encoder_layers, output_dim=None):
+#         super().__init__()
+#         self.local_norm = LocalNorm()
+
+#         # ts_encoder_layers must be a instance of a class defined similarly as belows
+#         self.encoder_layers = ts_encoder_layers
+        
+#         # Get the hidden dimension from the encoder's output
+#         hidden_dim = ts_encoder_layers.output_dim
+#         if output_dim is None:
+#             output_dim = hidden_dim
+        
+#         # Latent mean and variance 
+#         self.mean_layer = nn.Linear(hidden_dim, output_dim)
+#         self.logvar_layer = nn.Linear(hidden_dim, output_dim)
+
+
+#     def reparameterization(self, mean, log_var, lam=1):
+#         var = lam * torch.exp(0.5 * log_var) # calculate the variance from the log_var 
+#         # var = log_var
+#         epsilon = torch.randn_like(var).to(device)      
+#         z = mean + var*epsilon  # Using var directly
+#         # z = F.softmax(z,dim=1) # This variable follows a Dirichlet distribution
+#         return z
+    
+    
+#     def forward(self, x):
+#         _, x_mean, x_std = self.local_norm(x)
+
+#         #  ---- encode -----
+#         x_encoded = self.encoder_layers(x)
+#         mean = self.mean_layer(x_encoded)
+#         log_var = self.logvar_layer(x_encoded)
+
+#         #  ---- reparameterization -----
+#         z = self.reparameterization(mean, log_var)
+#         return z, mean, log_var, x_mean, x_std
+
+# # usage:
+# """
+# lstm_encoder = MultiLSTMEncoder(
+#     ts_dim=300, 
+#     output_dim=128,
+#     hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
+#     num_layers=2
+# )
+# ts_encoder = TSVAEEncoderWrapper(lstm_encoder)
+# for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
+
+#     ts_features = ts_features.to(device)
+#     print(ts_encoder(ts_features))
+#     break
+# """
+
+
+# # ts vae decoder wrapper for custom ts decoders
+# class TSVAEDecoderWrapper(nn.Module):
+#     def __init__(self, ts_decoder):
+#         super().__init__()
+#         self.decoder = ts_decoder
+        
+#     def forward(self, z, x_mean, x_std):
+#         x_hat = self.decoder(z)
+#         x_hat = x_hat * x_std + x_mean
+#         # x_hat = torch.round(x_hat)
+#         return x_hat
+
+
+
+
+
+# ------- custom text encoder_layers (for VITAL embedding generation) -------
+# MLP text encoder
+class TextEncoderMLP(nn.Module):
+    def __init__(self, 
+                 text_dim: int, 
+                 output_dim: int):
+        super().__init__()
+        
+        # Simple MLP with 3 layers
+        self.encoder = nn.Sequential(
+            nn.Linear(text_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_dim)
+        )
+
+    def forward(self, text_features):
+        tx_emb = self.encoder(text_features)
+        return tx_emb
+
+
+# CNN text encoder
+class TextEncoderCNN(nn.Module):
+    def __init__(self, 
+                 output_dim: int):
+        super().__init__()
+        
+        # CNN architecture for text features
+        self.encoder = nn.Sequential(
+            # First conv block
+            nn.Conv1d(1, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            
+            # Second conv block
+            nn.Conv1d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            
+            # Third conv block
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            
+            # Global average pooling
+            nn.AdaptiveAvgPool1d(1),
+            
+            # Final linear layer
+            nn.Flatten(),
+            nn.Linear(256, output_dim)
+        )
+
+    def forward(self, text_features):
+        # Reshape text_features to (batch_size, 1, text_dim) for 1D conv
+        x = text_features.unsqueeze(1)
+        tx_emb = self.encoder(x)
+        return tx_emb
+
+# # default text encoder with attention
+# class TextEncoder(nn.Module):
+#     def __init__(self, 
+#                  text_dim: int, 
+#                  output_dim: int,
+#                  dropout: float = 0.0):
+#         """Text encoder using transformer blocks
+        
+#         Args:
+#             text_dim (int): Input text embedding dimension
+#             output_dim (int): Output embedding dimension
+#         """
+#         super().__init__()
+#         self.encoder = nn.Sequential(
+#             # Initial projection
+#             nn.Linear(text_dim, 512),
+#             # nn.LayerNorm(512),
+#             nn.GELU(),
+#             nn.Dropout(dropout),
+            
+#             # Transformer blocks
+#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
+#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
+#             TransformerBlock(dim=512, hidden_dim=1024, num_heads=8, dropout=dropout),
+            
+#             # Final projection
+#             nn.Linear(512, output_dim)
+#         )
+
+#     def forward(self, text_features):
+#         """Forward pass
+        
+#         Args:
+#             text_features (torch.Tensor): Input tensor of shape [batch_size, text_dim]
+            
+#         Returns:
+#             torch.Tensor: Encoded text of shape [batch_size, output_dim]
+#         """
+
+#         tx_emb = self.encoder(text_features)
+#         tx_emb = F.normalize(tx_emb, dim=1)
+#         return tx_emb

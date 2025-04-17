@@ -218,14 +218,14 @@ def cal_embeddings_distances(df, text_cols, model, config_dict):
 
     return pairwise_distances, ts2tx_distances
 
-def plot_embeddings_graph(adj_mat):
+def plot_embeddings_graph(adj_mat, k = 2, title = '', subtitle = ''):
     # Create a network graph
     import networkx as nx
     import matplotlib.pyplot as plt
     import numpy as np
     
     # zero out lower than 50 percentile
-    adj_mat[adj_mat < np.percentile(adj_mat, 50)] = 0
+    adj_mat[adj_mat < np.percentile(adj_mat, 25)] = 0
     np.fill_diagonal(adj_mat, 0)  # Remove self-loops
 
     # Create and draw network
@@ -234,54 +234,73 @@ def plot_embeddings_graph(adj_mat):
 
     plt.figure(figsize=(6, 4))
 
-    # Create color list with three groups
-    n_nodes = len(G.nodes())
-    n_remaining = n_nodes - 2
-    half_remaining = n_remaining // 2
+    # Define a list of contrasting colors
+    color_list = ['darkgreen', 'blue', 'red', 'purple', 'orange', 
+                 'brown', 'pink', 'gray', 'olive', 'cyan',
+                 'magenta', 'yellow', 'teal', 'coral', 'navy',
+                 'maroon', 'lime', 'indigo', 'gold', 'silver']
+    
+    # Use the first k colors from the list
+    colors = color_list[:k]
 
     # Draw edges first
     nx.draw_networkx_edges(G, pos,
                           edge_color='grey',
                           width=0.1)
 
-    # Draw first two nodes as triangles
-    first_two_nodes = list(G.nodes())[:2]
-    first_two_colors = ['darkgreen', 'blue']
+    # Draw first k nodes as triangles
+    first_k_nodes = list(G.nodes())[:k]
     nx.draw_networkx_nodes(G, pos,
-                          nodelist=first_two_nodes,
-                          node_color=first_two_colors,
+                          nodelist=first_k_nodes,
+                          node_color=colors,
                           node_shape='^',
                           node_size=100)
 
-    # Draw remaining nodes as circles, split into two color groups
-    remaining_nodes_first_half = list(G.nodes())[2:2+half_remaining]
-    remaining_nodes_second_half = list(G.nodes())[2+half_remaining:]
+    # Draw remaining nodes as circles, distributed among k categories
+    remaining_nodes = list(G.nodes())[k:]
+    n_remaining = len(remaining_nodes)
+    nodes_per_category = n_remaining // k
     
-    nx.draw_networkx_nodes(G, pos,
-                          nodelist=remaining_nodes_first_half,
-                          node_color='darkgreen',
-                          node_size=10)
-    
-    nx.draw_networkx_nodes(G, pos,
-                          nodelist=remaining_nodes_second_half,
-                          node_color='blue',
-                          node_size=10)
+    for i in range(k):
+        start_idx = i * nodes_per_category
+        end_idx = (i + 1) * nodes_per_category if i < k-1 else n_remaining
+        category_nodes = remaining_nodes[start_idx:end_idx]
+        
+        nx.draw_networkx_nodes(G, pos,
+                              nodelist=category_nodes,
+                              node_color=colors[i],
+                              node_size=10)
     
     # Add node indices as labels
     labels = {i: str(i) for i in G.nodes()}
     nx.draw_networkx_labels(G, pos, labels, font_size=3)
     
+    # add title
+    plt.title(title)
+    # subtitle
+    plt.suptitle(subtitle)
     plt.show()
 
 
 
 
 
-def net_emb(df, model, config_dict, top=100, text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] ):
+
+def net_emb(df,
+            model, 
+            config_dict, 
+            top =100,
+            y_col = None,
+            text_levels = None):
+   
+    if y_col is None:
+        y_col = config_dict['y_col']
+    if text_levels is None:
+        text_levels = config_dict['y_levels']
     
     df_ls = []
     for i in range(len(text_levels)):
-        df_sub = df[df['text'] == text_levels[i]].reset_index(drop=True)
+        df_sub = df[df[y_col].str.contains(text_levels[i], case=False, na=False)].reset_index(drop=True) # if text_levels[i] is a substring of each row df[y_col]
         df_sub = df_sub.iloc[range(top)].copy()
         df_ls.append(df_sub)
     df = pd.concat(df_ls, ignore_index=True)
@@ -296,13 +315,14 @@ def net_emb(df, model, config_dict, top=100, text_levels = ['High amount of cons
 
     adj_mat = pairwise_distances['l2'].detach().cpu().numpy()
     adj_mat = 1/(adj_mat+1e-8)
-    plot_embeddings_graph(adj_mat)
+    plot_embeddings_graph(adj_mat, k=len(text_levels), title = y_col, subtitle = '1 / l2')
 
 
     adj_mat = pairwise_distances['simi'].detach().cpu().numpy()
-    plot_embeddings_graph(adj_mat)
+    plot_embeddings_graph(adj_mat, k=len(text_levels), title = y_col, subtitle = 'similarity')
 
     return pairwise_distances, ts2tx_distances
+
 
 
 
