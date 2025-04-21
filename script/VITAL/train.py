@@ -87,10 +87,19 @@ def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_la
     if train_type == 'joint':
         clip_loss = compute_clip_loss(logits, labels, targets, target_type)
         vae_loss = compute_vae_loss(ts, ts_hat, mean, log_var, beta)
+        
+        if alpha is None:
+            # Dynamic alpha automatically balances the two loss components based on their current magnitudes
+            # Compute alpha using detached values to prevent gradient flow
+            with torch.no_grad():
+                vae_loss_detached = vae_loss.detach()
+                clip_loss_detached = clip_loss.detach()
+                alpha = clip_loss_detached / torch.max(vae_loss_detached, torch.tensor(1e-8, device=vae_loss.device))
+                alpha = torch.clamp(alpha, min=1e-4, max=10.0)
+        
         loss = clip_loss + alpha * vae_loss
     elif train_type == 'vae':
         loss = compute_vae_loss(ts, ts_hat, mean, log_var, beta)
-        loss = alpha * loss
     elif train_type == 'clip':
         loss = compute_clip_loss(logits, labels, targets, target_type)
     else:
@@ -163,21 +172,21 @@ def test_epoch(model, test_dataloader, target_type = 'by_label', train_type='joi
 
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, kl_annealer, num_epochs, 
-                target_type = 'by_label', train_type='joint', alpha=1.0):
+                target_type = 'by_label', train_type='joint', alpha_init=None):
     
     # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
     torch.manual_seed(333)
     random.seed(333)
     np.random.seed(333)
 
-
+    alpha = alpha_init
     train_losses = []
     test_losses = []
-    
 
     # Keep track of best model
     best_loss = float('inf')
     best_model_state = None
+    
     try:
         for epoch in range(num_epochs):
 
@@ -192,6 +201,11 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             # Store losses
             train_losses.append(train_loss)
             test_losses.append(test_loss)
+            
+            if alpha_init is None: 
+                # Update alpha as train_vae_loss / test_vae_loss after the first epoch
+                alpha = train_clip_loss / max(train_vae_loss, 1e-8)
+                alpha = np.clip(alpha, a_min=1e-4, a_max=10.0)
             
             # Update learning rate based on test loss
             average_loss = (train_loss + test_loss) / 2

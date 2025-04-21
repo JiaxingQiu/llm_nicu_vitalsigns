@@ -103,7 +103,7 @@ def plot_interpolate_ts_tx_ws(df, model, config_dict, text_cols, w_values=None, 
             ts_hat = ts_hats[text_condition]
             
             # Plot reconstruction and ground truth
-            axs[row, col].plot(ts_hat, 'r-', label='Augmented')
+            axs[row, col].plot(np.round(ts_hat), 'r-', label='Augmented')
             axs[row, col].plot(raw_ts, 'b--', alpha=0.5, label='Raw')
             
             # Add distance metrics to title

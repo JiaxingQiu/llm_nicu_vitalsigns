@@ -15,11 +15,14 @@ text_config = {
         'apgar_mage': False
     },
     'ts': {
-        'sumb': True, # sum_brady
-        'sumd': False, # sum_desat
-        'simple': True,
-        'full': False,
-        'event1': True,
+        # dynamic
+        'ts_event': {
+            'sumb': True, # sum_brady
+            'sumd': False, # sum_desat
+            'simple': False,
+            'full': False,
+            'event1': True},
+        # static and categorical
         'succ_inc': True,
         'succ_unc': True,
         'histogram': True
@@ -79,17 +82,21 @@ config_dict = {
 
     # Model settings
     'model_name': 'hey_you_forget_to_name_your_model',
-    '3d': True,
-    'embedded_dim': 128,
+    '3d': False,
+    'embedded_dim': 512,
     'model_init': None,
     'concat_embeddings': False,
     'clip_mu': False,
     'variational': True,
+    'train_type': 'joint', # or 'vae', 'clip'
+    'clip_target_type': 'by_target', # or 'by_label'
+
     # Training settings
-    'init_lr': 0.0001,
-    'patience': 50,
-    'num_saves': 200,
-    'num_epochs': 50,
+    'init_lr': 1e-4,
+    'patience': 200,
+    'num_saves': 20,
+    'num_epochs': 500,
+    'alpha': None,
     
     # Text configuration
     'text_config': text_config

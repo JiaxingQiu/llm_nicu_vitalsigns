@@ -205,10 +205,10 @@ class TXTFeature(Dataset):
         # Convert to tensor if not already
         if not isinstance(self.features, torch.Tensor):
             self.features = torch.tensor(self.features)
-        # Global min-max normalization (across all values)
-        min_val = torch.min(self.features)
-        max_val = torch.max(self.features)
-        self.features = (self.features - min_val) / (max_val - min_val + 1e-8)  # Add small epsilon to avoid division by zero
+        # # Global min-max normalization (across all values)
+        # min_val = torch.min(self.features)
+        # max_val = torch.max(self.features)
+        # self.features = (self.features - min_val) / (max_val - min_val + 1e-8)  # Add small epsilon to avoid division by zero
 
     def __len__(self):
         return len(self.txt_ls)

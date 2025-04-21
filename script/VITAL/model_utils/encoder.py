@@ -118,16 +118,26 @@ class ResNetEncoder(nn.Module):
 
 
 
-class Lambda(nn.Module):
-    def __init__(self, func):
+# class Lambda(nn.Module):
+#     def __init__(self, func):
+#         super().__init__()
+#         self.func = func
+    
+#     def forward(self, x):
+#         return self.func(x) 
+
+class AddChannelDim(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.func = func
     
     def forward(self, x):
-        return self.func(x) 
+        return x.unsqueeze(1)
 
 class CNNEncoder(nn.Module):
-    def __init__(self, ts_dim, output_dim, num_channels=[64, 64, 128, 256], kernel_size=5, dropout=0.2):
+    def __init__(self, ts_dim, output_dim, 
+                 num_channels=[64, 64, 128, 256], 
+                 kernel_size=5, 
+                 dropout=0.2):
         """
         CNN encoder for time series.
         
@@ -143,7 +153,8 @@ class CNNEncoder(nn.Module):
         self.ts_dim = ts_dim
         self.output_dim = output_dim
         
-        layers = [Lambda(lambda x: x.unsqueeze(1))]  # Add channel dimension
+        # layers = [Lambda(lambda x: x.unsqueeze(1))]  # Add channel dimension
+        layers = [AddChannelDim()]  # Add channel dimension
         in_channels = 1
         
         # Add conv blocks
@@ -485,42 +496,52 @@ class TextEncoderMLP(nn.Module):
 # CNN text encoder
 class TextEncoderCNN(nn.Module):
     def __init__(self, 
-                 output_dim: int):
+                 text_dim: int,
+                 output_dim: int,
+                 num_channels=[64],#, 128, 256
+                 kernel_size=50,
+                 dropout=0):
+        """
+        CNN encoder for text features.
+        
+        Args:
+            output_dim (int): Output embedding dimension
+            num_channels (list): Number of channels for each conv layer
+            kernel_size (int): Kernel size for conv layers
+            dropout (float): Dropout rate
+        """
         super().__init__()
         
-        # CNN architecture for text features
-        self.encoder = nn.Sequential(
-            # First conv block
-            nn.Conv1d(1, 64, kernel_size=3, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-            
-            # Second conv block
-            nn.Conv1d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-            
-            # Third conv block
-            nn.Conv1d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-            
-            # Global average pooling
-            nn.AdaptiveAvgPool1d(1),
-            
-            # Final linear layer
-            nn.Flatten(),
-            nn.Linear(256, output_dim)
-        )
-
+        layers = [AddChannelDim()]  # Add channel dimension
+        in_channels = 1
+        
+        # Add conv blocks
+        for out_channels in num_channels:
+            layers.extend([
+                nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size//2),
+                nn.ReLU(),
+                nn.BatchNorm1d(out_channels),
+                nn.MaxPool1d(2),
+                nn.Dropout(dropout)
+            ])
+            in_channels = out_channels
+        
+        layers.append(nn.Flatten())
+        
+        # Calculate output dimension
+        with torch.no_grad():
+            x = torch.zeros(2, text_dim)
+            for layer in layers:
+                x = layer(x)
+            conv_out_dim = x.shape[1]
+        
+        # Add final linear projection to match output_dim
+        layers.append(nn.Linear(conv_out_dim, output_dim))
+        
+        self.encoder = nn.Sequential(*layers)
+    
     def forward(self, text_features):
-        # Reshape text_features to (batch_size, 1, text_dim) for 1D conv
-        x = text_features.unsqueeze(1)
-        tx_emb = self.encoder(x)
-        return tx_emb
+        return self.encoder(text_features)
 
 # # default text encoder with attention
 # class TextEncoder(nn.Module):

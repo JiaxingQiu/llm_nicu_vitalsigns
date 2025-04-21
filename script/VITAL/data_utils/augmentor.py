@@ -314,7 +314,7 @@ def augment_ts_n_desc(df_sub,
     df_aug_sub = df_aug_sub.merge(df_raw, on='rowid', how='left')
     del df_raw
 
-    df_aug_sub = text_gen_input_column(df_aug_sub, config_dict['text_config'])
+    df_aug_sub = text_gen_input_column(df_aug_sub, config_dict)
     # df_sub = pd.concat([df_sub, df_aug_sub])
     print(f"Augmented {len(df_aug_sub)} rows")
     return df_aug_sub
@@ -339,7 +339,7 @@ def augment_balance_data(df_sub,
     else:
         max_size = min(max_size, class_sizes.max())
     
-    print("Original class distribution:")
+    print("\n\n\nOriginal class distribution:")
     for class_label in txt_ls_org:
         print(f"Class {class_label}: {class_sizes.get(class_label, 0)}")
     print(f"\nTarget size per class: {max_size}")

@@ -205,8 +205,8 @@ def text_extract_event1(text):
     Extract the first event description from the text.
     """
     # Find start of Event 1
-    start_marker = "\n Event 1: "
-    end_marker = "\n Event 2: "
+    start_marker = " Event 1: "
+    end_marker = " Event 2: "
     
     # initialize event1_str
     event1_str = ""
@@ -248,7 +248,7 @@ def text_summarize_brady(text):
     
     # Find the event name and threshold
     import re
-    brady_match = re.search(r'Bradycardia(\d+)', text)
+    brady_match = re.search(r'Bradycardia (\d+)', text)
 
     if brady_match:
         event_name = brady_match.group(0)  # e.g., "Bradycardia90"
@@ -392,15 +392,12 @@ def text_gen_cl_event(row,
     else:
         return [die7d_str, fio2_str]
 
-def text_gen_ts_event(row,
-                 sumb=True, # sum_brady
-                 sumd=False, # sum_desat
-                 simple=True,
-                 full=False,
-                 event1=False,
-                 succ_inc=True,
-                 succ_unc=True,
-                 histogram=True):
+def text_gen_ts_event(row, 
+                      sumb=True, # sum_brady
+                      sumd=True, # sum_desat
+                      simple=True,
+                      full=False,
+                      event1=False):
     """
     Generate a time series event description string from a single row.
 
@@ -413,14 +410,11 @@ def text_gen_ts_event(row,
         - event1 (bool): if ture, return the first event description.
     """
 
+
     sum_str = ""
     simple_str = ""
     full_str = ""
     event1_str = ""
-    histogram_str = ""
-    succ_inc_str = ""
-    succ_unc_str = ""
-
     if sumb:
         sum_str = text_summarize_brady(row['description_ts_event'])
         # sum_str = sum_str + " "
@@ -437,6 +431,25 @@ def text_gen_ts_event(row,
     if event1:
         event1_str = text_extract_event1(row['description_ts_event'])
         # event1_str = event1_str + " "
+    text_str = f"{sum_str} {simple_str} {event1_str} {full_str}"
+    text_str = text_str.strip()
+    text_str = re.sub(r'\s+', ' ', text_str).strip() # remove extra spaces
+    if text_str == "":
+        return "No events."
+    return text_str
+
+
+def text_gen_ts_description(row,
+                            succ_inc=True,
+                            succ_unc=True,
+                            histogram=True):
+    
+    ts_event_str = ""
+    histogram_str = ""
+    succ_inc_str = ""
+    succ_unc_str = ""
+
+    ts_event_str = row['description_ts_event'] # already engineered by text_gen_ts_event
     if histogram:
         histogram_str = row['description_histogram']
         # histogram_str = histogram_str + " "
@@ -447,7 +460,7 @@ def text_gen_ts_event(row,
         succ_unc_str = row['description_succ_unc']
         # succ_unc_str = succ_unc_str + " "
     
-    text_str = f"{histogram_str} {succ_inc_str} {succ_unc_str} {sum_str} {simple_str} {event1_str} {full_str}"
+    text_str = f"{histogram_str} {succ_inc_str} {succ_unc_str} {ts_event_str}"
     text_str = text_str.strip()
     text_str = re.sub(r'\s+', ' ', text_str).strip() # remove extra spaces
     return text_str
@@ -461,7 +474,18 @@ def text_gen_input_column(df, config_dict):
     # clinical events
     df['cl_event'] = df.apply(text_gen_cl_event, axis=1, **text_config['cl'])
     # time series events
-    df['ts_description'] = df.apply(text_gen_ts_event, axis=1, **text_config['ts'])
+    df['description_ts_event'] = df.apply(text_gen_ts_event, axis=1, 
+                                         sumb=text_config['ts']['ts_event']['sumb'],
+                                         sumd=text_config['ts']['ts_event']['sumd'],
+                                         simple=text_config['ts']['ts_event']['simple'],
+                                         full=text_config['ts']['ts_event']['full'],
+                                         event1=text_config['ts']['ts_event']['event1'])
+    df['description_ts_event_binary'] = df['description_ts_event'].apply(lambda x: x if x == 'No events.' else 'Bradycardia events happened.')
+    # time series description
+    df['ts_description'] = df.apply(text_gen_ts_description, axis=1, 
+                                    succ_inc=text_config['ts']['succ_inc'],
+                                    succ_unc=text_config['ts']['succ_unc'],
+                                    histogram=text_config['ts']['histogram'])
     
     # create reserved text column for 2d clip
     df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']

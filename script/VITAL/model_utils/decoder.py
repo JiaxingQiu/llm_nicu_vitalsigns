@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .encoder import ResidualBlock, Lambda
+from .encoder import ResidualBlock, AddChannelDim
 
 # ------- custom ts decoder_layers -------
 class ResNetDecoder(nn.Module):
@@ -104,7 +104,7 @@ class CNNDecoder(nn.Module):
         self.ts_dim = ts_dim
         self.output_dim = output_dim
         
-        layers = [Lambda(lambda x: x.unsqueeze(1))]  # Add channel dimension
+        layers = [AddChannelDim()]  # Add channel dimension
         in_channels = 1
         
         # Add conv blocks

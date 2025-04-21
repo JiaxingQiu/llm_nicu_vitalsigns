@@ -281,18 +281,13 @@ def plot_embeddings_graph(adj_mat, k = 2, title = '', subtitle = ''):
     plt.suptitle(subtitle)
     plt.show()
 
-
-
-
-
-
 def net_emb(df,
             model, 
             config_dict, 
-            top =100,
+            top = 100,
             y_col = None,
             text_levels = None):
-   
+   # network the ts embeddings with predicted text conditions
     if y_col is None:
         y_col = config_dict['y_col']
     if text_levels is None:
@@ -323,7 +318,171 @@ def net_emb(df,
 
     return pairwise_distances, ts2tx_distances
 
+def cal_embeddings_distances_w_text(df, 
+                                    text_cols, # predicted text conditions
+                                    model, 
+                                    config_dict):
+    
+    model.eval() # 2d vital model
+    
+    # ----- text conditions -----
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device) 
+    tx_f_ls = [tx_f[0].reshape(1,-1).to(device) for tx_f in tx_f_ls]
+    tx_f_condi = torch.cat(tx_f_ls, dim=0)
+    tx_emb = model.text_encoder(tx_f_condi) # dim = [k_levels, tx_emb_dim]
 
+    # ----- orginial text description/caption -----
+    _, tx_f_raw, _ = get_features(df, config_dict, text_col = 'text') # text is the default caption column
+    tx_f_raw = tx_f_raw.to(device)
+    tx_emb_raw = model.text_encoder(tx_f_raw) # dim = [k_levels * top, tx_emb_dim]
+        
+    # ----- ts_embeddings -----
+    ts_emb, ts_emb_mean, _, _, _ = model.ts_encoder(ts_f)  # dim = [k_levels * top, ts_emb_dim]
+    
+        
+    # ----- pairwise similary / l2/ l1 distances between all embeddings (concate ts and tx_unqiue) -----
+    # concate txt embeddings (one for each text) and all ts embeddings
+    all_emb = torch.cat([tx_emb, ts_emb_mean, tx_emb_raw], dim=0)
+    # calculate pairwise similary / l2/ l1 distance between all embeddings
+    simi_mat = torch.exp(torch.matmul(all_emb, all_emb.T))
+    l1_dist_mat = torch.cdist(all_emb, all_emb, p=1) # L1 norm
+    l2_dist_mat = torch.cdist(all_emb, all_emb, p=2) # L2 norm
+
+    pairwise_distances = {'simi': simi_mat, 'l1': l1_dist_mat, 'l2': l2_dist_mat}
+
+    return pairwise_distances
+
+def plot_embeddings_graph_w_text(adj_mat, k = 2, title = '', subtitle = ''):
+    # Create a network graph
+    import networkx as nx
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # zero out lower than 50 percentile
+    adj_mat[adj_mat < np.percentile(adj_mat, 25)] = 0
+    np.fill_diagonal(adj_mat, 0)  # Remove self-loops
+
+    # Create and draw network
+    G = nx.from_numpy_array(adj_mat)
+    pos = nx.spring_layout(G, k=0.5, iterations=5000)
+
+    plt.figure(figsize=(9, 6))
+
+    # Define a list of contrasting colors
+    color_list = ['darkgreen', 'blue', 'red', 'purple', 'orange', 
+                 'brown', 'pink', 'gray', 'olive', 'cyan',
+                 'magenta', 'yellow', 'teal', 'coral', 'navy',
+                 'maroon', 'lime', 'indigo', 'gold', 'silver']
+    
+    # Use the first k colors from the list
+    colors = color_list[:k]
+
+    # Draw edges first
+    nx.draw_networkx_edges(G, pos,
+                          edge_color='grey',
+                          width=0.1)
+
+    # Draw first k nodes as larger triangles
+    first_k_nodes = list(G.nodes())[:k]
+    nx.draw_networkx_nodes(G, pos,
+                          nodelist=first_k_nodes,
+                          node_color=colors,
+                          node_shape='^',
+                          node_size=150)
+
+    # For the remaining nodes, first half are time series embeddings, second half are text embeddings
+    remaining_nodes = list(G.nodes())[k:]
+    n_remaining = len(remaining_nodes)
+    half_nodes = n_remaining // 2
+    
+    # First half: time series embeddings (circles)
+    ts_nodes = remaining_nodes[:half_nodes]
+    nodes_per_category = half_nodes // k
+    
+    for i in range(k):
+        start_idx = i * nodes_per_category
+        end_idx = (i + 1) * nodes_per_category if i < k-1 else half_nodes
+        category_nodes = ts_nodes[start_idx:end_idx]
+        
+        nx.draw_networkx_nodes(G, pos,
+                              nodelist=category_nodes,
+                              node_color=colors[i],
+                              node_size=50,
+                              node_shape='o')  # circles for time series
+    
+    # Second half: text embeddings (triangles)
+    text_nodes = remaining_nodes[half_nodes:]
+    nodes_per_category = (n_remaining - half_nodes) // k
+    
+    for i in range(k):
+        start_idx = i * nodes_per_category
+        end_idx = (i + 1) * nodes_per_category if i < k-1 else (n_remaining - half_nodes)
+        category_nodes = text_nodes[start_idx:end_idx]
+        
+        nx.draw_networkx_nodes(G, pos,
+                              nodelist=category_nodes,
+                              node_color=colors[i],
+                              node_size=50,
+                              node_shape='^')  # triangles for text
+    
+    # Add node indices as labels with proper formatting
+    labels = {}
+    # Add labels for first k nodes (text conditions)
+    for i, node in enumerate(first_k_nodes):
+        labels[node] = ''
+    
+    # Add labels for time series nodes (circles)
+    for i, node in enumerate(ts_nodes):
+        labels[node] = f'ts{i+1}'
+    # Add labels for text nodes (triangles)
+    for i, node in enumerate(text_nodes):
+        labels[node] = f'tx{i+1}'
+    
+    nx.draw_networkx_labels(G, pos, labels, font_size=3)
+    
+    # add title
+    plt.title(title)
+    # subtitle
+    plt.suptitle(subtitle)
+    plt.show()
+
+def net_emb_w_text(df,
+            model, 
+            config_dict, 
+            top = 100,
+            y_col = None,
+            text_levels = None):
+   # network the ts and text embeddings with predicted text conditions
+    if y_col is None:
+        y_col = config_dict['y_col']
+    if text_levels is None:
+        text_levels = config_dict['y_levels']
+    
+    df_ls = []
+    for i in range(len(text_levels)):
+        df_sub = df[df[y_col].str.contains(text_levels[i], case=False, na=False)].reset_index(drop=True) # if text_levels[i] is a substring of each row df[y_col]
+        df_sub = df_sub.iloc[range(top)].copy()
+        df_ls.append(df_sub)
+    df = pd.concat(df_ls, ignore_index=True)
+
+    text_cols = []
+    for i in range(len(text_levels)):
+        df['text'+str(i)] = text_levels[i]
+        text_cols.append('text'+str(i))
+
+    pairwise_distances = cal_embeddings_distances_w_text(df, text_cols, model, config_dict)
+
+
+    adj_mat = pairwise_distances['l2'].detach().cpu().numpy()
+    adj_mat = 1/(adj_mat+1e-8)
+    plot_embeddings_graph_w_text(adj_mat, k=len(text_levels), title = y_col, subtitle = '1 / l2')
+
+
+    adj_mat = pairwise_distances['simi'].detach().cpu().numpy()
+    plot_embeddings_graph_w_text(adj_mat, k=len(text_levels), title = y_col, subtitle = 'similarity')
+
+    return pairwise_distances
 
 
 # # df = df_train.iloc[:1,].copy()

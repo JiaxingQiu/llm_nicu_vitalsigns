@@ -15,8 +15,8 @@ class VITAL(nn.Module):
                  output_dim: int,
                  temperature: float = 0.01,
                  beta: float = 1.0,
-                 ts_encoder_custom = None,
-                 text_encoder_type = 'mlp',
+                 ts_encoder = None,
+                 text_encoder = None,
                  ts_decoder = None,
                  variational = True,
                  clip_mu = False,
@@ -37,10 +37,10 @@ class VITAL(nn.Module):
         super().__init__()
         
         # ts_encoder
-        self.ts_encoder = TSVAEEncoder(ts_dim, output_dim, encoder_layers = ts_encoder_custom) #default encoder
+        self.ts_encoder = TSVAEEncoder(ts_dim, output_dim, encoder_layers = ts_encoder)
         
         # text_encoder
-        self.text_encoder = TextEncoder(text_dim, output_dim, text_encoder_type = text_encoder_type)
+        self.text_encoder = TextEncoder(text_dim, output_dim, encoder_layers = text_encoder)
         
         # ts_decoder
         if concat_embeddings:
@@ -222,7 +222,7 @@ class TSVAEDecoder(nn.Module):
         return x_hat
 
 class TextEncoder(nn.Module):
-    def __init__(self, text_dim: int, output_dim: int, text_encoder_type = 'mlp'):
+    def __init__(self, text_dim: int, output_dim: int, encoder_layers = None):
         """Text encoder that can use either MLP or CNN architecture.
         
         Args:
@@ -231,16 +231,13 @@ class TextEncoder(nn.Module):
             text_encoder_type (str): Type of encoder to use ('mlp' or 'cnn')
         """
         super().__init__()
-        
-        if text_encoder_type == 'mlp':
-            self.text_encoder = TextEncoderMLP(text_dim, output_dim)
-        elif text_encoder_type == 'cnn':
-            self.text_encoder = TextEncoderCNN(output_dim)
+        if encoder_layers is None:
+            self.encoder_layers = TextEncoderMLP(text_dim, output_dim)
         else:
-            raise ValueError(f"Unknown text encoder type: {text_encoder_type}")
+            self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
     def forward(self, text_features):
-        tx_emb = self.text_encoder(text_features)
+        tx_emb = self.encoder_layers(text_features)
         tx_emb = F.normalize(tx_emb, dim=1)
         return tx_emb
 
