@@ -3,25 +3,16 @@ from sklearn.model_selection import train_test_split
 import time
 
 
-# ---- result saving directory ----
-output_dir = './results/'+config_dict['model_name']
-model_clip_path = output_dir+'/model_clip.pth' 
-eval_clip_path = output_dir+'/evals_clip.pth'
-model_path = output_dir+'/model.pth' 
-eval_path = output_dir+'/evals.pth'
-config_path = output_dir+'/config.pth'
-
-
 # ---- ready original dataframes ----
 # Train Data
-df = pd.read_excel('../../data/PAS Challenge HR Data.xlsx', engine="calamine")
+df = pd.read_excel('../../data/nicu/PAS Challenge HR Data.xlsx', engine="calamine")
 df.columns = df.columns.astype(str)
 df['unique_values'] = df.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
 df = df[df['unique_values'] > 5]
 df = df.reset_index(drop=True)
-df_y = pd.read_excel('../../data/PAS Challenge Outcome Data.xlsx', engine="calamine")[['VitalID', 'DiedNICU', 'DeathAge']]
-df_demo = pd.read_excel('../../data/PAS Challenge Demographic Data.xlsx', engine="calamine")
-df_x = pd.read_excel('../../data/PAS Challenge Model Data.xlsx', engine="calamine")
+df_y = pd.read_excel('../../data/nicu/PAS Challenge Outcome Data.xlsx', engine="calamine")[['VitalID', 'DiedNICU', 'DeathAge']]
+df_demo = pd.read_excel('../../data/nicu/PAS Challenge Demographic Data.xlsx', engine="calamine")
+df_x = pd.read_excel('../../data/nicu/PAS Challenge Model Data.xlsx', engine="calamine")
 df = df.merge(df_x[['VitalID', 'VitalTime', 'Age']], on=['VitalID', 'VitalTime'], how='left')
 df = label_death7d(df, df_y, id_col='VitalID')
 df = df.merge(df_demo, on='VitalID', how='left')
@@ -33,14 +24,14 @@ df_train = df
 
 
 # Test Data
-df_y_test = pd.read_excel('../../data/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
-df_test = pd.read_excel('../../data/Test Data/Test HR Data.xlsx', sheet_name=0, engine="calamine") # test hr with description
+df_y_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
+df_test = pd.read_excel('../../data/nicu/Test Data/Test HR Data.xlsx', sheet_name=0, engine="calamine") # test hr with description
 df_test.columns = df_test.columns.astype(str)
 df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
 df_test = df_test[df_test['unique_values'] > 5]
 df_test = df_test.reset_index(drop=True)
 df_test = label_death7d(df_test, df_y_test, id_col='TestID')
-df_demo_test = pd.read_excel('../../data/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
+df_demo_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
 df_test = df_test.merge(df_demo_test, on='TestID', how='left')
 df_test['rowid'] = df_test.index.to_series()
 df_test['VitalTime'] = df_test['Age']*24*60*60 # convert to second since birth
@@ -128,63 +119,3 @@ else:
 print('\n\nfinal distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
-
-if overwrite or not os.path.exists(model_path):
-    # ------------------------- ready eval inputs for CLIP -------------------------
-    # 1. ts to txt prediction evaluation (truei and texti are reserved names) 
-    n_levels = len(config_dict['y_levels'])
-    for i in range(n_levels):
-        df_train[f'true{i+1}'] = df_train[config_dict['y_col']].apply(lambda x: 1 if x == config_dict['y_levels'][i] else 0)
-        df_train[f'text{i+1}'] = config_dict['y_pred_levels'][i]
-    for i in range(n_levels):
-        df_test[f'true{i+1}'] = df_test[config_dict['y_col']].apply(lambda x: 1 if x == config_dict['y_levels'][i] else 0)
-        df_test[f'text{i+1}'] = config_dict['y_pred_levels'][i]
-    evalclipts2txt_train = EvalCLIPTS2TXT(df_train, 
-                                            config_dict,
-                                            y_true_cols = [f'true{i+1}' for i in range(n_levels)],
-                                            y_pred_cols = [f'text{i+1}' for i in range(n_levels)],
-                                            y_pred_cols_ls = config_dict['y_pred_cols_ls'])
-    evalclipts2txt_test = EvalCLIPTS2TXT(df_test, 
-                                            config_dict,
-                                            y_true_cols = [f'true{i+1}' for i in range(n_levels)],
-                                            y_pred_cols = [f'text{i+1}' for i in range(n_levels)],
-                                            y_pred_cols_ls = config_dict['y_pred_cols_ls'])
-    # 2. txt to ts prediction evaluation (caption is reserved name)
-    txt_tsid_mapping_train = []
-    for col in config_dict['txt2ts_y_cols']:  
-        txt_tsid_mapping_train_sub = gen_txt_tsid_mapping(df_train, col, k=500, n_neg=3)
-        txt_tsid_mapping_train.extend(txt_tsid_mapping_train_sub)
-    txt_tsid_mapping_test = []
-    for col in config_dict['txt2ts_y_cols']: 
-        txt_tsid_mapping_test_sub = gen_txt_tsid_mapping(df_test, col, k=500, n_neg=3)
-        txt_tsid_mapping_test.extend(txt_tsid_mapping_test_sub)
-    evalcliptxt2ts_train = EvalCLIPTXT2TS(df_train, txt_tsid_mapping_train, config_dict)
-    evalcliptxt2ts_test = EvalCLIPTXT2TS(df_test, txt_tsid_mapping_test, config_dict)
-
-    # ------------------------- ready dataloaders ------------------------- 
-    if config_dict['3d']:
-        ts_f_train, tx_f_train_ls, labels_train = get_features3d(df_train, 
-                                                                config_dict,
-                                                                text_col_ls = config_dict['text_col_ls'])
-        train_dataloader = VITAL3DDataset(ts_f_train, tx_f_train_ls, labels_train, target_train).dataloader(batch_size=config_dict['batch_size'])
-        ts_f_test, tx_f_test_ls, labels_test = get_features3d(df_test, 
-                                                                config_dict,
-                                                                text_col_ls = config_dict['text_col_ls'])
-        test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])
-    else: 
-        ts_f_train, tx_f_train, labels_train = get_features(df_train,
-                                                            config_dict)
-        train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train, target_train).dataloader(batch_size=config_dict['batch_size'])
-        ts_f_test, tx_f_test, labels_test = get_features(df_test,
-                                                            config_dict)
-        test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])
-
-# ------------------------- ready input features dimension -------------------------
-# get the dimension of input features
-if 'ts_f_dim' not in locals():
-    # just to get the dimension out
-    if config_dict['3d']:
-        ts_f_dim, tx_f_dim_ls, labels_dim = get_features3d(df_train.iloc[:1,:], config_dict, text_col_ls = config_dict['text_col_ls'])
-    else:
-        ts_f_dim, tx_f_dim, labels_dim = get_features(df_train.iloc[:1,:], config_dict)
-    

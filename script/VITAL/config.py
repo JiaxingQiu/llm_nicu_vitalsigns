@@ -52,6 +52,7 @@ config_dict = {
     # text features to be embedded
     'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother'] # for 3d
     'text_col': 'text', # for 2d, can be other text columns to replace 'text'
+    'seq_length': 300,
     # ts features to be embedded
     'downsample': True,
     'downsample_levels': ['This infant will survive.'],

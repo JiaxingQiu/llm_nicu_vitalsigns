@@ -219,20 +219,21 @@ class TXTFeature(Dataset):
 
 
 
-def get_ts_txt_org(df, text_col = 'text'):
+def get_ts_txt_org(df, text_col = 'text', seq_length = 300):
     # raise error if any of the columns are not in the dataframe
     df.columns = df.columns.astype(str)
-    required_columns = ['VitalID', 'VitalTime', '1', '300', 'text', 'label']
+    required_columns = ['1', 'text', 'label']
     for col in required_columns:
         if col not in df.columns:
             raise ValueError(f"Column '{col}' is required but not found in the dataframe.")
     
-    df = df.assign(id_time='id_' + df['VitalID'].astype(str) + '_' + df['VitalTime'].astype(str))
-    df = df.set_index('id_time')
-    df = df.drop(columns=['VitalID', 'VitalTime'])
+    if 'VitalID' in df.columns:
+        df = df.assign(id_time='id_' + df['VitalID'].astype(str) + '_' + df['VitalTime'].astype(str))
+        df = df.set_index('id_time')
+        df = df.drop(columns=['VitalID', 'VitalTime'])
     
     # get normalized time series dataframe norm_ts_df
-    ts_df = df.loc[:,'1':'300']
+    ts_df = df.loc[:,'1':str(seq_length)]
     # get text list txt_ls
     txt_ls = df.loc[:,text_col].tolist()
     labels = df.loc[:,'label'].tolist() # id of target matrix, indicating observations with the same id.
@@ -243,7 +244,7 @@ def get_ts_txt_org(df, text_col = 'text'):
 def get_features(df, 
                  config_dict,
                  text_col='text'):
-    ts_df, txt_ls, labels = get_ts_txt_org(df, text_col = text_col)
+    ts_df, txt_ls, labels = get_ts_txt_org(df, text_col = text_col, seq_length = config_dict['seq_length'])
     # --- ts_f ---
     ts_f = TSFeature(ts_df,
                     normalize_mean=config_dict['ts_normalize_mean'], 
@@ -265,7 +266,7 @@ def get_features3d(df,
                  config_dict,
                  text_col_ls=['demo', 'cl_event', 'ts_description']):
     
-    ts_df, _, labels = get_ts_txt_org(df)
+    ts_df, _, labels = get_ts_txt_org(df, seq_length = config_dict['seq_length'])
     ts_f = TSFeature(ts_df, 
                      normalize_mean=config_dict['ts_normalize_mean'],
                      normalize_std=config_dict['ts_normalize_std'],
@@ -274,7 +275,7 @@ def get_features3d(df,
     labels = torch.tensor(labels)
     tx_f_list = []
     for text_col in text_col_ls:
-        _, txt_ls, _ = get_ts_txt_org(df, text_col = text_col)
+        _, txt_ls, _ = get_ts_txt_org(df, text_col = text_col, seq_length = config_dict['seq_length'])
         tx_f = TXTFeature(txt_ls, 
                           encoder_model_name=config_dict['text_encoder_name']).features
         tx_f_list.append(tx_f)

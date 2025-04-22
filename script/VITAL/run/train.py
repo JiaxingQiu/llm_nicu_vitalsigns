@@ -94,37 +94,37 @@ if overwrite or not os.path.exists(model_path):
         _ = eng_eval_metrics(eval_dict_ts2txt, binary=False, plot=True, plot_confusion_matrices=True)
         _ = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
         # mixture of multiple text conditions
-        if config_dict['text_col'] in ['ts_description', 'text']:
-            _, _ = net_emb(df_train, model, config_dict,
-                           top=100,
-                           y_col = 'description_succ_inc',
-                           text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] )
-            _ = net_emb_w_text(df_train, model, config_dict,
-                        top=100,
-                        y_col = 'description_succ_inc',
-                        text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] )
-            _, _ = net_emb(df_train, model, config_dict,
-                        top=100,
-                        y_col = 'description_succ_unc',
-                        text_levels = ['Many flat lines.', 'Few flat lines.'] )
-            _ = net_emb_w_text(df_train, model, config_dict,
-                        top=100,
-                        y_col = 'description_succ_unc',
-                        text_levels = ['Many flat lines.', 'Few flat lines.'] )
-            _, _ = net_emb(df_train, model, config_dict,
-                        top=100,
-                        y_col = 'description_histogram',
-                        text_levels = ['High variability.', 'Low variability.'] )
-            _ = net_emb_w_text(df_train, model, config_dict,
-                        top=100,
-                        y_col = 'description_histogram',
-                        text_levels = ['High variability.', 'Low variability.'] )
-        else:
-            _, _ = net_emb(df_train, model, config_dict)
-            _ = net_emb_w_text(df_train, model, config_dict)
-            _, _ = net_emb(df_test, model, config_dict)
-            _ = net_emb_w_text(df_test, model, config_dict)
-        
+        # if config_dict['text_col'] in ['ts_description', 'text']:
+        #     _, _ = net_emb(df_train, model, config_dict,
+        #                    top=100,
+        #                    y_col = 'description_succ_inc',
+        #                    text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] )
+        #     _ = net_emb_w_text(df_train, model, config_dict,
+        #                 top=100,
+        #                 y_col = 'description_succ_inc',
+        #                 text_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'] )
+        #     _, _ = net_emb(df_train, model, config_dict,
+        #                 top=100,
+        #                 y_col = 'description_succ_unc',
+        #                 text_levels = ['Many flat lines.', 'Few flat lines.'] )
+        #     _ = net_emb_w_text(df_train, model, config_dict,
+        #                 top=100,
+        #                 y_col = 'description_succ_unc',
+        #                 text_levels = ['Many flat lines.', 'Few flat lines.'] )
+        #     _, _ = net_emb(df_train, model, config_dict,
+        #                 top=100,
+        #                 y_col = 'description_histogram',
+        #                 text_levels = ['High variability.', 'Low variability.'] )
+        #     _ = net_emb_w_text(df_train, model, config_dict,
+        #                 top=100,
+        #                 y_col = 'description_histogram',
+        #                 text_levels = ['High variability.', 'Low variability.'] )
+        # else:
+        _, _ = net_emb(df_train, model, config_dict)
+        _ = net_emb_w_text(df_train, model, config_dict)
+        _, _ = net_emb(df_test, model, config_dict)
+        _ = net_emb_w_text(df_test, model, config_dict)
+    
         
 
         
