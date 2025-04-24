@@ -161,13 +161,13 @@ def generate_outlier_series(
     for _ in range(N):
         if outlier_type == 'no':
             series = generate_no_outlier(L)
-            description = "No outliers."
+            description = "No sharp shifts."
         elif outlier_type == 'spikes':
             series = generate_spikes(L)
             description = "Spike outliers."
         elif outlier_type == 'step_spike':
             series = generate_step_spike(L)
-            description = "Step spikes."
+            description = "Step spike shifts."
         elif outlier_type == 'level_shift':
             series = generate_level_shift(L)
             description = "The mean of the time series shifts over time."

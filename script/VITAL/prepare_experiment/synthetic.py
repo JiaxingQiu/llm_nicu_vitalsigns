@@ -5,6 +5,11 @@ df = pd.read_csv('../../data/synthetic/data.csv')
 df.columns = df.columns.astype(str)
 df['text'] = df['ts_description']
 df = df.reset_index(drop=True)
+if 'text_pairs' in config_dict['text_config'] :
+    df = mix_w_counter(df, config_dict, n = config_dict['text_config']['n'])
+    df = df.reset_index(drop=True)
+    df = add_y_col(df, config_dict)
+    print(df.text.value_counts())
 df_train, df_test = train_test_split(df, test_size=0.2, stratify=df[config_dict['y_col']], random_state=config_dict['random_state']) 
 
 
