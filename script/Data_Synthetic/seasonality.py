@@ -1,15 +1,14 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List
 import random
 
 
 def generate_no_seasonal(
     length: int,
     period_range: Tuple[int, int] = (150, 200),
-    amplitude_range: Tuple[float, float] = (0, 2),
+    amplitude_range: Tuple[float, float] = (0, 0.5),
     phase_range: Tuple[float, float] = (0, 2*np.pi),
-    noise_std: float = 0.5
+    noise_std: float = 0.05
 ) -> np.ndarray:
     """
     Generate a time series with no seasonal pattern.
@@ -41,9 +40,9 @@ def generate_no_seasonal(
 def generate_single_seasonal(
     length: int,
     period_range: Tuple[int, int] = (20, 50),
-    amplitude_range: Tuple[float, float] = (1, 10),
+    amplitude_range: Tuple[float, float] = (2, 8),
     phase_range: Tuple[float, float] = (0, 2*np.pi),
-    noise_std: float = 0.5
+    noise_std: float = 0.05
 ) -> np.ndarray:
     """
     Generate a time series with seasonal pattern of varying period, amplitude, and phase.
@@ -74,11 +73,11 @@ def generate_single_seasonal(
 
 def generate_multiple_seasonal(
     length: int,
-    k: int = 3,  # number of seasonal patterns
+    k_range: Tuple[int, int] = (2, 4),  # number of seasonal patterns
     period_range: Tuple[int, int] = (20, 50),  # random sample from 1 to 10
-    amplitude_range: Tuple[float, float] = (1, 5),  # random sample from 0.1 to 1
+    amplitude_range: Tuple[float, float] = (1, 4),  # random sample from 0.1 to 1
     phase_range: Tuple[float, float] = (0, 2*np.pi),  # random sample from 0 to 2*pi
-    noise_std: float = 0.5
+    noise_std: float = 0.05
 ) -> np.ndarray:
     """
     Generate a time series with multiple seasonal patterns.
@@ -94,6 +93,7 @@ def generate_multiple_seasonal(
     Returns:
         np.ndarray: Generated time series
     """
+    k = random.randint(*k_range)
     # Generate random periods, amplitudes, and phases
     periods = [random.randint(*period_range) for _ in range(k)]
     amplitudes = [random.uniform(*amplitude_range) for _ in range(k)]
@@ -113,8 +113,8 @@ def generate_seasonal_series(
     N: int,
     L: int,
     seasonal_type: str = 'single',
-    std_range: Tuple[float, float] = (5, 10),
-    mean_range: Tuple[float, float] = (-1, 1)
+    # std_range: Tuple[float, float] = (5, 10),
+    # mean_range: Tuple[float, float] = (-1, 1)
 ) -> Tuple[List[np.ndarray], List[str]]:
     """
     Generate N samples of length L with specified seasonal pattern.

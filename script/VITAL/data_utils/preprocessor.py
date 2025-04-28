@@ -38,7 +38,9 @@ class TXTEncoder():
             tokenizer = BertTokenizer.from_pretrained(self.model_name)
             model = BertModel.from_pretrained(self.model_name)
             model = model.to(device)
-            encoded_input = tokenizer(text_list, return_tensors='pt', padding=True,truncation=True, max_length=512)
+            encoded_input = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True, max_length=512)
+            # Move all input tensors to the same device as the model
+            encoded_input = {k: v.to(device) for k, v in encoded_input.items()}
             output = model(**encoded_input)
             return output.pooler_output #output.last_hidden_state[:, 0, :]
             
@@ -54,6 +56,8 @@ class TXTEncoder():
             model = RobertaModel.from_pretrained(self.model_name)
             model = model.to(device)
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
+            # Move all input tensors to the same device as the model
+            encoded_input = {k: v.to(device) for k, v in encoded_input.items()}
             output = model(**encoded_input)
             return output.pooler_output #output.last_hidden_state[:, 0, :]
             
@@ -68,6 +72,8 @@ class TXTEncoder():
             model = DistilBertModel.from_pretrained(self.model_name)
             model = model.to(device)
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
+            # Move all input tensors to the same device as the model
+            encoded_input = {k: v.to(device) for k, v in encoded_input.items()}
             output = model(**encoded_input)
             return output.last_hidden_state.mean(dim=1) # output.last_hidden_state[:, 0, :]
             
@@ -79,8 +85,10 @@ class TXTEncoder():
             model = MPNetModel.from_pretrained(self.model_name)
             model = model.to(device) 
             encoded_input = tokenizer(text_list, return_tensors='pt', padding=True)
+            # Move all input tensors to the same device as the model
+            encoded_input = {k: v.to(device) for k, v in encoded_input.items()}
             output = model(**encoded_input)
-            return output.pooler_output 
+            return output.pooler_output
         
 
 class TSEncoder():
@@ -523,7 +531,7 @@ def text_gen_input_column(df, config_dict):
     
     return df
 
-def plot_ts(df, idx):
+def plot_ts(df, idx, len=300):
     """
     Plot a single time series from the DataFrame.
     
@@ -537,16 +545,16 @@ def plot_ts(df, idx):
     import matplotlib.pyplot as plt
     
     # Get time series data
-    ts_cols = [str(i) for i in range(1, 301)]
+    ts_cols = [str(i) for i in range(1, len+1)]
     ts = df.loc[idx, ts_cols].values
     
     # Create plot
-    plt.figure(figsize=(15, 5))
+    plt.figure(figsize=(5, 3))
     plt.plot(ts, 'b-', linewidth=2)
-    plt.title(f'Time Series (Index: {idx})')
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('Heart Rate')
-    plt.ylim(50, 200)
+    plt.title(f'ID: {idx}, caption: {df.loc[idx, "text"]}')
+    # plt.xlabel('Time (seconds)')
+    # plt.ylabel('Heart Rate')
+    # plt.ylim(50, 200)
     plt.grid(True)
     plt.show()
     

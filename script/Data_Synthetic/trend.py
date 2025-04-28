@@ -90,12 +90,34 @@ def generate_quadratic_trend(
     
     return series
 
+def generate_flat_trend(
+    length: int,
+    value_range: Tuple[float, float] = (-5, 5)
+) -> np.ndarray:
+    """
+    Generate a time series with a flat trend (constant value).
+    
+    Args:
+        length: Length of the time series
+        value_range: Range for the constant value
+        
+    Returns:
+        np.ndarray: Generated time series
+    """
+    # Generate constant value
+    value = random.uniform(*value_range)
+    
+    # Generate series
+    series = np.ones(length) * value
+    
+    return series
+
 # a function to generate N samples of length L with a given trend
 def generate_trend_series(N, L,
-                           trend_type = ['linear', 'quadratic'][0], 
+                           trend_type = ['linear', 'quadratic', 'flat'][0], 
                            direction=['up', 'down'][0],
-                           std_range = (1, 10),
-                           mean_range = (-5, 5)):
+                           mean_range = (-5, 5),
+                           std_range = (0.1, 10)):
     series_list = []
     description_list = []
     for _ in range(N):
@@ -103,16 +125,22 @@ def generate_trend_series(N, L,
             series = generate_linear_trend(L, direction=direction)
         elif trend_type == 'quadratic':
             series = generate_quadratic_trend(L, direction=direction)
+        elif trend_type == 'flat':
+            series = generate_flat_trend(L)
         
-        # rescale the series to be unit variance
-        series = (series - np.mean(series)) / np.std(series)
-        # randomly sample a mean between -1 and 1 uniform distribution, and a standard deviation between 0.1 and 0.5 uniform distribution
-        mean = random.uniform(*mean_range)
-        std = random.uniform(*std_range)
-        series = series * std + mean
-
+        if trend_type != 'flat':
+            # rescale the series to be unit variance
+            series = (series - np.mean(series)) / np.std(series)
+            # randomly sample a mean between -1 and 1 uniform distribution, and a standard deviation between 0.1 and 0.5 uniform distribution
+            mean = random.uniform(*mean_range)
+            std = random.uniform(*std_range)
+            series = series * std + mean
+            description = f"The time series exhibits a {direction}ward {trend_type} trend."
+        else:
+            description = "No trend."  
+            
         series_list.append(series)
-        description_list.append(f"The time series exhibits a {direction}ward {trend_type} trend.")
+        description_list.append(description)
     return series_list, description_list
 
 

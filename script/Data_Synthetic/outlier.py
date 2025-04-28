@@ -5,7 +5,7 @@ import random
 def generate_no_outlier(
     length: int,
     base_value: float = 0.0,
-    noise_std: float = 0.1
+    noise_std: float = 0.05
 ) -> np.ndarray:
     """
     Generate a time series with no outliers (control case).
@@ -23,8 +23,8 @@ def generate_no_outlier(
 def generate_spikes(
     length: int,
     base_value: float = 0.0,
-    noise_std: float = 0.1,
-    spike_magnitude_range: Tuple[float, float] = (3.0, 5.0),
+    noise_std: float = 0.05,
+    spike_magnitude_range: Tuple[float, float] = (2.0, 10.0),
     n_spikes_range: Tuple[int, int] = (1, 5),  # default to single spike
     min_spike_gap: int = 2  # minimum gap between spikes if multiple
 ) -> np.ndarray:
@@ -88,8 +88,8 @@ def generate_spikes(
 def generate_step_spike(
     length: int,
     base_value: float = 0.0,
-    noise_std: float = 0.1,
-    step_magnitude_range: Tuple[float, float] = (2.0, 4.0),
+    noise_std: float = 0.05,
+    step_magnitude_range: Tuple[float, float] = (2.0, 10.0),
     step_duration_range: Tuple[int, int] = (10, 50)
 ) -> np.ndarray:
     """
@@ -110,6 +110,10 @@ def generate_step_spike(
     step_duration = random.randint(*step_duration_range)
     step_magnitude = random.uniform(*step_magnitude_range)
     
+    # Randomly choose sign of the shift
+    sign = random.choice([-1, 1])
+    step_magnitude *= sign
+    
     # Ensure step doesn't exceed series length
     step_end = min(step_start + step_duration, length)
     series[step_start:step_end] += step_magnitude
@@ -118,8 +122,8 @@ def generate_step_spike(
 def generate_level_shift(
     length: int,
     base_value: float = 0.0,
-    noise_std: float = 0.1,
-    shift_magnitude_range: Tuple[float, float] = (2.0, 4.0)
+    noise_std: float = 0.05,
+    shift_magnitude_range: Tuple[float, float] = (2.0, 10.0)
 ) -> np.ndarray:
     """
     Generate a time series with a level shift (persistent change).
@@ -136,6 +140,11 @@ def generate_level_shift(
     series = np.random.normal(base_value, noise_std, length)
     shift_location = random.randint(0, length-1)
     shift_magnitude = random.uniform(*shift_magnitude_range)
+    
+    # Randomly choose sign of the shift
+    sign = random.choice([-1, 1])
+    shift_magnitude *= sign
+    
     series[shift_location:] += shift_magnitude
     return series
 

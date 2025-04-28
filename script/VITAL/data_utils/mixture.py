@@ -86,9 +86,12 @@ def mix_multiple_tstxt(df, config_dict, text_ls, weights=None, n=None, plot=Fals
     # Get all series at once for each pattern
     series_all = [df.loc[idx, ts_cols].values for df, idx in zip(dfs, idxs)]
     
-    # Standardize all series at once
-    series_std = [(s - s.mean(axis=1, keepdims=True)) / s.std(axis=1, keepdims=True) 
-                  for s in series_all]
+    # # Standardize all series at once
+    # series_std = [(s - s.mean(axis=1, keepdims=True)) / s.std(axis=1, keepdims=True) 
+    #               for s in series_all]
+    
+    # center all series at once
+    series_std = [(s - s.mean(axis=1, keepdims=True)) for s in series_all]
     
     # Mix all series with weights
     mixed_series = np.zeros_like(series_std[0])
@@ -101,7 +104,7 @@ def mix_multiple_tstxt(df, config_dict, text_ls, weights=None, n=None, plot=Fals
     
     # Plot first 10 examples if requested
     if plot:
-        for i in range(min(5, n)):
+        for i in range(min(2, n)):
             plt.figure(figsize=(15, 5))
             # Plot individual components
             for j, s in enumerate(series_std):
@@ -132,37 +135,41 @@ def add_y_col(df, config_dict):
 
 
 def mix_w_counter(df, config_dict, n=None, plot=False):
-
     """
-    df: the dataframe to mix
-    config_dict: the config dictionary
-    text_pairs: the text pairs to mix, 
-        text_pairs = [
-            [text1, counter_text1],
-            [text2, counter_text2],
-            [text3, counter_text3]...
-        ]
-    weights: the weights of the text pairs
-    n: the number of samples to mix
-    plot: whether to plot the mixed time series
+    Mix time series based on text pairs where each text has its own scaling weight.
+    
+    Args:
+        df: the dataframe to mix
+        config_dict: the config dictionary containing text pairs and weights
+        n: the number of samples to mix
+        plot: whether to plot the mixed time series
+        
+    Returns:
+        pd.DataFrame: DataFrame containing mixed time series
     """
     text_pairs = config_dict['text_config']['text_pairs']
-    weights = config_dict['text_config']['weights']
     
-    # assert weights is a list of the same length as text_pairs
-    assert len(weights) == len(text_pairs)
-
-    from itertools import product
     # Generate all possible combinations
+    from itertools import product
     all_combinations = list(product(*text_pairs))
-    all_combinations = [list(comb) for comb in all_combinations]
-
-    df_mixed = pd.DataFrame() 
-    for text_ls in all_combinations:
+    
+    df_mixed = pd.DataFrame()
+    for comb in all_combinations:
+        # Extract texts and their corresponding weights
+        text_ls = [text for text, _ in comb]
+        weights = [weight for _, weight in comb]
+        
+        # Mix the time series with the corresponding weights
         df_sub = mix_multiple_tstxt(df, config_dict, 
-                                    text_ls = text_ls,
-                                    weights=weights, 
-                                    n=n,
-                                    plot=plot)
+                                   text_ls=text_ls,
+                                   weights=weights,
+                                   n=n,
+                                   plot=plot)
         df_mixed = pd.concat([df_mixed, df_sub])
+    
     return df_mixed
+
+# from itertools import combinations, product
+# for comb in combinations(text_pairs, 2):
+#     print(comb)
+#     print(list(product(*comb)))

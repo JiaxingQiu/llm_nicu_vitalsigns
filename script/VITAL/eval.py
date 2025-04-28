@@ -439,7 +439,7 @@ def plot_embeddings_graph_w_text(adj_mat, k = 2, title = '', subtitle = ''):
     for i, node in enumerate(text_nodes):
         labels[node] = f'tx{i+1}'
     
-    nx.draw_networkx_labels(G, pos, labels, font_size=3)
+    nx.draw_networkx_labels(G, pos, labels, font_size=8)
     
     # add title
     plt.title(title)

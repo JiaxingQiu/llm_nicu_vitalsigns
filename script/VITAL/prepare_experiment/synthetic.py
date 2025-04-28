@@ -6,7 +6,7 @@ df.columns = df.columns.astype(str)
 df['text'] = df['ts_description']
 df = df.reset_index(drop=True)
 if 'text_pairs' in config_dict['text_config'] :
-    df = mix_w_counter(df, config_dict, n = config_dict['text_config']['n'])
+    df = mix_w_counter(df, config_dict, n = config_dict['text_config']['n'], plot=True)
     df = df.reset_index(drop=True)
     df = add_y_col(df, config_dict)
     print(df.text.value_counts())
@@ -29,5 +29,5 @@ else:
     target_test = None
 
 print('\n\nfinal distribution of text prediction')
-print(df_train[config_dict['y_col']].value_counts())
-print(df_test[config_dict['y_col']].value_counts())
+print(df_train['text'].value_counts())
+print(df_test['text'].value_counts())

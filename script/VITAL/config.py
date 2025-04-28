@@ -73,7 +73,7 @@ config_dict = {
 
     # Data loader settings
     'batch_size': 2048,
-    'text_encoder_name': 'sentence-transformers/all-mpnet-base-v2',
+    'text_encoder_name': 'sentence-transformers/paraphrase-mpnet-base-v2',#'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_global_normalize': False, 
     'ts_normalize_mean': 150, # global normalization mean
