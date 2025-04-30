@@ -1,7 +1,7 @@
 
 from sklearn.model_selection import train_test_split
 
-df = pd.read_csv('../../data/synthetic/data.csv')
+df = pd.read_csv('../../data/synthetic/data.csv.zip', compression='zip')
 df.columns = df.columns.astype(str)
 df['text'] = df['ts_description']
 df = df.reset_index(drop=True)

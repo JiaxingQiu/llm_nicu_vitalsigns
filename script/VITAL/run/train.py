@@ -115,8 +115,6 @@ if overwrite or not os.path.exists(model_path):
         # _ = net_emb_w_text(df_test, model, config_dict)
     
         
-
-        
         # Eval VAE
         plot_reconstructions(model, 
                             df=df_train, 
@@ -128,9 +126,13 @@ if overwrite or not os.path.exists(model_path):
                             config_dict = config_dict, 
                             text_col_ls = config_dict['text_col_ls'],
                             title="Test Data Reconstructions")
-        distances = [0, 0.1, 0.25, 0.3, 0.6]
-        plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-        plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+        # distances = [0, 0.1, 0.25, 0.3, 0.6]
+        # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+        # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+        
+        # Eval Generation
+        viz_generation_conditional(df_train, model, config_dict)
+        viz_generation_conditional(df_test, model, config_dict)
     
         
 else:
@@ -159,9 +161,15 @@ else:
                         config_dict = config_dict, 
                         text_col_ls = config_dict['text_col_ls'],
                         title="Test Data Reconstructions")
-    distances = [0, 0.1, 0.25, 0.3, 0.6]
-    plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-    plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+    # distances = [0, 0.1, 0.25, 0.3, 0.6]
+    # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+    # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+    
+    # Eval Generation
+    # viz_generation_marginal(df_train, model, config_dict)
+    viz_generation_conditional(df_train, model, config_dict)
+    # viz_generation_marginal(df_test, model, config_dict)
+    viz_generation_conditional(df_test, model, config_dict)
     
     train_eval_metrics_ts2txt_list = eval_dict_ts2txt['train_evals']
     test_eval_metrics_ts2txt_list = eval_dict_ts2txt['test_evals']

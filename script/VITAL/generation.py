@@ -29,7 +29,7 @@ def interpolate_ts_tx(df, model, config_dict, text_cols, w, label = False):
         if model.concat_embeddings:
             emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
         else:
-            emb = ts_emb_inter
+            emb = ts_emb_inter # torch.cat([ts_emb_inter, x_mean, x_std], dim=1)
         ts_hat = model.ts_decoder(emb, x_mean, x_std)
         # # plot the ts_hat
         # plt.plot(ts_hat[0].detach().cpu().numpy())
@@ -131,3 +131,37 @@ def plot_interpolate_ts_tx_ws(df, model, config_dict, text_cols, w_values=None, 
         
         plt.tight_layout()
         plt.show()
+
+
+def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2)):
+    model.eval()
+    w_values = np.concatenate([[0], w_values])
+    for y_col in config_dict['txt2ts_y_cols']:
+        y_levels = list(df[y_col].unique())
+        for i in range(len(y_levels)):
+            df_level = df[df[y_col] == y_levels[i]].reset_index(drop=True).iloc[[tid]].copy()
+            print(df_level[y_col])
+            for j in range(len(y_levels)):
+                df_level['text' + str(j)] = y_levels[j]
+            text_cols = ['text' + str(j) for j in range(len(y_levels))]
+            plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
+
+
+def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2)):
+    model.eval()
+    w_values = np.concatenate([[0], w_values])
+    for y_col in config_dict['txt2ts_y_cols']:
+        y_levels = list(df[y_col].unique())
+        for i in range(len(y_levels)):
+            df_level = df[df[y_col] == y_levels[i]].reset_index(drop=True).iloc[[tid]].copy()
+            print(df_level[y_col])
+            for j in range(len(y_levels)):
+                # find the substring in raw_text(df_level['text'].values[0]) that is the same as any of the elemnet in y_levels
+                # replace the substring y_levels[j] 
+                modified_text = df_level['text'].values[0]
+                for level in y_levels:
+                    if level in modified_text:
+                        modified_text = modified_text.replace(level, y_levels[j])
+                df_level['text' + str(j)] = modified_text
+            text_cols = ['text' + str(j) for j in range(len(y_levels))]
+            plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)

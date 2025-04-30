@@ -89,6 +89,7 @@ def generate_step_spike(
     length: int,
     base_value: float = 0.0,
     noise_std: float = 0.05,
+    sign: int = 1,
     step_magnitude_range: Tuple[float, float] = (2.0, 10.0),
     step_duration_range: Tuple[int, int] = (10, 50)
 ) -> np.ndarray:
@@ -106,12 +107,12 @@ def generate_step_spike(
         np.ndarray: Generated time series
     """
     series = np.random.normal(base_value, noise_std, length)
-    step_start = random.randint(0, length-1)
     step_duration = random.randint(*step_duration_range)
+    step_start = random.randint(int(length*0.1), int(length*0.9)-step_duration)
     step_magnitude = random.uniform(*step_magnitude_range)
     
     # Randomly choose sign of the shift
-    sign = random.choice([-1, 1])
+    # sign = random.choice([-1, 1])
     step_magnitude *= sign
     
     # Ensure step doesn't exceed series length
@@ -123,6 +124,7 @@ def generate_level_shift(
     length: int,
     base_value: float = 0.0,
     noise_std: float = 0.05,
+    sign: int = 1,
     shift_magnitude_range: Tuple[float, float] = (2.0, 10.0)
 ) -> np.ndarray:
     """
@@ -138,11 +140,11 @@ def generate_level_shift(
         np.ndarray: Generated time series
     """
     series = np.random.normal(base_value, noise_std, length)
-    shift_location = random.randint(0, length-1)
+    shift_location = random.randint(int(length*0.1), int(length*0.9))
     shift_magnitude = random.uniform(*shift_magnitude_range)
     
     # Randomly choose sign of the shift
-    sign = random.choice([-1, 1])
+    # sign = random.choice([-1, 1])
     shift_magnitude *= sign
     
     series[shift_location:] += shift_magnitude
@@ -174,12 +176,18 @@ def generate_outlier_series(
         elif outlier_type == 'spikes':
             series = generate_spikes(L)
             description = "Spike outliers."
-        elif outlier_type == 'step_spike':
+        elif outlier_type == 'step_spike_up':
             series = generate_step_spike(L)
-            description = "Step spike shifts."
-        elif outlier_type == 'level_shift':
+            description = "There is an upward step spike."
+        elif outlier_type == 'step_spike_down':
+            series = generate_step_spike(L, sign=-1)
+            description = "There is a downward step spike."
+        elif outlier_type == 'level_shift_up':
             series = generate_level_shift(L)
-            description = "The mean of the time series shifts over time."
+            description = "The mean of the time series shifts upwards."
+        elif outlier_type == 'level_shift_down':
+            series = generate_level_shift(L, sign=-1)
+            description = "The mean of the time series shifts downwards."
         else:
             raise ValueError(f"Unknown outlier type: {outlier_type}")
         

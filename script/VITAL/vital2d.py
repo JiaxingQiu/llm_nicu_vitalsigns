@@ -6,6 +6,7 @@ from torchinfo import summary as nn_summary
 from config import *
 from model_utils.encoder import *
 from model_utils.decoder import *
+import math
 
 # VITAL model (2d)
 class VITAL(nn.Module):
@@ -47,12 +48,8 @@ class VITAL(nn.Module):
             decode_dim = 2*output_dim
         else:
             decode_dim = output_dim
-        if ts_decoder is None:
-            self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = decode_dim) #default decoder
-        elif isinstance(ts_decoder, type):
-            self.ts_decoder = ts_decoder(ts_dim = ts_dim, output_dim = decode_dim)
-        else:
-            self.ts_decoder = ts_decoder
+        self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = decode_dim, decoder_layers = ts_decoder)
+        
         
         self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
         self.device = device
@@ -184,28 +181,14 @@ class TSVAEEncoder(nn.Module):
         
         return z, mean, log_var, x_mean, x_std
 
-# default ts vae decoder
+
 class TSVAEDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
         if decoder_layers is None:
             self.decoder = nn.Sequential(
-                nn.Linear(output_dim, 256),
+                nn.Linear(output_dim+2, 256), # 2 for x_mean and x_std
                 nn.LeakyReLU(0.2),
-                # nn.Linear(256, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 512),
-                # nn.LeakyReLU(0.2),
-                # nn.Linear(512, 256),
-                # nn.LeakyReLU(0.2),
                 nn.Linear(256, 256),
                 nn.LeakyReLU(0.2),
                 nn.Linear(256, ts_dim)
@@ -214,12 +197,15 @@ class TSVAEDecoder(nn.Module):
             self.decoder = decoder_layers
     
     def forward(self, z, x_mean, x_std):
+        z = torch.cat([z, x_mean, x_std], dim=1)
         x_hat = self.decoder(z)
-        # scale back to raw scale
-        x_hat = x_hat * x_std + x_mean
-        # round to 0 decimal places
+        # # scale back to raw scale
+        # x_hat = x_hat * x_std + x_mean
+        # # round to 0 decimal places
         # x_hat = torch.round(x_hat)
         return x_hat
+# import inspect
+# print(inspect.getsource(model.ts_decoder.forward))
 
 class TextEncoder(nn.Module):
     def __init__(self, text_dim: int, output_dim: int, encoder_layers = None):

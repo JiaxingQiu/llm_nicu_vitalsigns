@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .encoder import ResidualBlock, AddChannelDim
+import math
 
 # ------- custom ts decoder_layers -------
 class ResNetDecoder(nn.Module):
@@ -310,3 +311,86 @@ class MultiLSTMDecoder(nn.Module):
         output = self.projection(combined)
         
         return output
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(self, ts_dim: int, output_dim: int, 
+                 nhead: int = 8,
+                 num_layers: int = 6,
+                 dim_feedforward: int = 2048,
+                 dropout: float = 0.1):
+        """Transformer-based decoder for time series reconstruction.
+        
+        Args:
+            ts_dim: Input time series dimension
+            output_dim: Latent space dimension
+            nhead: Number of attention heads
+            num_layers: Number of transformer layers
+            dim_feedforward: Dimension of the feedforward network
+            dropout: Dropout probability
+        """
+        super().__init__()
+        
+        # Project latent vector to transformer input dimension
+        self.input_projection = nn.Linear(output_dim, ts_dim)
+        
+        # Positional encoding
+        self.pos_encoder = PositionalEncoding(ts_dim, dropout)
+        
+        # Transformer decoder layers
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=ts_dim,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer,
+            num_layers=num_layers
+        )
+        
+        # Output projection
+        self.output_projection = nn.Linear(ts_dim, ts_dim)
+        
+    def forward(self, z):
+        
+        # Project latent vector to transformer input dimension
+        x = self.input_projection(z)  # [batch_size, ts_dim]
+        
+        # Add sequence dimension and repeat for transformer
+        x = x.unsqueeze(1)  # [batch_size, 1, ts_dim]
+        
+        # Add positional encoding
+        x = self.pos_encoder(x)
+        
+        # Create memory (same as input for auto-regressive generation)
+        memory = x
+        
+        # Generate output sequence
+        output = self.transformer_decoder(x, memory)
+        
+        # Project back to original dimension
+        output = self.output_projection(output.squeeze(1))
+        
+        return output
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:x.size(1)]
+        return self.dropout(x)

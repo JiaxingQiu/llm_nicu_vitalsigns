@@ -1,12 +1,27 @@
-aiohttp==3.11.13
+
+
+# PyTorch and related
+torch==2.5.1
+torchinfo==1.8.0
 transformers==4.46.2
 datasets==3.1.0
 sentence_transformers==3.0.1
-torch==2.2.0
-torchinfo==1.8.0
-numpy==1.24.3
+
+# Data processing
+numpy>=1.26.0
 pandas==2.2.0
-rpy2==3.5.17
+scipy==1.11.4
+
+# Visualization and TSA utilities
 matplotlib==3.10.1
 python-calamine==0.3.1
 tslearn==0.6.3
+ruptures==1.1.9
+statsmodels==0.14.4
+
+
+# R integration
+rpy2==3.5.17
+
+# Web
+aiohttp==3.11.13

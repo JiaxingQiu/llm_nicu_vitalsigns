@@ -1,3 +1,7 @@
+# if need to reinstall
+#conda deactivate
+#rm -rf ./clip_env
+
 # ——— first time ———— 
 # 1. Set up R directories first
 mkdir -p ~/R/{goolf,x86_64-pc-linux-gnu-library}
@@ -14,7 +18,7 @@ module load miniforge
 cat ~/.Renviron
 
 # 4. Create conda environment with R
-conda create --prefix ./clip_env python=3.11 rpy2
+conda create --prefix ./clip_env python=3.12 rpy2
 
 # 5. Activate the environment
 conda activate ./clip_env
@@ -74,4 +78,13 @@ os.environ['R_HOME'] = r_home
 os.environ['R_LIBS'] = f"{r_home}/library"
 os.environ['R_LIBS_USER'] = os.path.expanduser('~/R/goolf/4.3')
 os.environ['LD_LIBRARY_PATH'] = f"{r_home}/lib:" + os.environ.get('LD_LIBRARY_PATH', '')
+
+
+2. To install new packages
+cd /home/jq2uw/llm_nicu_vitalsigns
+conda activate ./clip_env
+pip install package_name
+jupyter kernelspec uninstall clip_env
+python -m ipykernel install --user --name clip_env --display-name "CLIP"
+
 

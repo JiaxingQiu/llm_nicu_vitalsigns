@@ -135,7 +135,7 @@ def generate_trend_series(N, L,
             mean = random.uniform(*mean_range)
             std = random.uniform(*std_range)
             series = series * std + mean
-            description = f"The time series exhibits a {direction}ward {trend_type} trend."
+            description = f"The time series shows {direction}ward {trend_type} trend."
         else:
             description = "No trend."  
             

@@ -9,7 +9,9 @@ def plot_reconstructions(model,
                          config_dict,
                          text_col = 'text', 
                          text_col_ls = ['demo', 'cl_event', 'ts_description'],
-                         num_samples=20, start_idx=0, title="Data Reconstructions"):
+                         num_samples=20,
+                         # start_idx=0, 
+                         title="Data Reconstructions"):
     """
     Plot original and reconstructed time series from a VAE model.
     
@@ -24,8 +26,11 @@ def plot_reconstructions(model,
         title: Title for the plot (default="Data Reconstructions")
     """
     model.eval()
-    # get row start_idx:start_idx + num_samples
-    df = df.iloc[start_idx:(start_idx + num_samples)]  
+    # get sample without replacement num_samples
+    df = df.sample(n=num_samples, replace=False)
+    # # get row start_idx:start_idx + num_samples
+    # df = df.iloc[start_idx:(start_idx + num_samples)]  
+    
     if config_dict['3d']:
         ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
         ts_f = ts_f.to(device)

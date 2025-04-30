@@ -6,7 +6,7 @@ import random
 def generate_no_seasonal(
     length: int,
     period_range: Tuple[int, int] = (150, 200),
-    amplitude_range: Tuple[float, float] = (0, 0.5),
+    amplitude_range: Tuple[float, float] = (0, 0.1),
     phase_range: Tuple[float, float] = (0, 2*np.pi),
     noise_std: float = 0.05
 ) -> np.ndarray:
