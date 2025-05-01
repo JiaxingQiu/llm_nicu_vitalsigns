@@ -83,7 +83,7 @@ config_dict = {
 
     # Model settings
     'model_name': 'hey_you_forget_to_name_your_model',
-    '3d': False,
+    '3d': False, # **{'3d': False/True} to change in update_config
     'embedded_dim': 512,
     'model_init': None,
     'concat_embeddings': False,

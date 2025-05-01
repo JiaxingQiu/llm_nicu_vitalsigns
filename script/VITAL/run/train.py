@@ -93,13 +93,13 @@ if overwrite or not os.path.exists(model_path):
         # Eval CLIP
         _ = eng_eval_metrics(eval_dict_ts2txt, binary=False, plot=True, plot_confusion_matrices=True)
         _ = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
-        for y_col in config_dict['custom_target_cols']:
+        for y_col in config_dict['txt2ts_y_cols']:
             if y_col not in ['label']:
                 text_levels = list(df_train[y_col].unique())
-                _ = net_emb(df_train, model, config_dict,
-                            top=100,
-                            y_col = y_col,
-                            text_levels = text_levels)
+                # _ = net_emb(df_train, model, config_dict,
+                #             top=100,
+                #             y_col = y_col,
+                #             text_levels = text_levels)
                 # _ = net_emb_w_text(df_train, model, config_dict,
                 #                 top=100,
                 #                 y_col = y_col,
@@ -109,18 +109,13 @@ if overwrite or not os.path.exists(model_path):
                             y_col = y_col,
                             text_levels = text_levels)
         
-        # _, _ = net_emb(df_train, model, config_dict)
-        # _ = net_emb_w_text(df_train, model, config_dict)
-        # _, _ = net_emb(df_test, model, config_dict)
-        # _ = net_emb_w_text(df_test, model, config_dict)
-    
         
         # Eval VAE
-        plot_reconstructions(model, 
-                            df=df_train, 
-                            config_dict = config_dict, 
-                            text_col_ls = config_dict['text_col_ls'],
-                            title="Training Data Reconstructions")
+        # plot_reconstructions(model, 
+        #                     df=df_train, 
+        #                     config_dict = config_dict, 
+        #                     text_col_ls = config_dict['text_col_ls'],
+        #                     title="Training Data Reconstructions")
         plot_reconstructions(model, 
                             df=df_test, 
                             config_dict = config_dict, 
@@ -131,7 +126,7 @@ if overwrite or not os.path.exists(model_path):
         # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
         
         # Eval Generation
-        viz_generation_conditional(df_train, model, config_dict)
+        # viz_generation_conditional(df_train, model, config_dict)
         viz_generation_conditional(df_test, model, config_dict)
     
         
@@ -144,17 +139,37 @@ else:
     eval_dict_txt2ts = torch.load(output_dir+'/evals_clip_txt2ts.pth', map_location=torch.device(device))
     eval_dict_eng = eng_eval_metrics(eval_dict_ts2txt, binary=True, plot=True, plot_confusion_matrices=True)
     eval_dict_eng = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
-    pairwise_distances, ts2tx_distances = net_emb(df_train, model, config_dict)
-    pairwise_distances = net_emb_w_text(df_train, model, config_dict)
-    pairwise_distances, ts2tx_distances = net_emb(df_test, model, config_dict)
-    pairwise_distances = net_emb_w_text(df_test, model, config_dict)
+    
+    for y_col in config_dict['txt2ts_y_cols']:
+        if y_col not in ['label']:
+            text_levels = list(df_train[y_col].unique())
+            # _ = net_emb(df_train, model, config_dict,
+            #             top=100,
+            #             y_col = y_col,
+            #             text_levels = text_levels)
+            # _ = net_emb_w_text(df_train, model, config_dict,
+            #                 top=100,
+            #                 y_col = y_col,
+            #                 text_levels = text_levels)
+            _ = net_emb(df_test, model, config_dict,
+                        top=100,
+                        y_col = y_col,
+                        text_levels = text_levels)
+            # _ = net_emb_w_text(df_test, model, config_dict,
+            #                 top=100,
+            #                 y_col = y_col,
+            #                 text_levels = text_levels)
+    # pairwise_distances, ts2tx_distances = net_emb(df_train, model, config_dict)
+    # pairwise_distances = net_emb_w_text(df_train, model, config_dict)
+    # pairwise_distances, ts2tx_distances = net_emb(df_test, model, config_dict)
+    # pairwise_distances = net_emb_w_text(df_test, model, config_dict)
         
     # eval vae
-    plot_reconstructions(model, 
-                        df = df_train, 
-                        config_dict = config_dict, 
-                        text_col_ls = config_dict['text_col_ls'],
-                        title="Training Data Reconstructions")
+    # plot_reconstructions(model, 
+    #                     df = df_train, 
+    #                     config_dict = config_dict, 
+    #                     text_col_ls = config_dict['text_col_ls'],
+    #                     title="Training Data Reconstructions")
 
     plot_reconstructions(model, 
                         df = df_test, 
@@ -166,8 +181,8 @@ else:
     # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
     
     # Eval Generation
-    # viz_generation_marginal(df_train, model, config_dict)
-    viz_generation_conditional(df_train, model, config_dict)
+    # # viz_generation_marginal(df_train, model, config_dict)
+    # viz_generation_conditional(df_train, model, config_dict)
     # viz_generation_marginal(df_test, model, config_dict)
     viz_generation_conditional(df_test, model, config_dict)
     

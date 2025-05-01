@@ -195,6 +195,73 @@ class CNNEncoder(nn.Module):
 # )
 # model = GeneralBinaryClassifier(cnn)
 
+class MultiCNNEncoder(nn.Module):
+    def __init__(self, ts_dim, output_dim, kernel_sizes=[80, 50, 20, 5], hidden_num_channel=16, dropout=0.0):
+        """
+        Multi-resolution CNN encoder with attention mechanism.
+        
+        Args:
+            ts_dim (int): Input time series length
+            output_dim (int): Output embedding dimension
+            kernel_sizes (list): Different kernel sizes for multi-resolution analysis
+            hidden_num_channel (int): Number of channels in CNN layers
+            dropout (float): Dropout rate
+        """
+        super().__init__()
+        
+        self.ts_dim = ts_dim
+        self.output_dim = output_dim
+
+        # Create CNNs for different resolutions
+        self.cnns = nn.ModuleList()
+        for kernel_size in kernel_sizes:
+            self.cnns.append(CNNEncoder(ts_dim, 
+                                      output_dim,
+                                      num_channels=[hidden_num_channel],
+                                      kernel_size=kernel_size, 
+                                      dropout=dropout))
+        
+        # Attention mechanism to combine different resolutions
+        self.attention = nn.MultiheadAttention(
+            embed_dim=output_dim,
+            num_heads=1,  # Single head for clear attention weights
+            batch_first=True
+        )
+        
+        # Trainable query vector for attention
+        self.query = nn.Parameter(torch.randn(1, 1, output_dim))
+        
+        # Layer normalization for stability
+        self.layer_norm = nn.LayerNorm(output_dim)
+        
+    def forward(self, x):
+        # Get embeddings from each CNN
+        cnn_embeddings = []
+        for cnn in self.cnns:
+            embedding = cnn(x)  # [batch_size, output_dim]
+            cnn_embeddings.append(embedding)
+        
+        # Stack embeddings from different resolutions [batch_size, n_kernels, output_dim]
+        cnn_embeddings = torch.stack(cnn_embeddings, dim=1)
+        
+        # Apply layer normalization
+        cnn_embeddings = self.layer_norm(cnn_embeddings)
+        
+        # Expand query for batch size
+        query = self.query.expand(cnn_embeddings.size(0), -1, -1)
+        
+        # Apply attention to combine different resolutions
+        attended_output, _ = self.attention(
+            query=query,  # [batch_size, 1, output_dim]
+            key=cnn_embeddings,  # [batch_size, n_kernels, output_dim]
+            value=cnn_embeddings  # [batch_size, n_kernels, output_dim]
+        )
+        
+        # Remove the query dimension and get final embedding
+        combined_output = attended_output.squeeze(1)  # [batch_size, output_dim]
+        
+        return combined_output
+
 class MLPEncoder(nn.Module):
     def __init__(self, ts_dim, output_dim, hidden_dim=128, num_hidden_layers=6, dropout=0.2):
         """
@@ -519,7 +586,7 @@ class TextEncoderCNN(nn.Module):
         for out_channels in num_channels:
             layers.extend([
                 nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size//2),
-                nn.ReLU(),
+                nn.GELU(),
                 nn.BatchNorm1d(out_channels),
                 nn.MaxPool1d(2),
                 nn.Dropout(dropout)
@@ -542,6 +609,92 @@ class TextEncoderCNN(nn.Module):
     
     def forward(self, text_features):
         return self.encoder(text_features)
+
+
+
+
+class TextEncoderMultiCNN(nn.Module):
+    def __init__(self, 
+                 text_dim: int,
+                 output_dim: int,
+                 kernel_sizes=[500, 250, 100, 50],  # Different context windows
+                 hidden_num_channel=16,
+                 dropout=0.0):
+        """
+        Multi-resolution CNN encoder for text features with attention mechanism.
+        
+        Args:
+            text_dim (int): Input text embedding dimension
+            output_dim (int): Output embedding dimension
+            kernel_sizes (list): Different kernel sizes for multi-resolution analysis
+            hidden_num_channel (int): Number of channels in CNN layers
+            dropout (float): Dropout rate
+        """
+        super().__init__()
+        
+        # Create CNNs for different resolutions
+        self.cnns = nn.ModuleList()
+        for kernel_size in kernel_sizes:
+            self.cnns.append(
+                TextEncoderCNN(
+                    text_dim=text_dim,
+                    output_dim=output_dim,
+                    num_channels=[hidden_num_channel],
+                    kernel_size=kernel_size,
+                    dropout=dropout
+                )
+            )
+        
+        # Attention mechanism to combine different resolutions
+        self.attention = nn.MultiheadAttention(
+            embed_dim=output_dim,
+            num_heads=1,  # Single head for clear attention weights
+            batch_first=True
+        )
+        
+        # Trainable query vector for attention
+        self.query = nn.Parameter(torch.randn(1, 1, output_dim))
+        
+        # Layer normalization for stability
+        self.layer_norm = nn.LayerNorm(output_dim)
+        
+    def forward(self, text_features):
+        # Get embeddings from each CNN
+        cnn_embeddings = []
+        for cnn in self.cnns:
+            embedding = cnn(text_features)  # [batch_size, output_dim]
+            cnn_embeddings.append(embedding)
+        
+        # Stack embeddings from different resolutions [batch_size, n_kernels, output_dim]
+        cnn_embeddings = torch.stack(cnn_embeddings, dim=1)
+        
+        # Apply layer normalization
+        cnn_embeddings = self.layer_norm(cnn_embeddings)
+        
+        # Expand query for batch size
+        query = self.query.expand(cnn_embeddings.size(0), -1, -1)
+        
+        # Apply attention to combine different resolutions
+        attended_output, _ = self.attention(
+            query=query,  # [batch_size, 1, output_dim]
+            key=cnn_embeddings,  # [batch_size, n_kernels, output_dim]
+            value=cnn_embeddings  # [batch_size, n_kernels, output_dim]
+        )
+        
+        # Remove the query dimension and get final embedding
+        combined_output = attended_output.squeeze(1)  # [batch_size, output_dim]
+        
+        return combined_output
+
+# Usage example:
+# text_encoder = TextEncoderMultiCNN(
+#     text_dim=768,  # e.g., BERT embedding dimension
+#     output_dim=128,
+#     kernel_sizes=[50, 20, 10, 5],
+#     hidden_num_channel=16,
+#     dropout=0.1
+# )
+
 
 # # default text encoder with attention
 # class TextEncoder(nn.Module):
