@@ -34,7 +34,7 @@ def mix_2tstxt(df, config_dict, text1, text2, n = None, w = 1.0, plot = False):
     
     # Plot first 10 examples if requested
     if plot:
-        for i in range(min(10, n)):
+        for i in range(min(3, n)):
             plt.figure(figsize=(15, 5))
             plt.plot(ts2_std[i], 'b--', linewidth=1, label='Series 2')
             plt.plot(ts1_std[i], 'g--', linewidth=1, label='Series 1')

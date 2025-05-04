@@ -94,20 +94,19 @@ if overwrite or not os.path.exists(model_path):
         _ = eng_eval_metrics(eval_dict_ts2txt, binary=False, plot=True, plot_confusion_matrices=True)
         _ = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
         for y_col in config_dict['txt2ts_y_cols']:
-            if y_col not in ['label']:
-                text_levels = list(df_train[y_col].unique())
-                # _ = net_emb(df_train, model, config_dict,
-                #             top=100,
-                #             y_col = y_col,
-                #             text_levels = text_levels)
-                # _ = net_emb_w_text(df_train, model, config_dict,
-                #                 top=100,
-                #                 y_col = y_col,
-                #                 text_levels = text_levels)
+            try:
+                text_levels = list(df_test[y_col].unique())
                 _ = net_emb(df_test, model, config_dict,
                             top=100,
                             y_col = y_col,
                             text_levels = text_levels)
+                # _ = net_emb_w_text(df_test, model, config_dict,
+                #                 top=100,
+                #                 y_col = y_col,
+                #                 text_levels = text_levels)
+            except Exception as e:
+                print(f"Error plot network embedding for {y_col}")
+                continue
         
         
         # Eval VAE
@@ -126,8 +125,9 @@ if overwrite or not os.path.exists(model_path):
         # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
         
         # Eval Generation
-        # viz_generation_conditional(df_train, model, config_dict)
-        viz_generation_conditional(df_test, model, config_dict)
+        if len(config_dict['txt2ts_y_cols'])<3:
+            # viz_generation_conditional(df_train, model, config_dict)
+            viz_generation_conditional(df_test, model, config_dict)
     
         
 else:
@@ -141,7 +141,7 @@ else:
     eval_dict_eng = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
     
     for y_col in config_dict['txt2ts_y_cols']:
-        if y_col not in ['label']:
+        try:
             text_levels = list(df_train[y_col].unique())
             # _ = net_emb(df_train, model, config_dict,
             #             top=100,
@@ -159,10 +159,10 @@ else:
             #                 top=100,
             #                 y_col = y_col,
             #                 text_levels = text_levels)
-    # pairwise_distances, ts2tx_distances = net_emb(df_train, model, config_dict)
-    # pairwise_distances = net_emb_w_text(df_train, model, config_dict)
-    # pairwise_distances, ts2tx_distances = net_emb(df_test, model, config_dict)
-    # pairwise_distances = net_emb_w_text(df_test, model, config_dict)
+        except Exception as e:
+            print(f"Error plot network embedding for {y_col}")
+            continue
+        
         
     # eval vae
     # plot_reconstructions(model, 
@@ -181,10 +181,11 @@ else:
     # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
     
     # Eval Generation
-    # # viz_generation_marginal(df_train, model, config_dict)
-    # viz_generation_conditional(df_train, model, config_dict)
-    # viz_generation_marginal(df_test, model, config_dict)
-    viz_generation_conditional(df_test, model, config_dict)
+    if len(config_dict['txt2ts_y_cols'])<3:
+        # viz_generation_marginal(df_train, model, config_dict)
+        viz_generation_conditional(df_train, model, config_dict)
+        # viz_generation_marginal(df_test, model, config_dict)
+        viz_generation_conditional(df_test, model, config_dict)
     
     train_eval_metrics_ts2txt_list = eval_dict_ts2txt['train_evals']
     test_eval_metrics_ts2txt_list = eval_dict_ts2txt['test_evals']

@@ -5,6 +5,7 @@ from config import *
 from data import get_features3d
 
 
+# ----------------- Augment Time Series by Text Instructions --------------------------------
 def interpolate_ts_tx(df, model, config_dict, text_cols, w):
 
     model.eval() # 2d vital model
@@ -35,98 +36,8 @@ def interpolate_ts_tx(df, model, config_dict, text_cols, w):
     return ts_hat_ls
 
 
-def eval_augmented_properties(df, model, config_dict, type, w, y_cols = None):
-    model.eval()
-    df_augmented_all = pd.DataFrame()
-    if y_cols is None:
-        y_cols = config_dict['txt2ts_y_cols']
-    for y_col in y_cols:
-        y_levels = list(df[y_col].unique())
-        for i in range(len(y_levels)):
-            df_level = df[df[y_col] == y_levels[i]].reset_index(drop=False).copy()
-            
-            # add new text conditions
-            for j in range(len(y_levels)):
-                if type == "conditional":
-                    modified_text = df_level['text'].values[0]
-                    for level in y_levels:
-                        if level in modified_text:
-                            modified_text = modified_text.replace(level, y_levels[j])
-                    df_level['text' + str(j)] = modified_text
-                elif type == "marginal":
-                    df_level['text' + str(j)] = y_levels[j]
-                else:
-                    raise ValueError("type must be either 'marginal' or 'conditional'")
-                
-            # Augment the time series with the given text conditions
-            text_cols = ['text' + str(j) for j in range(len(y_levels))]
-            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, text_cols, w)
 
-            # Calculate the math properties of the generated time series
-            df_prop_all = pd.DataFrame()
-            for text_col, pairs in ts_hat_ls.items():
-                df_prop = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
-                properties = df_prop['ts_hat'].apply(lambda x: get_all_properties(x.detach().cpu().numpy()))
-                df_prop['properties'] = properties
-                df_prop['text_col'] = text_col
-                df_prop['index'] = df_level.index # saved original index
-                df_prop_all = pd.concat([df_prop_all, df_prop])
-            
-            df_prop_all['org_y_col'] = y_col
-            df_prop_all['org_y_level'] = y_levels[i]
-            df_augmented_all = pd.concat([df_augmented_all, df_prop_all])
-
-    return df_augmented_all
-
-
-def viz_augmented_properties(df_augmented, org_y_level, y_col):
-    """Visualize augmented properties and return the figure.
-    
-    Args:
-        df_augmented: DataFrame with augmented data
-        org_y_level: Original y-level to filter
-        y_col: Column name to analyze
-        
-    Returns:
-        fig, ax: matplotlib figure and axis objects
-        metric: string indicating which metric was analyzed
-    """
-    y_levels = list(df_augmented[df_augmented['org_y_col'] == y_col]['org_y_level'].unique())
-    if 'trend' in y_levels[0].lower():
-        metric = 'trend'
-    elif 'seasonal' in y_levels[0].lower():
-        metric = 'seasonality'
-    elif 'shift' in y_levels[0].lower():
-        metric = 'shift'
-    elif 'variability' in y_levels[0].lower():
-        metric = 'variability'
-    else:
-        raise ValueError(f"Invalid org_y_level: {y_levels[0]}")
-    
-    stats_ls = {}
-    for y_level in y_levels:
-        filtered_df = df_augmented[
-            (df_augmented['org_y_level'].str.contains(org_y_level, case=False)) & 
-            (df_augmented['aug_text'].str.contains(y_level, case=False))
-        ]
-        if metric == 'seasonality':
-            stats_ls[y_level] = filtered_df['properties'].apply(lambda x: x[metric]['entropy'])
-        else:
-            stats_ls[y_level] = filtered_df['properties'].apply(lambda x: x[metric])
-    
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=(6, 4))
-    
-    # plot the histogram of the statistics
-    for i in range(len(y_levels)):
-        ax.hist(stats_ls[y_levels[i]], bins=20, alpha=0.5, label=y_levels[i])
-    ax.set_xlabel(metric + ' statistic')
-    ax.legend()
-    
-    return fig, ax, metric
-
-
-# augment a single time series with given text conditions
+# ----------------- Visualize augmentation of a single time series (input as df) --------------------------------
 def interpolate_ts_tx_single(df, model, config_dict, text_cols, w, label = False):
     model.eval() # 2d vital model
     ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
@@ -255,8 +166,8 @@ def plot_interpolate_ts_tx_ws(df, model, config_dict, text_cols, w_values=None, 
         plt.show()
 
 
-# visualize the transition of timeseries from raw to instructed augmentation
-def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2)):
+def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2),
+                               sampling = False, b=200, ep=1):
     model.eval()
     w_values = np.concatenate([[0], w_values])
     for y_col in config_dict['txt2ts_y_cols']:
@@ -267,9 +178,15 @@ def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(
             for j in range(len(y_levels)):
                 df_level['text' + str(j)] = y_levels[j]
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
-            plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
+            if sampling:
+                plot_interpolate_ts_tx_ws_sampling(df_level, model, config_dict, text_cols, w_values = w_values, 
+                                                   label = True, b=b, ep=ep)
+            else:
+                plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
 
-def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2)):
+
+def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2),
+                               sampling = False, b=200, ep=1):
     model.eval()
     w_values = np.concatenate([[0], w_values])
     for y_col in config_dict['txt2ts_y_cols']:
@@ -286,4 +203,178 @@ def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.aran
                         modified_text = modified_text.replace(level, y_levels[j])
                 df_level['text' + str(j)] = modified_text
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
-            plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
+            if sampling:
+                plot_interpolate_ts_tx_ws_sampling(df_level, model, config_dict, text_cols, w_values = w_values, 
+                                                   label = True, b=b, ep=ep)
+            else:
+                plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
+
+
+def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w, 
+                                      label=False, b=100, ep=1, plot = False):
+    model.eval() # 2d vital model
+
+    ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
+    ts_f = ts_f.to(device)
+    raw_ts = ts_f[0].detach().cpu().numpy()
+    tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+
+    # ----- ts_embeddings -----
+    _, ts_emb_mean, ts_emb_log_var, x_mean, x_std = model.ts_encoder(ts_f)
+    ts_emb_mean = ts_emb_mean.expand(b, -1)
+    if not model.variational:
+        ts_emb_log_var = torch.zeros_like(ts_emb_mean) - 1e2   
+    else:
+        ts_emb_log_var = ts_emb_log_var.expand(b, -1)
+        # ts_emb_log_var = torch.zeros_like(ts_emb_mean) - 1e2   
+    ts_emb = model.ts_encoder.reparameterization(ts_emb_mean, ts_emb_log_var, ep=ep) # (b, dim)
+    x_mean = x_mean.repeat(b, 1)
+    x_std = x_std.repeat(b, 1)
+        
+    ts_hat_ls = {}
+    for txid in range(len(tx_f_ls)):
+        # ----- text_embeddings -----
+        tx_emb = model.text_encoder(tx_f_ls[txid])
+        tx_emb = tx_emb.repeat(b, 1)
+        # ----- interpolation -----
+        ts_emb_inter = (1-w)*ts_emb + w*tx_emb # interpolation of ts_emb and tx_emb
+        # ----- decoder -----
+        if model.concat_embeddings:
+            emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
+        else:
+            emb = ts_emb_inter
+        ts_hat = model.ts_decoder(emb, x_mean, x_std)
+        
+        if plot:
+            ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0) 
+            ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0)
+            ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0)
+            plt.plot(ts_hat_r.detach().cpu().numpy(), '--', color='red', linewidth=0.5)
+            plt.plot(ts_hat_q.detach().cpu().numpy(), color='red', linewidth=0.5)
+            plt.plot(ts_hat_i.detach().cpu().numpy(), '--', color='red', linewidth=0.5)
+            plt.show()
+            
+        if label:
+            text_condition = df[text_cols[txid]].iloc[0]
+        else:
+            text_condition = text_cols[txid]
+        # Move ts_hat to CPU and convert to numpy to free GPU memory
+        ts_hat_ls[text_condition] = ts_hat.detach().cpu()
+
+        # Clean up CUDA memory
+        del tx_emb, ts_emb_inter, emb, ts_hat
+        if plot:
+            del ts_hat_r, ts_hat_q, ts_hat_i
+        torch.cuda.empty_cache()
+    
+    # Clean up remaining CUDA tensors
+    del ts_f, ts_emb_mean, ts_emb_log_var, ts_emb, x_mean, x_std
+    for tx_f in tx_f_ls:
+        del tx_f
+    torch.cuda.empty_cache()
+        
+    return ts_hat_ls, raw_ts
+
+
+def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_values=None, 
+                                       label = True, plot = False, b=200, ep=1):
+    if w_values is None:
+        w_values = np.arange(0, 1.1, 0.1)
+
+    # Get ground truth reconstruction
+    ts_hats, raw_ts = interpolate_ts_tx_single_sampling(df, model, config_dict, 
+                                         text_cols = ['text'], # ground truth text condition
+                                         w=0, # reconstruction only on ground truth text condition
+                                         label = False, plot = plot, b=b, ep=ep)
+    
+    # Collect all results first
+    all_results = {}
+    for w in w_values:
+        ts_hats, _ = interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, 
+                                                       w=w, label=label, plot = plot, b=b, ep=ep)
+        # Store results as CPU tensors
+        all_results[w] = {'ts_hats': {k: v for k, v in ts_hats.items()}}
+        torch.cuda.empty_cache()
+
+    for text_condition in list(ts_hats.keys()):
+        n_cols = 5
+        n_rows = int(np.ceil(len(w_values) / n_cols))
+        fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols*4, n_rows*4))
+        fig.suptitle(f'Augmenting towards: {text_condition}', fontsize=18)
+        if n_rows == 1:
+            axs = axs.reshape(1, -1)
+
+        # --- Find global min/max for all quantiles across all subplots ---
+        global_min = float('inf')
+        global_max = float('-inf')
+
+        for idx, w in enumerate(w_values):
+            ts_hats = all_results[w]['ts_hats']
+            ts_hat = ts_hats[text_condition]
+            ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0) 
+            ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0)
+            ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0)
+
+            # Update global min/max using numpy arrays
+            for arr in [ts_hat_r, ts_hat_q, ts_hat_i]:
+                arr_np = arr.numpy()
+                global_min = min(global_min, arr_np.min())
+                global_max = max(global_max, arr_np.max())
+            
+            # Clean up temporary tensors
+            del ts_hat_r, ts_hat_q, ts_hat_i
+            
+        # Also include raw_ts in global min/max
+        global_min = min(global_min, raw_ts.min())
+        global_max = max(global_max, raw_ts.max())
+
+        white_space = np.round((global_max - global_min) * 0.1, 2)
+        ylims = (global_min - white_space, global_max + white_space)
+
+        # --- Plotting ---
+        for idx, w in enumerate(w_values):
+            row = idx // n_cols
+            col = idx % n_cols
+            ts_hats = all_results[w]['ts_hats']
+            ts_hat = ts_hats[text_condition]
+            
+            # Calculate quantiles and immediately convert to numpy
+            ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0).numpy()
+            ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0).numpy()
+            ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0).numpy()
+
+            axs[row, col].plot(ts_hat_q, 'r-', label='Augmented') 
+            axs[row, col].plot(ts_hat_r, 'r--')
+            axs[row, col].plot(ts_hat_i, 'r--')
+            axs[row, col].plot(raw_ts, 'b-', alpha=0.7, label='Raw')
+            w_title = f'w = {w:.1f}' if w != 0 else 'w = 0 (reconstruction)'
+            title = f'{w_title}'
+            axs[row, col].set_title(title, pad=15, fontsize=10)
+            axs[row, col].set_xlabel('Time Steps', fontsize=9)
+            axs[row, col].set_ylabel('Value', fontsize=9)
+            axs[row, col].grid(True, linestyle='--', alpha=0.3)
+            axs[row, col].legend()
+            axs[row, col].spines['top'].set_visible(False)
+            axs[row, col].spines['right'].set_visible(False)
+            axs[row, col].set_ylim(*ylims)
+            
+            # Clean up temporary arrays
+            del ts_hat_r, ts_hat_q, ts_hat_i
+
+        # Hide any empty subplots
+        for idx in range(len(w_values), n_rows * n_cols):
+            row = idx // n_cols
+            col = idx % n_cols
+            axs[row, col].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+        
+        # Clean up the figure
+        plt.close(fig)
+    
+    # Final cleanup
+    del all_results, ts_hats
+    torch.cuda.empty_cache()
+
+
