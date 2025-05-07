@@ -1,3 +1,6 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -167,7 +170,7 @@ def plot_interpolate_ts_tx_ws(df, model, config_dict, text_cols, w_values=None, 
 
 
 def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2),
-                               sampling = False, b=200, ep=1):
+                               sampling = False, b=200, ep=1, ylims = None):
     model.eval()
     w_values = np.concatenate([[0], w_values])
     for y_col in config_dict['txt2ts_y_cols']:
@@ -180,13 +183,13 @@ def viz_generation_marginal(df, model, config_dict, tid=0, w_values = np.arange(
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
             if sampling:
                 plot_interpolate_ts_tx_ws_sampling(df_level, model, config_dict, text_cols, w_values = w_values, 
-                                                   label = True, b=b, ep=ep)
+                                                   label = True, b=b, ep=ep, ylims = ylims)
             else:
                 plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
 
 
 def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.arange(0.4, 1.2, 0.2),
-                               sampling = False, b=200, ep=1):
+                               sampling = False, b=200, ep=1, ylims = None):
     model.eval()
     w_values = np.concatenate([[0], w_values])
     for y_col in config_dict['txt2ts_y_cols']:
@@ -205,7 +208,7 @@ def viz_generation_conditional(df, model, config_dict, tid=0, w_values = np.aran
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
             if sampling:
                 plot_interpolate_ts_tx_ws_sampling(df_level, model, config_dict, text_cols, w_values = w_values, 
-                                                   label = True, b=b, ep=ep)
+                                                   label = True, b=b, ep=ep, ylims = ylims)
             else:
                 plot_interpolate_ts_tx_ws(df_level, model, config_dict, text_cols, w_values = w_values, label = True)
 
@@ -277,7 +280,7 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
 
 
 def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_values=None, 
-                                       label = True, plot = False, b=200, ep=1):
+                                       label = True, plot = False, b=200, ep=1, ylims = None):
     if w_values is None:
         w_values = np.arange(0, 1.1, 0.1)
 
@@ -295,7 +298,7 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
         # Store results as CPU tensors
         all_results[w] = {'ts_hats': {k: v for k, v in ts_hats.items()}}
         torch.cuda.empty_cache()
-
+    
     for text_condition in list(ts_hats.keys()):
         n_cols = 5
         n_rows = int(np.ceil(len(w_values) / n_cols))
@@ -304,32 +307,30 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
         if n_rows == 1:
             axs = axs.reshape(1, -1)
 
-        # --- Find global min/max for all quantiles across all subplots ---
+        # Calculate global y-limits for all plots
         global_min = float('inf')
         global_max = float('-inf')
-
-        for idx, w in enumerate(w_values):
-            ts_hats = all_results[w]['ts_hats']
-            ts_hat = ts_hats[text_condition]
-            ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0) 
-            ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0)
-            ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0)
-
-            # Update global min/max using numpy arrays
-            for arr in [ts_hat_r, ts_hat_q, ts_hat_i]:
-                arr_np = arr.numpy()
-                global_min = min(global_min, arr_np.min())
-                global_max = max(global_max, arr_np.max())
-            
-            # Clean up temporary tensors
-            del ts_hat_r, ts_hat_q, ts_hat_i
-            
+        
+        for w in w_values:
+            if w in all_results:
+                ts_hats = all_results[w]['ts_hats']
+                ts_hat = ts_hats[text_condition]
+                ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0).numpy()
+                ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0).numpy()
+                ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0).numpy()
+                
+                # Update global min/max
+                for arr in [ts_hat_r, ts_hat_q, ts_hat_i]:
+                    global_min = min(global_min, arr.min())
+                    global_max = max(global_max, arr.max())
+        
         # Also include raw_ts in global min/max
         global_min = min(global_min, raw_ts.min())
         global_max = max(global_max, raw_ts.max())
-
+        
         white_space = np.round((global_max - global_min) * 0.1, 2)
-        ylims = (global_min - white_space, global_max + white_space)
+        if ylims is None:
+            ylims = (global_min - white_space, global_max + white_space)
 
         # --- Plotting ---
         for idx, w in enumerate(w_values):

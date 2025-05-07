@@ -10,6 +10,7 @@ script/Data/tmp/
 script/WSDIST/results/
 script/VITAL/results/
 script/VITAL/tmp/
+script/VITAL/test/
 __pycache__/
 .vscode/
 clip_env/

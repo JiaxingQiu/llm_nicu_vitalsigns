@@ -18,6 +18,7 @@ python-calamine==0.3.1
 tslearn==0.6.3
 ruptures==1.1.9
 statsmodels==0.14.4
+h5py==3.13.0
 
 
 # R integration

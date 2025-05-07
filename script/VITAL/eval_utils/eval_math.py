@@ -1,13 +1,13 @@
 import numpy as np
 from typing import Sequence, Union, Optional, Dict, List
 import pandas as pd
-
-import statsmodels.api as sm
 import ruptures as rpt
-# seasonality
-from scipy.signal import periodogram, savgol_filter, medfilt
+from scipy.signal import periodogram, savgol_filter
 from statsmodels.tsa.stattools import acf
 from statsmodels.tsa.seasonal import STL
+
+
+
 
 
 
@@ -239,7 +239,7 @@ def calculate_curvature(
         return float(np.median(kappa))                 # magnitude only
 
     else:
-        raise ValueError(f"Unknown curvature method “{method}”")
+        raise ValueError(f"Unknown curvature method '{method}'")
 
 
 # ---------------------------------------------------------------------------
@@ -686,7 +686,7 @@ def step_pelt(
 
 
 # ------------------------------------------------------ 5. Variability ---------------------------------------------------------------
-# How much of the signal’s variance looks like unstructured (white) noise?
+# How much of the signal's variance looks like unstructured (white) noise?
 # ----------------------------------------------------------------------
 # 1.  Noise‑to‑total variance ratio  (white‑noise strength)
 # ----------------------------------------------------------------------
@@ -793,5 +793,204 @@ def get_all_stats(x, step = False):
     if step:
         res['step'] = np.round(step_pelt(x), 4) # slow, only use when step is trained on
     return res
+
+
+
+
+
+
+
+
+
+# ----------------- Math statistics evaluation on synthetic data --------------------------------
+from generation import interpolate_ts_tx
+from joblib import Parallel, delayed
+import multiprocessing
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import gc
+from tqdm import tqdm
+
+# calculate the math properties of the generated time series (calculate on all time series i.e. df_train.sample(500))
+def eval_math_properties(df, model, config_dict, type, w, y_cols = None):
+    model.eval()
+    df_augmented = pd.DataFrame()
+    if y_cols is None:
+        y_cols = config_dict['txt2ts_y_cols']
+    
+    # Set up parallel processing parameters
+    n_cores = min(max(1, int(multiprocessing.cpu_count() * 0.7)), 10)
+    batch_size = 500  # Adjust based on your system's memory
+    
+    for y_col in y_cols:
+        y_levels = list(df[y_col].unique())
+        for i in range(len(y_levels)):
+            df_level = df[df[y_col] == y_levels[i]].reset_index(drop=False).copy()
+            
+            # add new text conditions
+            for j in range(len(y_levels)):
+                if type == "conditional":
+                    modified_text = df_level['text'].values[0]
+                    for level in y_levels:
+                        if level in modified_text:
+                            modified_text = modified_text.replace(level, y_levels[j])
+                    df_level['text' + str(j)] = modified_text
+                elif type == "marginal":
+                    df_level['text' + str(j)] = y_levels[j]
+                else:
+                    raise ValueError("type must be either 'marginal' or 'conditional'")
+                
+            # Augment the time series with the given text conditions
+            text_cols = ['text' + str(j) for j in range(len(y_levels))]
+            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, text_cols, w)
+
+            # Calculate the math properties of the generated time series
+            df_prop_all = pd.DataFrame()
+            for text_col, pairs in ts_hat_ls.items():
+                df_prop = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
+                
+                n_cores = min(max(1, int(multiprocessing.cpu_count() * 0.7)), 10)
+                properties = Parallel(n_jobs=n_cores)(
+                    delayed(get_all_stats)(x.detach().cpu().numpy()) for x in tqdm(df_prop['ts_hat'], desc="Calculating math statistics")
+                )
+                
+                # # Process in batches
+                # ts_list = [x.detach().cpu().numpy() for x in df_prop['ts_hat']]
+                # properties = []
+                # # Calculate total number of batches for progress bar
+                # n_batches = (len(ts_list) + batch_size - 1) // batch_size
+                # parallel = Parallel(n_jobs=n_cores, batch_size=1, prefer='processes')
+                # for batch_start in tqdm(range(0, len(ts_list), batch_size), total=n_batches, desc="Processing batches"):
+                #     batch_end = min(batch_start + batch_size, len(ts_list))
+                #     batch = ts_list[batch_start:batch_end]
+                #     properties.extend(parallel(delayed(get_all_stats)(x) for x in batch))
+                #     gc.collect() # force garbage collection after each batch
+
+                df_prop['properties'] = properties
+                df_prop['text_col'] = text_col
+                df_prop['index'] = df_level.index# saved original index
+                df_prop_all = pd.concat([df_prop_all, df_prop])
+            
+            df_prop_all['org_y_col'] = y_col
+            df_prop_all['org_y_level'] = y_levels[i]
+            df_augmented = pd.concat([df_augmented, df_prop_all])
+
+    return df_augmented
+
+
+# engineer the math properties from the math properties of the augmented time serie (df_augmented)
+def eng_math_diff(df_augmented, base_y_level, augm_y_level, metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']):
+
+    df_metrics = None
+    for metric in metrics:
+        aug_df = df_augmented[
+                    (df_augmented['org_y_level'].str.contains(base_y_level, case=False)) & 
+                    (df_augmented['aug_text'].str.contains(augm_y_level, case=False))
+                ]
+        aug_df['aug_'+metric] = aug_df['properties'].apply(lambda x: x[metric])
+        bas_df = df_augmented[
+                    (df_augmented['org_y_level'].str.contains(base_y_level, case=False)) & 
+                    (df_augmented['aug_text'].str.contains(base_y_level, case=False))
+                ]
+        bas_df['bas_'+metric] = bas_df['properties'].apply(lambda x: x[metric])
+        scl = bas_df['bas_'+metric].std()
+
+        # merge the two dataframes on the index column
+        aug_df = aug_df.loc[:, ['index', 'aug_'+metric]]
+        bas_df = bas_df.loc[:, ['index', 'bas_'+metric]]
+        # assert two df has same nrow
+        assert len(aug_df) == len(bas_df)
+        df = aug_df.merge(bas_df, on = 'index', how = 'left')
+        df['diff_'+metric] = df['aug_'+metric] - df['bas_'+metric]
+        df['diff_'+metric] = df['diff_'+metric] / scl# / df['diff_'+metric].abs().max()
+        df = df.loc[:, ['index', 'diff_'+metric, 'aug_'+metric, 'bas_'+metric]]
+        if df_metrics is None:
+            df_metrics = df
+        else: 
+            df_metrics  = df_metrics.merge(df, on = 'index', how = 'left')
+
+    return df_metrics
+
+
+
+def eng_math_diff_multiple(df_augmented, base_aug_dict, metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']):
+    df_ls = []
+    for aug_matrix, pairs in base_aug_dict.items():
+        n_cols = 4  # Always use 4 columns
+        n_pairs = len(pairs)
+        n_rows = int(np.ceil(n_pairs / n_cols))
+        
+        # Create figure with 2 rows per pair: one for boxplots, one for histograms
+        fig, axes = plt.subplots(2 * n_rows, n_cols, figsize=(n_cols*5, 6*n_rows))
+        if n_rows == 1:
+            axes = axes.reshape(2, n_cols)  # Make it 2D array if only one row
+        
+        for idx, (base, aug) in enumerate(pairs):
+            row = idx // n_cols
+            col = idx % n_cols
+            
+            df = eng_math_diff(df_augmented, base, aug, metrics = metrics)
+            df['base'] = base
+            df['aug'] = aug
+            df['aug_matrix'] = aug_matrix
+            df_ls.append(df)
+
+            # --- Boxplot in first row ---
+            diff_df = pd.DataFrame()
+            for metric in metrics:
+                diff_df[metric] = df['diff_'+metric]
+            
+            box = axes[2*row, col].boxplot(
+                [diff_df[col] for col in diff_df.columns],
+                labels=diff_df.columns,
+                showfliers=False,
+                patch_artist=False  # No fill, just lines
+            )
+            for i, metric in enumerate(diff_df.columns):
+                color = 'black' if metric == aug_matrix else 'grey'
+                # Set box color
+                for line in [
+                    box['boxes'][i],
+                    box['whiskers'][2*i], box['whiskers'][2*i+1],
+                    box['caps'][2*i], box['caps'][2*i+1],
+                    box['medians'][i]
+                ]:
+                    line.set_color(color)
+                    line.set_linewidth(1)
+            axes[2*row, col].set_ylim(-5, 5)
+            axes[2*row, col].axhline(0, color='black', linewidth=0.5)
+            axes[2*row, col].set_title(f'{base}\n→\n{aug}', pad=20)
+            if col == 0:  # Only add ylabel to first subplot
+                axes[2*row, col].set_ylabel('Difference')
+            
+            # --- Histogram in second row ---
+            aug_stat = df['aug_'+aug_matrix].values.tolist()
+            bas_stat = df['bas_'+aug_matrix].values.tolist()
+            axes[2*row+1, col].hist(aug_stat, bins=20, alpha=0.5, label='Augmented')
+            axes[2*row+1, col].hist(bas_stat, bins=20, alpha=0.5, label='Base')
+            axes[2*row+1, col].set_xlabel(aug_matrix)
+            if col == 0:
+                axes[2*row+1, col].set_ylabel('Count')
+            axes[2*row+1, col].legend()
+        
+        # Hide any empty subplots
+        total_plots = n_rows * n_cols
+        for idx in range(n_pairs, total_plots):
+            row = idx // n_cols
+            col = idx % n_cols
+            axes[2*row, col].axis('off')
+            axes[2*row+1, col].axis('off')
+        
+        plt.tight_layout()
+        plt.show()
+    res_df = pd.concat(df_ls)
+    return res_df
+
+
+
+
+
+
 
 

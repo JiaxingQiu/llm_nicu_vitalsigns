@@ -7,6 +7,8 @@ import os
 import numpy as np
 from joblib import Parallel, delayed
 import multiprocessing
+import gc
+from tqdm import tqdm
 
 # Enable automatic conversion between numpy and R arrays
 numpy2ri.activate()
@@ -96,8 +98,6 @@ def generate_descriptions_parallel(ts_df, id_df, type=2):
         events80 = describe_brady_events(x, th=80, plot=False, type=type)
         events90 = describe_brady_events(x, th=90, plot=False, type=type)
         events100 = describe_brady_events(x, th=100, plot=False, type=type)
-        # # Clear R objects after processing each row
-        # ro.r('gc()')
         return {
             'succ_inc': succ_inc,
             'succ_unc': succ_unc,
@@ -108,13 +108,38 @@ def generate_descriptions_parallel(ts_df, id_df, type=2):
     # determine the number of cores to use by checking the number of available cores
     try:
         total_cores = multiprocessing.cpu_count()
-        n_cores = max(1, int(total_cores * 0.75)) 
+        n_cores = max(1, int(total_cores * 0.5)) 
     except:
         n_cores = 4
-    # Process all rows in parallel
-    results = Parallel(n_jobs=n_cores, verbose=1)(
-        delayed(process_row)(row) for _, row in ts_df.iterrows()
-    )
+
+    # # Process all rows in parallel
+    # results = Parallel(n_jobs=n_cores, verbose=1)(
+    #     delayed(process_row)(row) for _, row in ts_df.iterrows()
+    # )
+    # Set up batch processing
+    batch_size = 500  # Adjust based on your system's memory
+    results = []
+    
+    # Calculate total number of batches for progress bar
+    n_batches = (len(ts_df) + batch_size - 1) // batch_size
+    parallel = Parallel(n_jobs=n_cores, batch_size=10, prefer='processes')  # Send 10 tasks to each worker at a time
+    
+    # Process in batches with progress bar
+    for batch_start in tqdm(range(0, len(ts_df), batch_size), 
+                          total=n_batches,
+                          desc="Processing descriptions"):
+        batch_end = min(batch_start + batch_size, len(ts_df))
+        batch_df = ts_df.iloc[batch_start:batch_end]
+        
+        # Process batch in parallel
+        batch_results = parallel(
+            delayed(process_row)(row) for _, row in batch_df.iterrows()
+        )
+        results.extend(batch_results)
+        
+        # Force garbage collection after each batch
+        gc.collect()
+    
     # Extract results
     df_desc['description_succ_inc'] = [r['succ_inc'] for r in results]
     df_desc['description_succ_unc'] = [r['succ_unc'] for r in results]
