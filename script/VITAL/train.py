@@ -102,11 +102,13 @@ def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_la
     
     elif train_type == 'vae':
         reconstruction_loss = alpha * compute_reconstruction_loss(ts, ts_hat)
-        kl_loss = beta * compute_kl_loss(mean, log_var)
+        kl_loss = beta * compute_kl_loss(mean, log_var)  
         loss = reconstruction_loss + kl_loss
     
     elif train_type == 'clip':
-        loss = compute_clip_loss(logits, labels, targets, target_type)
+        clip_loss = compute_clip_loss(logits, labels, targets, target_type)
+        kl_loss = beta * compute_kl_loss(mean, log_var)
+        loss = clip_loss + kl_loss
     
     else:
         raise ValueError(f"Invalid model type: {train_type}")
