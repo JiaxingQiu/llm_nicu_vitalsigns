@@ -115,9 +115,9 @@ def generate_noise_series(
             description = "The time series exhibits low variability."
         elif noise_type == 'high variability':
             if stationary:
-                series = generate_noise(length=L, noise_std_range=(0.5, 1))
+                series = generate_noise(length=L, noise_std_range=(1.5, 2))
             else:
-                series = generate_nonstationary_noise(length=L, noise_std_range=(0.5, 1))
+                series = generate_nonstationary_noise(length=L, noise_std_range=(1.5, 2))
             description = "The time series exhibits high variability."
         else:
             raise ValueError(f"Unknown noise type: {noise_type}")

@@ -279,6 +279,7 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
     return ts_hat_ls, raw_ts
 
 
+
 def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_values=None, 
                                        label = True, plot = False, b=200, ep=1, ylims = None):
     if w_values is None:
@@ -290,7 +291,7 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
                                          w=0, # reconstruction only on ground truth text condition
                                          label = False, plot = plot, b=b, ep=ep)
     
-    # Collect all results first
+    # ------------------------- Collect all results first -------------------------
     all_results = {}
     for w in w_values:
         ts_hats, _ = interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, 
@@ -299,17 +300,31 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
         all_results[w] = {'ts_hats': {k: v for k, v in ts_hats.items()}}
         torch.cuda.empty_cache()
     
+    # --------- NEW: Compute global min/max across all text_conditions and w ---------
+    global_min, global_max = float('inf'), float('-inf')
     for text_condition in list(ts_hats.keys()):
+        for w in w_values:
+            if w in all_results:
+                ts_hats = all_results[w]['ts_hats']
+                ts_hat = ts_hats[text_condition]
+                global_min = min(global_min, ts_hat.min().item())
+                global_max = max(global_max, ts_hat.max().item())
+    # Also include raw_ts in global min/max
+    global_min = min(global_min, raw_ts.min())
+    global_max = max(global_max, raw_ts.max())
+
+    white_space = np.round((global_max - global_min) * 0.1, 2)
+    if ylims is None:
+        ylims = (global_min - white_space, global_max + white_space)
+    # ------------------------------------------------------------------------------
+    for text_condition in list(ts_hats.keys()):
+        
         n_cols = 5
         n_rows = int(np.ceil(len(w_values) / n_cols))
         fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols*4, n_rows*4))
         fig.suptitle(f'Augmenting towards: {text_condition}', fontsize=18)
         if n_rows == 1:
             axs = axs.reshape(1, -1)
-
-        # Calculate global y-limits for all plots
-        global_min = float('inf')
-        global_max = float('-inf')
         
         for w in w_values:
             if w in all_results:
@@ -318,20 +333,7 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
                 ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0).numpy()
                 ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0).numpy()
                 ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0).numpy()
-                
-                # Update global min/max
-                for arr in [ts_hat_r, ts_hat_q, ts_hat_i]:
-                    global_min = min(global_min, arr.min())
-                    global_max = max(global_max, arr.max())
         
-        # Also include raw_ts in global min/max
-        global_min = min(global_min, raw_ts.min())
-        global_max = max(global_max, raw_ts.max())
-        
-        white_space = np.round((global_max - global_min) * 0.1, 2)
-        if ylims is None:
-            ylims = (global_min - white_space, global_max + white_space)
-
         # --- Plotting ---
         for idx, w in enumerate(w_values):
             row = idx // n_cols

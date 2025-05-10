@@ -40,7 +40,7 @@ def generate_no_seasonal(
 def generate_single_seasonal(
     length: int,
     period_range: Tuple[int, int] = (20, 50),
-    amplitude_range: Tuple[float, float] = (2, 8),
+    amplitude_range: Tuple[float, float] = (5, 10),
     phase_range: Tuple[float, float] = (0, 2*np.pi),
     noise_std: float = 0.05
 ) -> np.ndarray:
@@ -75,7 +75,7 @@ def generate_multiple_seasonal(
     length: int,
     k_range: Tuple[int, int] = (2, 4),  # number of seasonal patterns
     period_range: Tuple[int, int] = (20, 50),  # random sample from 1 to 10
-    amplitude_range: Tuple[float, float] = (1, 4),  # random sample from 0.1 to 1
+    amplitude_range: Tuple[float, float] = (2, 5),  # random sample from 0.1 to 1
     phase_range: Tuple[float, float] = (0, 2*np.pi),  # random sample from 0 to 2*pi
     noise_std: float = 0.05
 ) -> np.ndarray:

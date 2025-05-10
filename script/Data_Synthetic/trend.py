@@ -46,7 +46,7 @@ def generate_linear_trend(
 def generate_quadratic_trend(
     length: int,
     a_range: Tuple[float, float] = (0.01, 1),
-    b_range: Tuple[float, float] = (0, 5),
+    b_range: Tuple[float, float] = (-0.1, 0.1),
     c_range: Tuple[float, float] = (0, 10),
     direction: Optional[str] = None,
     ensure_non_negative: bool = True

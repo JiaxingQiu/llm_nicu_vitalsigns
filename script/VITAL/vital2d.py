@@ -6,7 +6,6 @@ from torchinfo import summary as nn_summary
 from config import *
 from model_utils.encoder import *
 from model_utils.decoder import *
-import math
 
 # VITAL model (2d)
 class VITAL(nn.Module):
@@ -14,7 +13,6 @@ class VITAL(nn.Module):
                  ts_dim: int, 
                  text_dim: int, 
                  output_dim: int,
-                 temperature: float = 0.01,
                  beta: float = 1.0,
                  ts_encoder = None,
                  text_encoder = None,
@@ -28,7 +26,6 @@ class VITAL(nn.Module):
             ts_dim: Input time series dimension
             text_dim: Input text embedding dimension
             output_dim: Latent space dimension
-            temperature: Temperature for similarity scaling
             beta: Weight for VAE loss
             ts_encoder: Optional custom time series encoder
             text_encoder: Optional custom text encoder
@@ -51,7 +48,6 @@ class VITAL(nn.Module):
         self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = decode_dim, decoder_layers = ts_decoder)
         
         
-        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / temperature))
         self.device = device
         self.beta = beta
         self.clip_mu = clip_mu
@@ -63,7 +59,7 @@ class VITAL(nn.Module):
     def clip(self, ts_embedded, text_embedded):
         # ts_embedded = F.normalize(ts_embedded, dim=1)
         # text_embedded = F.normalize(text_embedded, dim=1)
-        logits = torch.matmul(ts_embedded, text_embedded.T) #* torch.exp(self.temperature)
+        logits = torch.matmul(ts_embedded, text_embedded.T) 
         return logits
     
     def forward(self, ts, text_features):
@@ -132,24 +128,30 @@ class TSVAEEncoder(nn.Module):
         self.local_norm = LocalNorm()
         if encoder_layers is None:
             # default encoder layers
-            self.encoder_layers = nn.Sequential(
-                MultiLSTMEncoder(
-                    ts_dim=ts_dim, 
-                    output_dim=256,
-                    hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
-                    num_layers=2,
-                    dropout=0,
-                    bidirectional=False,
-                    mask=0  # mask 0 with 0 to suppress the effect of masked values
-                ),
-                nn.LayerNorm(256),  # Add LayerNorm at the end
-                nn.Linear(256, 512),
-                nn.LeakyReLU(0.2),
-                nn.LayerNorm(512),
-                nn.Linear(512, output_dim),
-                nn.LeakyReLU(0.2),
-                nn.LayerNorm(output_dim)
-            )
+            self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
+                                                    output_dim=output_dim,
+                                                    kernel_sizes=[150, 100, 50, 10],
+                                                    hidden_num_channel=16,
+                                                    dropout=0)
+            # # old default encoder layers
+            # nn.Sequential(
+            #     MultiLSTMEncoder(
+            #         ts_dim=ts_dim, 
+            #         output_dim=256,
+            #         hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
+            #         num_layers=2,
+            #         dropout=0,
+            #         bidirectional=False,
+            #         mask=0  # mask 0 with 0 to suppress the effect of masked values
+            #     ),
+            #     nn.LayerNorm(256),  # Add LayerNorm at the end
+            #     nn.Linear(256, 512),
+            #     nn.LeakyReLU(0.2),
+            #     nn.LayerNorm(512),
+            #     nn.Linear(512, output_dim),
+            #     nn.LeakyReLU(0.2),
+            #     nn.LayerNorm(output_dim)
+            # )
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
@@ -186,18 +188,25 @@ class TSVAEDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
         if decoder_layers is None:
-            self.decoder = nn.Sequential(
-                nn.Linear(output_dim+2, 256), # 2 for x_mean and x_std
-                nn.LeakyReLU(0.2),
-                nn.Linear(256, 256),
-                nn.LeakyReLU(0.2),
-                nn.Linear(256, ts_dim)
-            )
+            self.decoder = TransformerDecoder(ts_dim = ts_dim, 
+                                              output_dim = output_dim, 
+                 nhead = 8,
+                 num_layers = 6,
+                 dim_feedforward = 512,
+                 dropout = 0.0)
+            # # old default decoder layers
+            # nn.Sequential(
+            #     nn.Linear(output_dim, 256), # +2 2 for x_mean and x_std
+            #     nn.LeakyReLU(0.2),
+            #     nn.Linear(256, 256),
+            #     nn.LeakyReLU(0.2),
+            #     nn.Linear(256, ts_dim)
+            # )
         else:
             self.decoder = decoder_layers
     
     def forward(self, z, x_mean, x_std):
-        z = torch.cat([z, x_mean, x_std], dim=1)
+        # z = torch.cat([z, x_mean, x_std], dim=1) # can help the decoder to learn faster but not good for reconstruct shift means
         x_hat = self.decoder(z)
         # # scale back to raw scale
         # x_hat = x_hat * x_std + x_mean
@@ -218,7 +227,13 @@ class TextEncoder(nn.Module):
         """
         super().__init__()
         if encoder_layers is None:
-            self.encoder_layers = TextEncoderMLP(text_dim, output_dim)
+            self.encoder_layers = TextEncoderMultiCNN(text_dim = text_dim,
+                                   output_dim=output_dim,
+                                   kernel_sizes=[768, 384, 192],  # Different context windows
+                                   hidden_num_channel=16,
+                                   dropout=0.0)
+            # # old default encoder layers
+            # TextEncoderMLP(text_dim, output_dim)
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         

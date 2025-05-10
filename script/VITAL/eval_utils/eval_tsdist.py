@@ -1,9 +1,7 @@
 # Suppress warnings
 import warnings
 warnings.filterwarnings('ignore')
-
-
-from tslearn.metrics import dtw, lcss
+from tslearn.metrics import dtw, lcss, cdist_dtw
 from joblib import Parallel, delayed
 import multiprocessing
 from tqdm import tqdm
@@ -12,8 +10,76 @@ import gc
 import matplotlib.pyplot as plt
 import pandas as pd
 from generation import interpolate_ts_tx
+from numpy.lib.stride_tricks import sliding_window_view   # NumPy ≥ 1.20
 
-def calculate_distances_parallel(ref_ts_list, aug_ts_list, n_jobs=None, standardize=True):
+def _split_patches(ts, *, n_patches=8):
+    ts = np.ascontiguousarray(ts)   # uniform stride‑layout
+    n  = ts.size
+    if n_patches <= 0:
+        raise ValueError("n_patches must be positive")
+
+    patch_len = max(1, n // n_patches)          # floor division
+    # Build a 2‑D view of all length‑patch_len windows, then hop by patch_len
+    view = sliding_window_view(ts, patch_len)[::patch_len]
+    return [view[i] for i in range(view.shape[0])]
+
+
+# # patchify
+# def _split_patches(ts, patch_len=None, step=None):
+#     ts = np.asarray(ts)
+#     n  = len(ts)
+#     patch_len = n // 4 if patch_len is None else int(patch_len)
+#     step      = n // 8 if step      is None else int(step)
+#     patch_len = max(1, patch_len)
+#     step      = max(1, step)
+#     if patch_len > n:
+#         raise ValueError("patch_len cannot exceed series length")
+#     return [ts[i : i + patch_len] for i in range(0, n - patch_len + 1, step)]
+
+def _patch_lcss(ref_p, aug_p): # lcss similarity
+    mat = np.zeros((len(ref_p), len(aug_p)))
+    for r, rp in enumerate(ref_p):
+        for a, ap in enumerate(aug_p):
+            mat[r, a] = lcss(rp, ap)
+    return np.median(mat) 
+
+def _patch_dtw(ref_p, aug_p, n_jobs=None):
+    ref_arr = np.vstack(ref_p)        # shape (n_ref_p, patch_len)
+    aug_arr = np.vstack(aug_p)        # shape (n_aug_p, patch_len)
+    mat = cdist_dtw(ref_arr, aug_arr,
+                    n_jobs=n_jobs,
+                    verbose=0)        # still returns *distances*
+    return np.median(mat)
+
+def _patch_mse(ref_p, aug_p):
+    """Median patch‑level mean‑squared‑error."""
+    ref_arr = np.vstack(ref_p)          # (R, L)
+    aug_arr = np.vstack(aug_p)          # (A, L)
+    diff    = ref_arr[:, None, :] - aug_arr[None, :, :]
+    mse     = np.mean(diff ** 2, axis=-1)   # (R, A)
+    return np.median(mse)
+
+
+def _process_pair(i, j, ref_ts, aug_ts, n_patches):
+    """Return DTW‑similarity, LCSS‑similarity, MSE‑similarity for one pair."""
+    if n_patches is None:                 # ── global comparison ──
+        dtw_dist  = dtw(ref_ts, aug_ts)
+        lcss_simi = lcss(ref_ts, aug_ts)          # already similarity
+        mse_dist  = np.mean((ref_ts - aug_ts) ** 2)
+    else:                                 # ── patch‑wise comparison ──
+        ref_p = _split_patches(ref_ts, n_patches=n_patches)
+        aug_p = _split_patches(aug_ts, n_patches=n_patches)
+        dtw_dist  = _patch_dtw(ref_p,  aug_p)
+        lcss_simi = _patch_lcss(ref_p, aug_p)
+        mse_dist  = _patch_mse(ref_p,  aug_p)
+
+    dtw_simi = 1 / (1 + dtw_dist)         # convert distance → similarity
+    mse_simi = 1 / (1 + mse_dist)
+    return i, j, dtw_simi, lcss_simi, mse_simi
+
+
+
+def calculate_similarity_parallel(ref_ts_list, aug_ts_list, n_jobs=None, n_patches=None):
     """
     Calculate DTW and LCSS distance matrices between reference and augmented time series in parallel.
     
@@ -21,6 +87,7 @@ def calculate_distances_parallel(ref_ts_list, aug_ts_list, n_jobs=None, standard
         ref_ts_list (list): List of reference time series
         aug_ts_list (list): List of augmented time series
         n_jobs (int): Number of parallel jobs. If None, uses 70% of available CPUs.
+        patch_params (dict): Dictionary with keys 'patch_len' and 'step'. If None, no patching is done.
         
     Returns:
         tuple: (dtw_matrix, lcss_matrix, dtw_summaries, lcss_summaries)
@@ -33,89 +100,37 @@ def calculate_distances_parallel(ref_ts_list, aug_ts_list, n_jobs=None, standard
     n_aug = len(aug_ts_list)
     dtw_matrix = np.zeros((n_ref, n_aug))
     lcss_matrix = np.zeros((n_ref, n_aug))
-    
-    def process_pair(args, standardize=standardize):
-        i, j, ref_ts, aug_ts = args # ref_ts and aug_ts are 1-d numpy arrays
-        if standardize:
-            ref_ts = (ref_ts - ref_ts.mean()) / ref_ts.std()
-            aug_ts = (aug_ts - aug_ts.mean()) / aug_ts.std()
-        dtw_dist = dtw(ref_ts, aug_ts)
-        lcss_dist = lcss(ref_ts, aug_ts)
-        return i, j, dtw_dist, lcss_dist
-    
-    # Prepare arguments for parallel processing
-    args_list = []
-    for i, ref_ts in enumerate(ref_ts_list):
-        for j, aug_ts in enumerate(aug_ts_list):
-            args_list.append((i, j, ref_ts, aug_ts))
-    
-    # Process in parallel
-    results = Parallel(n_jobs=n_jobs)(
-        delayed(process_pair)(args) for args in tqdm(args_list, desc="Calculating distances")
+    mse_matrix = np.zeros((n_ref, n_aug))
+
+    jobs = [(i, j, ref_ts, aug_ts, n_patches)
+            for i, ref_ts in enumerate(ref_ts_list)
+            for j, aug_ts in enumerate(aug_ts_list)]
+
+    results = Parallel(n_jobs=n_jobs, backend="loky")(
+        delayed(_process_pair)(*job) for job in tqdm(jobs, desc="Similarity")
     )
-    # # Process in parallel with batch size to reduce overhead
-    # batch_size = 500  # Adjust this based on your system's memory
-    # results = []
+
+    # collect results
+    for i, j, dtw_simi, lcss_simi, mse_simi in results:
+        dtw_matrix[i, j] = dtw_simi
+        lcss_matrix[i, j] = lcss_simi
+        mse_matrix[i, j] = mse_simi
     
-    # # Calculate total number of batches for progress bar
-    # n_batches = (len(args_list) + batch_size - 1) // batch_size
-    # parallel = Parallel(n_jobs=n_jobs, batch_size=1, prefer='processes')  # Send 10 tasks to each worker at a time
-    
-    # # Process in batches with progress bar
-    # for batch_start in tqdm(range(0, len(args_list), batch_size), 
-    #                       total=n_batches,
-    #                       desc="Calculating distances"):
-    #     batch_end = min(batch_start + batch_size, len(args_list))
-    #     batch = args_list[batch_start:batch_end]
-        
-    #     # Process batch in parallel
-    #     batch_results = parallel(
-    #         delayed(process_pair)(args) for args in batch
-    #     )
-    #     results.extend(batch_results)
-        
-    #     # Force garbage collection after each batch
-    #     gc.collect()
-    
-    # Fill the matrices
-    for i, j, dtw_dist, lcss_dist in results:
-        dtw_matrix[i, j] = dtw_dist
-        lcss_matrix[i, j] = lcss_dist
-    
-    # Create summaries for each augmented time series
-    dtw_summaries = []
-    lcss_summaries = []
-    
-    for j in range(n_aug):
-        # DTW summary for j-th augmented time series
-        dtw_summary = {
-            'mean': np.round(dtw_matrix[:, j].mean(), 4),
-            'std': np.round(dtw_matrix[:, j].std(), 4),
-            'min': np.round(dtw_matrix[:, j].min(), 4),
-            'max': np.round(dtw_matrix[:, j].max(), 4),
-            'q5': np.round(np.quantile(dtw_matrix[:, j], 0.05), 4),
-            'q25': np.round(np.quantile(dtw_matrix[:, j], 0.25), 4),
-            'q50': np.round(np.quantile(dtw_matrix[:, j], 0.5), 4),
-            'q75': np.round(np.quantile(dtw_matrix[:, j], 0.75), 4),
-            'q95': np.round(np.quantile(dtw_matrix[:, j], 0.95), 4)
+    # summaries (unchanged)
+    def _summ(col):
+        return {
+            'mean': col.mean().round(4),
+            'std' : col.std().round(4),
+            'min' : col.min().round(4),
+            'max' : col.max().round(4),
+            **{f"q{p}": np.quantile(col, p/100).round(4)
+               for p in (5, 25, 50, 75, 95)}
         }
-        dtw_summaries.append(dtw_summary)
-        
-        # LCSS summary for j-th augmented time series
-        lcss_summary = {
-            'mean': np.round(lcss_matrix[:, j].mean(), 4),
-            'std': np.round(lcss_matrix[:, j].std(), 4),
-            'min': np.round(lcss_matrix[:, j].min(), 4),
-            'max': np.round(lcss_matrix[:, j].max(), 4),
-            'q5': np.round(np.quantile(lcss_matrix[:, j], 0.05), 4),
-            'q25': np.round(np.quantile(lcss_matrix[:, j], 0.25), 4),
-            'q50': np.round(np.quantile(lcss_matrix[:, j], 0.5), 4),
-            'q75': np.round(np.quantile(lcss_matrix[:, j], 0.75), 4),
-            'q95': np.round(np.quantile(lcss_matrix[:, j], 0.95), 4)
-        }
-        lcss_summaries.append(lcss_summary)
-    
-    return dtw_matrix, lcss_matrix, dtw_summaries, lcss_summaries
+    dtw_summaries  = [_summ(dtw_matrix[:, j])  for j in range(n_aug)]
+    lcss_summaries = [_summ(lcss_matrix[:, j]) for j in range(n_aug)]
+    mse_summaries = [_summ(mse_matrix[:, j]) for j in range(n_aug)]
+
+    return dtw_matrix, lcss_matrix, mse_matrix, dtw_summaries, lcss_summaries, mse_summaries
 
 
 def _stratified_bootstrap(group, b):
@@ -123,10 +138,37 @@ def _stratified_bootstrap(group, b):
     replace = n < b
     return group.sample(n=b, replace=replace, random_state=333)
 
-def eval_ts_distances(df, # df can be df_train / df_test
+def _scale_to_range(ts, ths=(None, None)):
+    if ths[0] is None and ths[1] is None:
+        return ts
+    
+    # Convert tuple to list for modification
+    ths_list = list(ths)
+    
+    # Get current min and max
+    current_min = ts.min()
+    current_max = ts.max()
+        
+    # Scale to [0,1] first
+    ts_scaled = (ts - current_min) / (current_max - current_min)
+    if ths_list[0] is None:
+        ths_list[0] = current_min 
+    if ths_list[1] is None:
+        ths_list[1] = current_max
+    # Then scale to desired range
+    ts_final = ts_scaled * (ths_list[1] - ths_list[0]) + ths_list[0]
+    
+    return ts_final
+
+
+def eval_ts_similarity(df, # df can be df_train / df_test
                       model, config_dict, w,  y_col, 
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
-                      b=200):
+                      b=200,
+                      standardize=False,
+                      ths = (None, None),
+                      round_to = 4,
+                      n_patches=None):
     
     if conditions is not None:
         for condition in conditions:
@@ -173,14 +215,38 @@ def eval_ts_distances(df, # df can be df_train / df_test
             ref_df = df[df[y_col] == ref_text]   
             ref_ts_list = [ref_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(ref_df))]
 
-            _, _, dtw_aug2tgt, lcss_aug2tgt = calculate_distances_parallel(aug_ts_list, tgt_ts_list)
-            _, _, dtw_ref2tgt, lcss_ref2tgt = calculate_distances_parallel(ref_ts_list, tgt_ts_list)
+            if standardize:
+                ref_ts_list = [(ref_ts - ref_ts.mean()) / ref_ts.std() for ref_ts in ref_ts_list]
+                aug_ts_list = [(aug_ts - aug_ts.mean()) / aug_ts.std() for aug_ts in aug_ts_list]
+            if ths[0] is not None or ths[1] is not None:
+                # ref_ts_list = [_scale_to_range(ref_ts, ths) for ref_ts in ref_ts_list]
+                aug_ts_list = [_scale_to_range(aug_ts, ths) for aug_ts in aug_ts_list]
+                # ref_ts_list = [ref_ts.clip(ths[0], ths[1]) for ref_ts in ref_ts_list]
+                # aug_ts_list = [aug_ts.clip(ths[0], ths[1]) for aug_ts in aug_ts_list]
+            if round_to is not None:
+                ref_ts_list = [np.round(ref_ts, round_to) for ref_ts in ref_ts_list]
+                aug_ts_list = [np.round(aug_ts, round_to) for aug_ts in aug_ts_list]
+            # plot 20 time series in aug_ts_list
+            fig, axs = plt.subplots(4, 5, figsize=(20, 8))
+            for i in range(20):
+                axs[i//5, i%5].plot(aug_ts_list[i], label='augmented', color='red')
+                axs[i//5, i%5].plot(tgt_ts_list[i], label='target', color='black')
+                axs[i//5, i%5].plot(ref_ts_list[i], label='original', color='darkgrey')
+                axs[i//5, i%5].legend()
+            plt.suptitle(ref_text+" -> "+aug_text, fontsize=15)
+            plt.tight_layout()
+            plt.show()
+
+            _, _, _, dtw_aug2tgt, lcss_aug2tgt, mse_aug2tgt = calculate_similarity_parallel(aug_ts_list, tgt_ts_list, n_patches=n_patches)
+            _, _, _, dtw_ref2tgt, lcss_ref2tgt, mse_ref2tgt = calculate_similarity_parallel(ref_ts_list, tgt_ts_list, n_patches=n_patches)
             
 
             aug_df['dtw_aug2tgt'] = dtw_aug2tgt
             aug_df['lcss_aug2tgt'] = lcss_aug2tgt
+            aug_df['mse_aug2tgt'] = mse_aug2tgt
             aug_df['dtw_ref2tgt'] = dtw_ref2tgt
             aug_df['lcss_ref2tgt'] = lcss_ref2tgt
+            aug_df['mse_ref2tgt'] = mse_ref2tgt
             aug_df_all = pd.concat([aug_df_all, aug_df], ignore_index=True)
 
         aug_df_all['ref_y_col'] = y_col
@@ -195,7 +261,7 @@ def eval_ts_distances(df, # df can be df_train / df_test
 def eng_dists(df_dist, 
               ref_y_level, 
               aug_y_level, 
-              metrics = ['lcss', 'dtw'], 
+              metrics = ['lcss', 'dtw', 'mse'], 
               plot = False):
     import matplotlib.pyplot as plt
    
@@ -266,7 +332,7 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss'):
                 ]:
                     line.set_color(color)
                     line.set_linewidth(1)
-            axes[2*row, col].set_ylim(-1, 1)
+            # axes[2*row, col].set_ylim(-1, 1)
             axes[2*row, col].axhline(0, color='black', linewidth=0.5)
             axes[2*row, col].set_title(f'{ref}\n→\n{aug}', pad=20)
             if col == 0:  # Only add ylabel to first subplot
@@ -293,7 +359,7 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss'):
                 ]:
                     line.set_color(color)
                     line.set_linewidth(1)
-            axes[2*row+1, col].set_ylim(-0.1, 1)
+            # axes[2*row+1, col].set_ylim(-0.1, 1)
             axes[2*row+1, col].axhline(box_df['reference'].median(), color='black', linewidth=0.5)
             if col == 0:  # Only add ylabel to first subplot
                 axes[2*row+1, col].set_ylabel(metric + ' similarity')

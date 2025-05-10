@@ -18,9 +18,9 @@ if overwrite or not os.path.exists(model_path):
         cooldown=20          
     )
 
-    kl_annealer = KLAnnealer(start=0.0, 
-                                end=0.0, 
-                                epochs=10000) # for the first 1000 epochs, favor reconstruction more
+    # kl_annealer = KLAnnealer(start=0.0, 
+    #                             end=0.0, 
+    #                             epochs=10000) # for the first 1000 epochs, favor reconstruction more
 
     
     for i in range(config_dict['num_saves']):  
@@ -29,11 +29,11 @@ if overwrite or not os.path.exists(model_path):
                                                         test_dataloader, 
                                                         optimizer, 
                                                         scheduler,
-                                                        kl_annealer,
                                                         num_epochs = config_dict['num_epochs'], 
                                                         target_type = config_dict['clip_target_type'],
                                                         train_type = config_dict['train_type'],
-                                                        alpha_init = config_dict['alpha'])
+                                                        alpha = config_dict['alpha'],
+                                                        beta = config_dict['beta'])
         train_losses = train_losses + train_losses_tmp
         test_losses = test_losses + test_losses_tmp
         # every num_epochs, evaluate the model
@@ -108,26 +108,26 @@ if overwrite or not os.path.exists(model_path):
                 print(f"Error plot network embedding for {y_col}")
                 continue
         
-        
-        # Eval VAE
-        # plot_reconstructions(model, 
-        #                     df=df_train, 
-        #                     config_dict = config_dict, 
-        #                     text_col_ls = config_dict['text_col_ls'],
-        #                     title="Training Data Reconstructions")
-        plot_reconstructions(model, 
-                            df=df_test, 
-                            config_dict = config_dict, 
-                            text_col_ls = config_dict['text_col_ls'],
-                            title="Test Data Reconstructions")
-        # distances = [0, 0.1, 0.25, 0.3, 0.6]
-        # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-        # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-        
-        # Eval Generation
-        if len(config_dict['txt2ts_y_cols'])<3:
-            # viz_generation_conditional(df_train, model, config_dict)
-            viz_generation_conditional(df_test, model, config_dict)
+        if config_dict['train_type'] != 'clip':
+            # Eval VAE
+            # plot_reconstructions(model, 
+            #                     df=df_train, 
+            #                     config_dict = config_dict, 
+            #                     text_col_ls = config_dict['text_col_ls'],
+            #                     title="Training Data Reconstructions")
+            plot_reconstructions(model, 
+                                df=df_test, 
+                                config_dict = config_dict, 
+                                text_col_ls = config_dict['text_col_ls'],
+                                title="Test Data Reconstructions")
+            # distances = [0, 0.1, 0.25, 0.3, 0.6]
+            # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+            # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
+            
+            # Eval Generation
+            if len(config_dict['txt2ts_y_cols'])<3:
+                # viz_generation_conditional(df_train, model, config_dict)
+                viz_generation_conditional(df_test, model, config_dict)
     
         
 else:

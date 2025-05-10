@@ -90,8 +90,8 @@ def generate_step_spike(
     base_value: float = 0.0,
     noise_std: float = 0.05,
     sign: int = 1,
-    step_magnitude_range: Tuple[float, float] = (2.0, 10.0),
-    step_duration_range: Tuple[int, int] = (10, 50)
+    step_magnitude_range: Tuple[float, float] = (25.0, 30.0),
+    step_duration_range: Tuple[int, int] = (50, 100)
 ) -> np.ndarray:
     """
     Generate a time series with a step spike (persistent change).
@@ -125,7 +125,7 @@ def generate_level_shift(
     base_value: float = 0.0,
     noise_std: float = 0.05,
     sign: int = 1,
-    shift_magnitude_range: Tuple[float, float] = (2.0, 10.0)
+    shift_magnitude_range: Tuple[float, float] = (25.0, 30.0)
 ) -> np.ndarray:
     """
     Generate a time series with a level shift (persistent change).
@@ -191,6 +191,8 @@ def generate_outlier_series(
         else:
             raise ValueError(f"Unknown outlier type: {outlier_type}")
         
+        # center the series at zero 
+        series = series - np.mean(series)
         series_list.append(series)
         description_list.append(description)
     

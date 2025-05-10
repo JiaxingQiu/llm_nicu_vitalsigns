@@ -72,7 +72,7 @@ config_dict = {
     
 
     # Data loader settings
-    'batch_size': 2048,
+    'batch_size': 512,
     'text_encoder_name': 'sentence-transformers/paraphrase-mpnet-base-v2',#'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_global_normalize': False, 
@@ -84,7 +84,7 @@ config_dict = {
     # Model settings
     'model_name': 'hey_you_forget_to_name_your_model',
     '3d': False, # **{'3d': False/True} to change in update_config
-    'embedded_dim': 512,
+    'embedded_dim': 768,
     'model_init': None,
     'concat_embeddings': False,
     'clip_mu': False,
@@ -94,10 +94,11 @@ config_dict = {
 
     # Training settings
     'init_lr': 1e-4,
-    'patience': 200,
-    'num_saves': 20,
-    'num_epochs': 500,
-    'alpha': None,
+    'patience': 500,
+    'num_saves': 10,
+    'num_epochs': 1000,
+    'alpha': 1/1000, # weight of reconstruction loss
+    'beta': 1.0, # weight of kl loss
     
     # Text configuration
     'text_config': text_config

@@ -1,3 +1,9 @@
+
+# ------------------------------------------------------------------
+# mix time series without ground truth (large-random synthetic dataset)
+# ------------------------------------------------------------------
+
+
 # utilities to mix attributes of time series and text 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -73,6 +79,8 @@ def mix_multiple_tstxt(df, config_dict, text_ls, weights=None, n=None, plot=Fals
     # Set default weights if not provided
     if weights is None:
         weights = [1.0] * len(text_ls)
+    # normalize the weights
+    weights = [w / sum(weights) for w in weights]
     
     # Get dataframes for each text
     dfs = [df[df.text == text].reset_index(drop=True) for text in text_ls]
@@ -165,7 +173,7 @@ def mix_w_counter(df, config_dict, n=None, plot=False):
                                    weights=weights,
                                    n=n,
                                    plot=plot)
-        df_mixed = pd.concat([df_mixed, df_sub])
+        df_mixed = pd.concat([df_mixed, df_sub], ignore_index=True)
     
     return df_mixed
 
@@ -173,3 +181,111 @@ def mix_w_counter(df, config_dict, n=None, plot=False):
 # for comb in combinations(text_pairs, 2):
 #     print(comb)
 #     print(list(product(*comb)))
+
+
+
+
+
+# ------------------------------------------------------------------
+# mix time series with ground truth
+# ------------------------------------------------------------------
+
+# mix time series with ground truth
+def mix_multiple_tstxt_gt(df, config_dict, id_dict, text_ls, weights, plot = False):
+    # normalize the weights
+    weights = [w / sum(weights) for w in weights]
+    ts_cols = [str(i) for i in range(1, config_dict['seq_length']+1)]
+    # dfs = [df[df['id'].isin(id_dict[text])].reset_index(drop=True) for text in text_ls] # not mapping correctly to the id_dict
+    dfs = []
+    for text in text_ls:
+        ids = id_dict[text]
+        df_sub = (
+            df.set_index("id")         # make id the index
+            .loc[ids]                 # pull rows **in that order**
+            .reset_index()            # restore id as a column
+        )
+        dfs.append(df_sub)
+    series_all = [df[ts_cols].values for df in dfs]
+    series_centered = [(s - s.mean(axis=1, keepdims=True)) for s in series_all] # center all series at once
+    mixed_series = np.zeros_like(series_centered[0])
+    for s, w in zip(series_centered, weights):
+        mixed_series += w * s
+    description = ' '.join(text_ls)
+    descriptions = [description] * len(id_dict[text_ls[0]])
+    # Plot first 10 examples if requested
+    if plot:
+        for i in range(min(2, len(id_dict[text_ls[0]]))):
+            plt.figure(figsize=(15, 5))
+            # Plot individual components
+            for j, s in enumerate(series_centered):
+                plt.plot(s[i], '--', linewidth=1, label=f'Series {j+1}')
+            # Plot mixed series
+            plt.plot(mixed_series[i], '-', linewidth=2, label='Mixed Series', color='black')
+            plt.title(description)
+            plt.legend()
+            plt.show()
+    df_mixed = pd.DataFrame(mixed_series, columns=ts_cols)
+    df_mixed['text'] = descriptions
+    for i, text in enumerate(text_ls):
+        df_mixed['segment'+str(i+1)] = text
+        df_mixed['segment'+str(i+1)+'_srcid'] = id_dict[text]
+    return df_mixed  
+        
+
+ 
+def mix_w_counter_gt(df, config_dict, id_dict, plot=False):
+    text_pairs = config_dict['text_config']['text_pairs']
+    n = config_dict['text_config']['n']
+    # Generate all possible combinations
+    from itertools import product
+    all_combinations = list(product(*text_pairs))
+    df_mixed = pd.DataFrame()
+    # for each comb
+    for comb in all_combinations:
+        # Extract texts and their corresponding weights
+        text_ls = [text for text, _ in comb]
+        weights = [weight for _, weight in comb]
+        df_sub = mix_multiple_tstxt_gt(df, config_dict, id_dict, text_ls, weights, plot = plot)
+        df_mixed = pd.concat([df_mixed, df_sub], ignore_index=True)
+  
+    return df_mixed
+
+
+def _split_id_dict(id_dict): 
+    id_dict_train, id_dict_test, id_dict_left = {}, {}, {}
+    for level, ids in id_dict.items():
+        n_total = len(ids)
+        n_train = int(0.7 * n_total)          # 70 %
+        n_test = int(0.2 * n_total)          # 20 %
+        # the remaining (≈10 %) go to test
+
+        id_dict_train[level] = ids[:n_train]
+        id_dict_test[level] = ids[n_train : n_train + n_test]
+        id_dict_left [level] = ids[n_train + n_test :]
+    return id_dict_train, id_dict_test, id_dict_left
+
+
+def gt_train_test_left(df, config_dict):
+    text_pairs = config_dict['text_config']['text_pairs']
+    n = config_dict['text_config']['n'] if config_dict['text_config']['n'] is not None else 300
+
+    # Generate id list for each level of attributes
+    id_dict = {}                     
+    for att_idx, att in enumerate(text_pairs):           
+        for level, weight in att:   
+            df_sub = df.loc[df["ts_description"] == level, ["id"]]
+            replace = n > len(df_sub)
+            sampled_ids = df_sub["id"].sample(n=n, replace=replace, random_state=config_dict['random_state']).tolist()  # reproducible
+            id_dict[level] = sampled_ids 
+
+    id_dict_train, id_dict_test, id_dict_left = _split_id_dict(id_dict)
+
+    # quick sanity‑check
+    print({k: (len(id_dict_train[k]), len(id_dict_test[k]), len(id_dict_left[k]))
+        for k in id_dict.keys()})
+
+    df_train = mix_w_counter_gt(df, config_dict, id_dict_train, plot=True)
+    df_test = mix_w_counter_gt(df, config_dict, id_dict_test)
+    df_left = mix_w_counter_gt(df, config_dict, id_dict_left)
+
+    return df_train, df_test, df_left

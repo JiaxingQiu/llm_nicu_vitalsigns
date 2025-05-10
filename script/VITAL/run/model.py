@@ -1,3 +1,12 @@
+
+# if encoder and decoder not defined otherwise, use the default ones
+if 'ts_encoder' not in locals():
+    ts_encoder = None
+if 'ts_decoder' not in locals():
+    ts_decoder = None
+if 'text_encoder' not in locals():
+    text_encoder = None
+
 # customize model
 if overwrite or not os.path.exists(model_path):  
     

@@ -549,7 +549,7 @@ def plot_ts(df, idx, len=300):
     ts = df.loc[idx, ts_cols].values
     
     # Create plot
-    plt.figure(figsize=(5, 3))
+    plt.figure(figsize=(10, 5))
     plt.plot(ts, 'b-', linewidth=2)
     plt.title(f'ID: {idx}, caption: {df.loc[idx, "text"]}')
     # plt.xlabel('Time (seconds)')
