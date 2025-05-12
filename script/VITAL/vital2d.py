@@ -190,7 +190,7 @@ class TSVAEDecoder(nn.Module):
         if decoder_layers is None:
             self.decoder = TransformerDecoder(ts_dim = ts_dim, 
                                               output_dim = output_dim, 
-                 nhead = 8,
+                 nhead = 4,
                  num_layers = 6,
                  dim_feedforward = 512,
                  dropout = 0.0)

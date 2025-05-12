@@ -149,10 +149,8 @@ def update_config(**kwargs):
 def get_config_dict():
     """Get current configuration"""
     
-    base_config = config_dict
-        
     # Create a copy to avoid modifying the original
-    config = base_config.copy()
+    config = config_dict.copy()
     
     # Validate y_levels and y_pred_levels match
     assert len(config['y_levels']) == len(config['y_pred_levels'])
@@ -170,6 +168,9 @@ def get_config_dict():
         y_pred_cols_ls = None
 
     config['y_pred_cols_ls'] = y_pred_cols_ls
+
+    if not config['variational']:
+        config['beta'] = 0.0 # no kl loss for non-variational models
 
     return config
 

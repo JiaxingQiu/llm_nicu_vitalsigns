@@ -59,6 +59,14 @@ def _patch_mse(ref_p, aug_p):
     mse     = np.mean(diff ** 2, axis=-1)   # (R, A)
     return np.median(mse)
 
+def _patch_mae(ref_p, aug_p):
+    """Median patch‑level mean‑squared‑error."""
+    ref_arr = np.vstack(ref_p)          # (R, L)
+    aug_arr = np.vstack(aug_p)          # (A, L)
+    diff    = ref_arr[:, None, :] - aug_arr[None, :, :]
+    mae     = np.mean(np.abs(diff), axis=-1)
+    return np.median(mae)
+
 
 def _process_pair(i, j, ref_ts, aug_ts, n_patches):
     """Return DTW‑similarity, LCSS‑similarity, MSE‑similarity for one pair."""
@@ -66,16 +74,18 @@ def _process_pair(i, j, ref_ts, aug_ts, n_patches):
         dtw_dist  = dtw(ref_ts, aug_ts)
         lcss_simi = lcss(ref_ts, aug_ts)          # already similarity
         mse_dist  = np.mean((ref_ts - aug_ts) ** 2)
+        mae_dist  = np.mean(np.abs(ref_ts - aug_ts))
     else:                                 # ── patch‑wise comparison ──
         ref_p = _split_patches(ref_ts, n_patches=n_patches)
         aug_p = _split_patches(aug_ts, n_patches=n_patches)
         dtw_dist  = _patch_dtw(ref_p,  aug_p)
         lcss_simi = _patch_lcss(ref_p, aug_p)
         mse_dist  = _patch_mse(ref_p,  aug_p)
-
+        mae_dist  = _patch_mae(ref_p,  aug_p)
     dtw_simi = 1 / (1 + dtw_dist)         # convert distance → similarity
-    mse_simi = 1 / (1 + mse_dist)
-    return i, j, dtw_simi, lcss_simi, mse_simi
+    # mse_simi = 1 / (1 + mse_dist)
+    # mae_simi = 1 / (1 + mae_dist)
+    return i, j, dtw_simi, lcss_simi, mse_dist, mae_dist
 
 
 
@@ -101,6 +111,7 @@ def calculate_similarity_parallel(ref_ts_list, aug_ts_list, n_jobs=None, n_patch
     dtw_matrix = np.zeros((n_ref, n_aug))
     lcss_matrix = np.zeros((n_ref, n_aug))
     mse_matrix = np.zeros((n_ref, n_aug))
+    mae_matrix = np.zeros((n_ref, n_aug))
 
     jobs = [(i, j, ref_ts, aug_ts, n_patches)
             for i, ref_ts in enumerate(ref_ts_list)
@@ -111,10 +122,11 @@ def calculate_similarity_parallel(ref_ts_list, aug_ts_list, n_jobs=None, n_patch
     )
 
     # collect results
-    for i, j, dtw_simi, lcss_simi, mse_simi in results:
+    for i, j, dtw_simi, lcss_simi, mse_dist, mae_dist in results:
         dtw_matrix[i, j] = dtw_simi
         lcss_matrix[i, j] = lcss_simi
-        mse_matrix[i, j] = mse_simi
+        mse_matrix[i, j] = mse_dist
+        mae_matrix[i, j] = mae_dist
     
     # summaries (unchanged)
     def _summ(col):
@@ -129,8 +141,9 @@ def calculate_similarity_parallel(ref_ts_list, aug_ts_list, n_jobs=None, n_patch
     dtw_summaries  = [_summ(dtw_matrix[:, j])  for j in range(n_aug)]
     lcss_summaries = [_summ(lcss_matrix[:, j]) for j in range(n_aug)]
     mse_summaries = [_summ(mse_matrix[:, j]) for j in range(n_aug)]
+    mae_summaries = [_summ(mae_matrix[:, j]) for j in range(n_aug)]
 
-    return dtw_matrix, lcss_matrix, mse_matrix, dtw_summaries, lcss_summaries, mse_summaries
+    return dtw_matrix, lcss_matrix, mse_matrix, mae_matrix, dtw_summaries, lcss_summaries, mse_summaries, mae_summaries
 
 
 def _stratified_bootstrap(group, b):
@@ -160,15 +173,22 @@ def _scale_to_range(ts, ths=(None, None)):
     
     return ts_final
 
+# ----------------- TS distances evaluation on synthetic data --------------------------------
 
 def eval_ts_similarity(df, # df can be df_train / df_test
                       model, config_dict, w,  y_col, 
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
                       b=200,
-                      standardize=False,
+                      global_standardize=False,
                       ths = (None, None),
                       round_to = 4,
-                      n_patches=None):
+                      n_patches=None,
+                      aug_type='conditional'):
+    
+    if global_standardize:
+        df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
+        global_mean = np.nanmean(df_ts.values)        # ignores NaNs
+        global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
     
     if conditions is not None:
         for condition in conditions:
@@ -184,48 +204,55 @@ def eval_ts_similarity(df, # df can be df_train / df_test
     df_dists = pd.DataFrame()
     y_levels = list(df[y_col].unique())
 
-    # for each reference text
     for i in range(len(y_levels)):
         # agument data with original reference text y_levels[i]
-        ref_text = y_levels[i]
-        df_level = df[df[y_col] == ref_text].reset_index(drop=False).copy() #
+        ref_level = y_levels[i]
+        df_level = df[df[y_col] == ref_level].reset_index(drop=False).copy() #
         # agument towards new text conditions 
         for j in range(len(y_levels)):
-            df_level['text' + str(j)] = y_levels[j] # only do marginal augmentation
+            if aug_type == 'marginal':
+                df_level['text' + str(j)] = y_levels[j] # marginal augmentation
+            elif aug_type == 'conditional':
+                df_level['text' + str(j)] = df_level['text'].str.replace(ref_level, y_levels[j]) # sub ref_text with y_levels[j] in 'text'
+        # mapping text_col to y_level
+        col_level_map = dict(zip(['text' + str(j) for j in range(len(y_levels))], y_levels))
+    
         # only augment towards NEW text conditions except original aug_text
-        new_text_cols = ['text' + str(j) for j in range(len(y_levels)) if df_level['text' + str(j)][0] != ref_text]
+        new_text_cols = ['text' + str(j) for j in range(len(y_levels)) if y_levels[j] != ref_level]
         # augment towards new text conditions with w!
         ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, new_text_cols, w) # 
         
+        for text_col, pairs in ts_hat_ls.items():
 
-        aug_df_all = pd.DataFrame()
-        for _, pairs in ts_hat_ls.items():
-            
+            aug_level = col_level_map[text_col]
+
             # augmented time series
             aug_df = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
-            aug_text = aug_df['aug_text'].unique()[0] # # augment towards text
+            # aug_text = aug_df['aug_text'].unique()[0] # # augment towards text
             aug_df['ts_hat'] = aug_df['ts_hat'].apply(lambda x: x.cpu().detach().numpy())
             aug_ts_list = [aug_df['ts_hat'][i] for i in range(len(aug_df))]
             
             # target time series
-            tgt_df = df[df[y_col] == aug_text]
+            tgt_df = df[df[y_col] == aug_level] # this will make tgt_df['text'] mismatch with aug_df['aug_text']
             tgt_ts_list = [tgt_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(tgt_df))]
             
-            # orginal time series (reference time series)
-            ref_df = df[df[y_col] == ref_text]   
+            # orginal time series (reference time series) 
+            ref_df = df[df[y_col] == ref_level]   
             ref_ts_list = [ref_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(ref_df))]
-
-            if standardize:
-                ref_ts_list = [(ref_ts - ref_ts.mean()) / ref_ts.std() for ref_ts in ref_ts_list]
-                aug_ts_list = [(aug_ts - aug_ts.mean()) / aug_ts.std() for aug_ts in aug_ts_list]
-            if ths[0] is not None or ths[1] is not None:
-                # ref_ts_list = [_scale_to_range(ref_ts, ths) for ref_ts in ref_ts_list]
-                aug_ts_list = [_scale_to_range(aug_ts, ths) for aug_ts in aug_ts_list]
-                # ref_ts_list = [ref_ts.clip(ths[0], ths[1]) for ref_ts in ref_ts_list]
-                # aug_ts_list = [aug_ts.clip(ths[0], ths[1]) for aug_ts in aug_ts_list]
-            if round_to is not None:
-                ref_ts_list = [np.round(ref_ts, round_to) for ref_ts in ref_ts_list]
-                aug_ts_list = [np.round(aug_ts, round_to) for aug_ts in aug_ts_list]
+            
+            if global_standardize:
+                tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list] # globally standardize time series
+                ref_ts_list = [(ref_ts - global_mean) / global_std for ref_ts in ref_ts_list]
+                aug_ts_list = [(aug_ts - global_mean) / global_std for aug_ts in aug_ts_list]
+            else:
+                if ths[0] is not None or ths[1] is not None:
+                    # ref_ts_list = [_scale_to_range(ref_ts, ths) for ref_ts in ref_ts_list]
+                    aug_ts_list = [_scale_to_range(aug_ts, ths) for aug_ts in aug_ts_list]
+                    # ref_ts_list = [ref_ts.clip(ths[0], ths[1]) for ref_ts in ref_ts_list]
+                    # aug_ts_list = [aug_ts.clip(ths[0], ths[1]) for aug_ts in aug_ts_list]
+                if round_to is not None:
+                    ref_ts_list = [np.round(ref_ts, round_to) for ref_ts in ref_ts_list]
+                    aug_ts_list = [np.round(aug_ts, round_to) for aug_ts in aug_ts_list]
             # plot 20 time series in aug_ts_list
             fig, axs = plt.subplots(4, 5, figsize=(20, 8))
             for i in range(20):
@@ -233,25 +260,27 @@ def eval_ts_similarity(df, # df can be df_train / df_test
                 axs[i//5, i%5].plot(tgt_ts_list[i], label='target', color='black')
                 axs[i//5, i%5].plot(ref_ts_list[i], label='original', color='darkgrey')
                 axs[i//5, i%5].legend()
-            plt.suptitle(ref_text+" -> "+aug_text, fontsize=15)
+            plt.suptitle(ref_level+" -> "+aug_level, fontsize=15)
             plt.tight_layout()
             plt.show()
 
-            _, _, _, dtw_aug2tgt, lcss_aug2tgt, mse_aug2tgt = calculate_similarity_parallel(aug_ts_list, tgt_ts_list, n_patches=n_patches)
-            _, _, _, dtw_ref2tgt, lcss_ref2tgt, mse_ref2tgt = calculate_similarity_parallel(ref_ts_list, tgt_ts_list, n_patches=n_patches)
+            _, _, _, _, dtw_aug2tgt, lcss_aug2tgt, mse_aug2tgt, mae_aug2tgt = calculate_similarity_parallel(aug_ts_list, tgt_ts_list, n_patches=n_patches)
+            _, _, _, _, dtw_ref2tgt, lcss_ref2tgt, mse_ref2tgt, mae_ref2tgt = calculate_similarity_parallel(ref_ts_list, tgt_ts_list, n_patches=n_patches)
             
 
             aug_df['dtw_aug2tgt'] = dtw_aug2tgt
             aug_df['lcss_aug2tgt'] = lcss_aug2tgt
             aug_df['mse_aug2tgt'] = mse_aug2tgt
+            aug_df['mae_aug2tgt'] = mae_aug2tgt
             aug_df['dtw_ref2tgt'] = dtw_ref2tgt
             aug_df['lcss_ref2tgt'] = lcss_ref2tgt
             aug_df['mse_ref2tgt'] = mse_ref2tgt
-            aug_df_all = pd.concat([aug_df_all, aug_df], ignore_index=True)
+            aug_df['mae_ref2tgt'] = mae_ref2tgt
 
-        aug_df_all['ref_y_col'] = y_col
-        aug_df_all['ref_y_level'] = ref_text 
-        df_dists = pd.concat([df_dists, aug_df_all], ignore_index=True)
+            aug_df['ref_y_level'] = ref_level
+            aug_df['aug_y_level'] = aug_level
+            aug_df['ref_y_col'] = y_col
+            df_dists = pd.concat([df_dists, aug_df], ignore_index=True)
    
     return df_dists
 
@@ -261,13 +290,13 @@ def eval_ts_similarity(df, # df can be df_train / df_test
 def eng_dists(df_dist, 
               ref_y_level, 
               aug_y_level, 
-              metrics = ['lcss', 'dtw', 'mse'], 
+              metrics = ['lcss', 'dtw', 'mse', 'mae'], 
               plot = False):
     import matplotlib.pyplot as plt
    
     df = df_dist[
                     (df_dist['ref_y_level'].str.contains(ref_y_level, case=False)) & 
-                    (df_dist['aug_text'].str.contains(aug_y_level, case=False))
+                    (df_dist['aug_y_level'].str.contains(aug_y_level, case=False))
                 ]
     for metric in metrics:
         df['aug_'+metric] = df[metric+'_aug2tgt'].apply(lambda x: x['q50'])
@@ -287,7 +316,10 @@ def eng_dists(df_dist,
 
 
 
-def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss'):
+def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditional'):
+
+    df_dists = df_dists[df_dists['aug_type'] == aug_type]
+
     df_ls = []
     for _, pairs in base_aug_dict.items():
         n_cols = 4  # Always use 4 columns
@@ -391,9 +423,92 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss'):
         plt.tight_layout()
         plt.show()
     res_df = pd.concat(df_ls, ignore_index=True)
+    # reformat
+    res_df['score'] = res_df['diff_'+metric]
+    res_df['metric'] = 'delta_'+metric
+    res_df.rename(columns={'aug_y_level': 'tgt_level',
+                           'ref_y_level': 'src_level'}, inplace=True)
+    res_df = res_df[['aug_type', 'attr', 'src_level', 'tgt_level', 'metric', 'score']]
     return res_df
 
 
 
 
 
+
+
+# ----------------- point-wise distance evaluation on synthetic with ground truth data --------------------------------
+# only used for synthetic_gt data
+def eval_pw_dist(df, model, config_dict, w, aug_type='conditional', global_standardize=True):
+    model.eval()
+    text_pairs = config_dict['text_config']['text_pairs']
+
+    if global_standardize:
+        df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
+        global_mean = np.nanmean(df_ts.values)        # ignores NaNs
+        global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
+
+
+    pw_df_all = pd.DataFrame()
+    # attribute to be modified
+    for att_idx, att in enumerate(text_pairs):  
+        # # attributes to be conditioned on
+        # condition_attrs = sorted(
+        #     set(f"segment{aid+1}_srcid" for aid in range(len(text_pairs)))
+        #     - {f"segment{att_idx+1}_srcid"}
+        # )  
+        # source level to be modified
+        for src_level, _ in tqdm(att):   
+            df_src_level = df.loc[df["segment"+str(att_idx+1)] == src_level,:]
+            tgt_levels = [tgt_level for (tgt_level, _) in att if tgt_level != src_level]
+            for tgt_id, tgt_level in enumerate(tgt_levels): 
+                if aug_type == 'marginal':
+                    df_src_level['text'+str(tgt_id+1)] = tgt_level # marginal augmentation 
+                elif aug_type == 'conditional':
+                    df_src_level['text'+str(tgt_id+1)] = df_src_level['text'].str.replace(src_level, tgt_level) # sub src_level with tgt_level  in 'text'+str(tgt_id+1)
+            new_text_cols = ['text'+str(tgt_id+1) for tgt_id, _ in enumerate(tgt_levels)]
+            ts_hat_ls = interpolate_ts_tx(df_src_level, model, config_dict, new_text_cols, w) 
+
+            
+            # target level to modify towards
+            for text_col,tgt_level in zip(new_text_cols, tgt_levels):
+                # target time series
+                df_tgt = df.loc[df["segment"+str(att_idx+1)] == tgt_level,:]
+                tgt_ts_list = [df_tgt[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(df_tgt))]
+                if global_standardize:
+                    tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list] # globally standardize time series
+
+                # augmented time series
+                pairs = ts_hat_ls[text_col]
+                aug_df = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
+                aug_df['ts_hat'] = aug_df['ts_hat'].apply(lambda x: x.cpu().detach().numpy())
+                aug_ts_list = [aug_df['ts_hat'][i] for i in range(len(aug_df))]
+                if global_standardize:
+                    aug_ts_list = [(aug - global_mean) / global_std for aug in aug_ts_list] # globally standardize time series
+
+                # point-wise performance by mse and mae
+                mse = []
+                mae = []
+                for tgt, aug in zip(tgt_ts_list, aug_ts_list):
+                    diff = tgt - aug
+                    mse.append(np.mean(diff ** 2))
+                    mae.append(np.mean(np.abs(diff)))
+                pw_df = pd.DataFrame({ "MSE": mse, "MAE": mae}) #"pair_id": range(len(mse)),
+                pw_df['src_level'] = src_level
+                pw_df['tgt_level'] = tgt_level
+                pw_df['attr'] = 'segment'+str(att_idx+1)
+                pw_df['aug_type'] = aug_type
+                pw_df_all = pd.concat([pw_df_all, pw_df], ignore_index=True)
+
+    # reformat
+    # pw_df_all has columns : pair_id	MSE	MAE	src_level	tgt_level	attr	aug_type
+    mse_df = pw_df_all[['aug_type', 'attr', 'src_level', 'tgt_level', 'MSE']] 
+    mse_df.rename(columns={'MSE': 'score'}, inplace=True)
+    mae_df = pw_df_all[['aug_type', 'attr', 'src_level', 'tgt_level', 'MAE']] 
+    mae_df.rename(columns={'MAE': 'score'}, inplace=True)
+    mse_df['metric'] = 'mse'
+    mae_df['metric'] = 'mae'
+
+    res_df = pd.concat([mse_df, mae_df], ignore_index=True)
+    res_df = res_df[['aug_type', 'attr', 'src_level', 'tgt_level', 'metric', 'score']]
+    return res_df

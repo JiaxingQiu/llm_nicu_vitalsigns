@@ -813,7 +813,7 @@ import gc
 from tqdm import tqdm
 
 # calculate the math properties of the generated time series (calculate on all time series i.e. df_train.sample(500))
-def eval_math_properties(df, model, config_dict, type, w, y_cols = None):
+def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None):
     model.eval()
     df_augmented = pd.DataFrame()
     if y_cols is None:
@@ -821,7 +821,7 @@ def eval_math_properties(df, model, config_dict, type, w, y_cols = None):
     
     # Set up parallel processing parameters
     n_cores = min(max(1, int(multiprocessing.cpu_count() * 0.7)), 10)
-    batch_size = 500  # Adjust based on your system's memory
+    # batch_size = 500  # Adjust based on your system's memory
     
     for y_col in y_cols:
         y_levels = list(df[y_col].unique())
@@ -830,16 +830,16 @@ def eval_math_properties(df, model, config_dict, type, w, y_cols = None):
             
             # add new text conditions
             for j in range(len(y_levels)):
-                if type == "conditional":
+                if aug_type == "conditional":
                     modified_text = df_level['text'].values[0]
                     for level in y_levels:
                         if level in modified_text:
                             modified_text = modified_text.replace(level, y_levels[j])
                     df_level['text' + str(j)] = modified_text
-                elif type == "marginal":
+                elif aug_type == "marginal":
                     df_level['text' + str(j)] = y_levels[j]
                 else:
-                    raise ValueError("type must be either 'marginal' or 'conditional'")
+                    raise ValueError("aug_type must be either 'marginal' or 'conditional'")
                 
             # Augment the time series with the given text conditions
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
@@ -914,7 +914,10 @@ def eng_math_diff(df_augmented, base_y_level, augm_y_level, metrics = ['trend', 
 
 
 
-def eng_math_diff_multiple(df_augmented, base_aug_dict, metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']):
+def eng_math_diff_multiple(df_augmented, base_aug_dict, metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability'], aug_type='conditional'):
+
+    df_augmented = df_augmented[df_augmented['aug_type'] == aug_type]
+    
     df_ls = []
     for aug_matrix, pairs in base_aug_dict.items():
         n_cols = 4  # Always use 4 columns
@@ -958,7 +961,7 @@ def eng_math_diff_multiple(df_augmented, base_aug_dict, metrics = ['trend', 'cur
                 ]:
                     line.set_color(color)
                     line.set_linewidth(1)
-            axes[2*row, col].set_ylim(-5, 5)
+            #axes[2*row, col].set_ylim(-5, 5)
             axes[2*row, col].axhline(0, color='black', linewidth=0.5)
             axes[2*row, col].set_title(f'{base}\n→\n{aug}', pad=20)
             if col == 0:  # Only add ylabel to first subplot

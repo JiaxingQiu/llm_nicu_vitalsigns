@@ -284,7 +284,7 @@ def gt_train_test_left(df, config_dict):
     print({k: (len(id_dict_train[k]), len(id_dict_test[k]), len(id_dict_left[k]))
         for k in id_dict.keys()})
 
-    df_train = mix_w_counter_gt(df, config_dict, id_dict_train, plot=True)
+    df_train = mix_w_counter_gt(df, config_dict, id_dict_train, plot=False)
     df_test = mix_w_counter_gt(df, config_dict, id_dict_test)
     df_left = mix_w_counter_gt(df, config_dict, id_dict_left)
 

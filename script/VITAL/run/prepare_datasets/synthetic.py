@@ -1,4 +1,6 @@
-
+# ------------------------------------------------------------------------------------------------
+# prepare dataset and arguments for training
+# ------------------------------------------------------------------------------------------------
 from sklearn.model_selection import train_test_split
 
 df = pd.read_csv('../../data/synthetic/data.csv.zip', compression='zip')
@@ -42,3 +44,56 @@ print('\n\nfinal distribution of text prediction')
 print(df_train['text'].value_counts())
 print(df_test['text'].value_counts())
 print(df_left['text'].value_counts())
+
+
+
+
+
+
+# ------------------------------------------------------------------------------------------------
+# prepare arguments for evaluation
+# ------------------------------------------------------------------------------------------------
+
+df_eval = df_left #df_test if 'df_left' not in locals() else df_left
+w = 0.8 # stength of augmentation
+suffix = ''#'_test' if 'df_left' not in locals() else ''
+
+# Matrices
+math_metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']
+ts_dist = True
+rats = True
+
+# argument dictionary used for ts_dist and rats
+args0 = {'segment1': None,
+        'segment2': None,
+        'segment3': None,
+        'segment4':None
+        }
+
+args1 = {'segment1': [('segment2', 'No seasonal pattern.'), ('segment3', 'No sharp shifts.'), ('segment4', 'The time series exhibits low variability.')],
+        'segment2': [('segment1', 'No trend.'), ('segment3', 'No sharp shifts.'), ('segment4', 'The time series exhibits low variability.')],
+        'segment3': [('segment1', 'No trend.'), ('segment2', 'No seasonal pattern.'), ('segment4', 'The time series exhibits low variability.')],
+        'segment4': [('segment1', 'No trend.'), ('segment2', 'No seasonal pattern.'), ('segment3', 'No sharp shifts.')]
+        }
+args_ls = [args0, args1]
+
+# Define the base augmentation pairs used in math and ts_dist
+base_aug_dict = {'trend': [('No trend.', 'The time series shows upward linear trend.'), 
+                            ('The time series shows downward linear trend.', 'The time series shows upward linear trend.'),
+                            ('No trend.', 'The time series shows downward linear trend.'), 
+                            ('The time series shows upward linear trend.', 'The time series shows downward linear trend.')],
+                    'curvature': [('No trend.', 'The time series shows upward quadratic trend.'),
+                                  ('The time series shows upward linear trend.', 'The time series shows upward quadratic trend.'),
+                                  ('No trend.', 'The time series shows downward quadratic trend.'),
+                                  ('The time series shows downward linear trend.', 'The time series shows downward quadratic trend.')],
+                    'seasonality': [('No seasonal pattern.', 'The time series exhibits a seasonal pattern.'),
+                                ('The time series exhibits a seasonal pattern.', 'No seasonal pattern.')],
+                    'shift': [('No sharp shifts.', 'The mean of the time series shifts upwards.'),
+                            ('The mean of the time series shifts downwards.', 'The mean of the time series shifts upwards.'),
+                            ('No sharp shifts.', 'The mean of the time series shifts downwards.'),
+                            ('The mean of the time series shifts upwards.', 'The mean of the time series shifts downwards.')],
+                    'variability': [("The time series exhibits low variability.", "The time series exhibits high variability."),
+                                ('The time series exhibits high variability.', "The time series exhibits low variability.")]
+                    }
+
+

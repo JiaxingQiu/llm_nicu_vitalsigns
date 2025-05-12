@@ -288,7 +288,7 @@ def plot_augmentor(x, pretrained_model_path):
 
 def augment_ts_n_desc(df_sub,
                     config_dict, 
-                    pretrained_model_path='./pretrained/hr_vae_linear_medium.pth',
+                    pretrained_model_path='./data_utils/pretrained/hr_vae_linear_medium.pth',
                     K = 50):
     ts_df = df_sub.loc[:, '1':'300'].astype(float)
     df_aug_sub = augment_ts_df_parallel(ts_df, pretrained_model_path, K = K)
@@ -324,7 +324,7 @@ def augment_balance_data(df_sub,
                          txt_ls_org,
                          y_col, 
                          config_dict, 
-                         pretrained_model_path='./pretrained/hr_vae_linear_medium.pth', 
+                         pretrained_model_path='./data_utils/pretrained/hr_vae_linear_medium.pth', 
                          K = 50): # augement each time series K times
     
     if not config_dict['balance']:

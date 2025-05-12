@@ -165,7 +165,8 @@ def eval_ts_classifier(df, # df can be df_train / df_test
                       model, config_dict, w, y_col, 
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
                       b=None, # number to bootstrap
-                      finetune=True):
+                      finetune=True, 
+                      aug_type='conditional'):
     
     model.eval()
     y_levels = list(df[y_col].unique())
@@ -204,6 +205,15 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         # rows we want to *re‑write* toward tgt_level
         df2aug = df2train[df2train[y_col] != tgt_level].copy().reset_index(drop=True)
         df2aug['new_text'] = tgt_level
+
+        if aug_type == 'marginal':
+            df2aug['new_text'] = tgt_level
+        elif aug_type == 'conditional':
+            org_levels = list(set(y_levels) - set([tgt_level]))
+            df2aug['new_text'] = df2aug['text'].copy()
+            for org_level in org_levels:
+                df2aug['new_text'] = df2aug['new_text'].str.replace(org_level, tgt_level)
+            
         df2aug_src = df2aug[ts_str_cols + [y_col, 'text', 'label']].copy()
         df2pred_src = pd.concat([df2pred_src, df2aug_src], ignore_index=True)
 
@@ -213,11 +223,11 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         tmp['ts_hat'] = tmp['ts_hat'].apply(lambda x: x.cpu().detach().numpy() )
 
         # add y_col and update ts_str_cols 
-        df2aug[y_col] = tmp['aug_text'].values               
+        df2aug[y_col] = tgt_level #tmp['aug_text'].values               
         df2aug[ts_str_cols] = np.vstack(tmp['ts_hat'].to_numpy())
 
         # tidy‑up
-        df2aug = df2aug[ts_str_cols + [y_col]].copy()
+        df2aug = df2aug[ts_str_cols + [y_col, 'text', 'new_text']].copy()
         df2pred_aug = pd.concat([df2pred_aug, df2aug], ignore_index=True)
 
     # --- train and predict ---------------------------------------------------------------------------------------------------------------
@@ -265,7 +275,17 @@ def eval_ts_classifier(df, # df can be df_train / df_test
     RaTS_summ = _summ(df2pred_aug['RaTS'])
     torch.cuda.empty_cache()
 
-    return df2pred_aug, RaTS_summ
+    df2pred_aug['aug_type'] = aug_type
+    df2pred_aug['attr'] = y_col
+    df2pred_aug['score'] = df2pred_aug['RaTS']
+    df2pred_aug['metric'] = 'RaTS'
+    df2pred_aug['src_level'] = df2pred_aug['text']
+    df2pred_aug['tgt_level'] = df2pred_aug['new_text']
+    # df2pred_aug['aug_text'] = df2pred_aug['new_text']
+
+    res_df = df2pred_aug[['aug_type', 'attr', 'src_level', 'tgt_level', 'metric', 'score']]
+
+    return res_df, RaTS_summ
 
 # usage:
 # df2pred_aug, rats_summ = eval_ts_classifier(df_test, model, config_dict, 
@@ -273,3 +293,120 @@ def eval_ts_classifier(df, # df can be df_train / df_test
 
 
 
+def plot_rats(df_rats_all, figsize=(15, 4)):
+    """
+    Create a grid of boxplots comparing RaTS scores across different conditions.
+    
+    Parameters:
+    -----------
+    df_rats_all : pd.DataFrame
+        DataFrame containing RaTS scores and metadata
+    figsize : tuple, optional
+        Figure size in inches (width, height). Default is (20, 4)
+    
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        The created figure object
+    """
+    # Get unique conditions including "All"
+    conditions = ['All'] + list(df_rats_all.attr.unique())
+    n_conditions = len(conditions)
+
+    # Calculate number of rows needed (4 columns per row)
+    n_cols = 4
+    n_rows = (n_conditions + n_cols - 1) // n_cols  # Ceiling division
+
+    # Create figure with calculated dimensions
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(figsize[0], figsize[1]*n_rows))
+    fig.suptitle('RaTS Score Comparison Across Different Conditions', fontsize=14, y=1.02)
+
+    # Flatten axes for easier iteration
+    axes = axes.flatten()
+
+    # Plot settings
+    metrics = ['RaTS']
+    types_ = ['marginal', 'conditional']
+
+    # First pass: collect all data to determine y-limits
+    all_data = []
+    for condition in conditions:
+        if condition == 'All':
+            data = [
+                df_rats_all[(df_rats_all.metric == m) & (df_rats_all.aug_type == t)].score
+                for m in metrics for t in types_
+            ]
+        else:
+            df_rats = df_rats_all[df_rats_all.attr == condition]
+            data = [
+                df_rats[(df_rats.metric == m) & (df_rats.aug_type == t)].score
+                for m in metrics for t in types_
+            ]
+        all_data.extend([item for sublist in data for item in sublist])
+    
+    # Calculate y-limits with some padding
+    y_min = min(all_data)
+    y_max = max(all_data)
+    y_padding = (y_max - y_min) * 0.1  # 10% padding
+    y_limits = (y_min - y_padding, y_max + y_padding)
+
+    # Plot each condition
+    for idx, condition in enumerate(conditions):
+        if condition == 'All':
+            # Use all data for "All" condition
+            data = [
+                df_rats_all[(df_rats_all.metric == m) & (df_rats_all.aug_type == t)].score
+                for m in metrics for t in types_
+            ]
+            title = 'All Conditions'
+        else:
+            # Filter data for specific condition
+            df_rats = df_rats_all[df_rats_all.attr == condition]
+            data = [
+                df_rats[(df_rats.metric == m) & (df_rats.aug_type == t)].score
+                for m in metrics for t in types_
+            ]
+            title = condition
+        
+        # Create boxplot with specified configuration
+        bp = axes[idx].boxplot(data, 
+                            labels=['Marginal', 'Conditional'],
+                            notch=True, 
+                            showmeans=True,
+                            patch_artist=False,  # solid boxes
+                            boxprops=dict(color="black"),    # outline of the box
+                            whiskerprops=dict(color="black"),
+                            capprops=dict(color="black"),
+                            medianprops=dict(color="red", linewidth=2),
+                            flierprops=dict(markeredgecolor="black", 
+                                          markerfacecolor="black", 
+                                          marker="o", 
+                                          markersize=3))
+        
+        # Customize axes
+        axes[idx].set_title(title, fontsize=12, pad=10)
+        axes[idx].axhline(0, color='gray', linestyle='--', alpha=0.5)
+        axes[idx].grid(True, linestyle='--', alpha=0.3)
+        
+        # Set shared y-limits
+        axes[idx].set_ylim(y_limits)
+        
+        # Only show ylabel for the first subplot in each row
+        if idx % n_cols == 0:
+            axes[idx].set_ylabel('RaTS Score', fontsize=10)
+        
+        axes[idx].tick_params(axis='x', rotation=0)
+
+    # Hide any unused subplots
+    for idx in range(len(conditions), len(axes)):
+        axes[idx].set_visible(False)
+
+    # Adjust layout
+    plt.tight_layout()
+    return fig
+
+# Example usage:
+# df_rats_all = df_rats_ls[0]
+# df_rats_all.dropna(inplace=True)
+# fig = plot_rats(df_rats_all)
+# plt.show()
