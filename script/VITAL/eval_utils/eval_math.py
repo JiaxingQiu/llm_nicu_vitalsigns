@@ -914,8 +914,13 @@ def eng_math_diff(df_augmented, base_y_level, augm_y_level, metrics = ['trend', 
 
 
 
-def eng_math_diff_multiple(df_augmented, base_aug_dict, metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability'], aug_type='conditional'):
+def eng_math_diff_multiple(df_augmented, base_aug_dict, aug_type='conditional'): # , metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']
 
+    metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability', 'successive_increases', 'successive_unchanges']
+    metrics_quest = base_aug_dict.keys()
+    metrics = [metric for metric in metrics if metric in metrics_quest]
+    base_aug_dict = {k:v for k,v in base_aug_dict.items() if k in metrics}
+    
     df_augmented = df_augmented[df_augmented['aug_type'] == aug_type]
     
     df_ls = []

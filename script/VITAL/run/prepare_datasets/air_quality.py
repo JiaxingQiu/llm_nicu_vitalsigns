@@ -46,7 +46,7 @@ df_eval = df_left
 w = 0.8 # stength of augmentation
 suffix = ''  
 
-math_metrics = []
+math = False
 ts_dist = True
 rats = True
 

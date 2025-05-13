@@ -47,10 +47,10 @@ def train_clf(
     label2idx = {lvl: i for i, lvl in enumerate(y_levels)}
 
     # tensors
-    X_all = torch.tensor(df_train[ts_cols].values, dtype=torch.float32)
+    X_all = torch.tensor(df_train[ts_cols].values, dtype=torch.float32).to(device)
     y_all = torch.tensor(df_train[label_col].map(label2idx).values,
-                         dtype=torch.long)
-    ds_full = TensorDataset(X_all.to(device), y_all.to(device))
+                         dtype=torch.long).to(device)
+    ds_full = TensorDataset(X_all, y_all)
 
     train_len = int(0.8 * len(ds_full))
     val_len   = len(ds_full) - train_len
@@ -274,6 +274,7 @@ def eval_ts_classifier(df, # df can be df_train / df_test
      
     RaTS_summ = _summ(df2pred_aug['RaTS'])
     torch.cuda.empty_cache()
+    del clf
 
     df2pred_aug['aug_type'] = aug_type
     df2pred_aug['attr'] = y_col

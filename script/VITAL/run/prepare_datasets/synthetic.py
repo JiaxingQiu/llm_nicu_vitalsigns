@@ -59,7 +59,7 @@ w = 0.8 # stength of augmentation
 suffix = ''#'_test' if 'df_left' not in locals() else ''
 
 # Matrices
-math_metrics = ['trend', 'curvature', 'seasonality', 'shift', 'variability']
+math = True
 ts_dist = True
 rats = True
 

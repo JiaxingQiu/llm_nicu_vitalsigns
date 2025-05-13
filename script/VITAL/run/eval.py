@@ -1,7 +1,7 @@
 
 # ---------------------------------------  Math eval ---------------------------------------
 # Math properties (applicable to quantitative time series attributes)
-if math_metrics:
+if math:
     filename = output_dir+'/df_stats_all'+suffix+'.pt.gz'
     if overwrite or (not os.path.exists(filename)):
         # calculate the properties of the generated time series
@@ -93,6 +93,8 @@ if ts_dist:
 # ---------------------------------------  RaTS eval ---------------------------------------
 # RaTS from classifiers (to both quantitative and qualitative attritbutes)
 if rats:
+    df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
+        
     filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
     if overwrite or (not os.path.exists(filename)):
         df_rats_ls = []
@@ -101,7 +103,7 @@ if rats:
             for y_col in args.keys():
                 df = pd.DataFrame()
                 for aug_type in ['conditional', 'marginal']:
-                    df_type, _ = eval_ts_classifier(df_eval, model, config_dict,
+                    df_type, _ = eval_ts_classifier(df_eval_rats, model, config_dict,
                                                     w = w, y_col = y_col, conditions = args[y_col], aug_type = aug_type)
                     df = pd.concat([df, df_type], ignore_index=True)
                 df_rats = pd.concat([df_rats, df], ignore_index=True)

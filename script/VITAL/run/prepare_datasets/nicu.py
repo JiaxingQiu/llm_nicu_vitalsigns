@@ -149,7 +149,6 @@ w = 0.8 # stength of augmentation
 suffix = ''  
 
 math = True
-math_metrics = ['variability', 'successive_increases']
 ts_dist = True
 rats = True
 
@@ -167,11 +166,11 @@ args1 = {'description_succ_inc': [('description_histogram', "Low variability."),
 args_ls = [args0, args1]
 
 # Define the base augmentation pairs
-base_aug_dict = {'description_succ_inc': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
+base_aug_dict = {'successive_increases': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
                                           ('Moderate amount of consecutive increases.', 'High amount of consecutive increases.'),
                                           ('High amount of consecutive increases.', 'Moderate amount of consecutive increases.'),
                                           ('High amount of consecutive increases.', 'Low amount of consecutive increases.')],
-                'description_histogram': [('Low variability.', 'High variability.'),
+                'variability': [('Low variability.', 'High variability.'),
                                           ('High variability.', 'Low variability.')],
                 'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
                                                 ('Bradycardia events happened.', 'No events.')]
