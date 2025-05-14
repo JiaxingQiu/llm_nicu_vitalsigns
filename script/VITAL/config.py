@@ -76,8 +76,6 @@ config_dict = {
     'text_encoder_name': 'sentence-transformers/paraphrase-mpnet-base-v2',#'sentence-transformers/all-mpnet-base-v2',
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_global_normalize': False, 
-    'ts_normalize_mean': 150, # global normalization mean
-    'ts_normalize_std': 20, # global normalization std
     'ts_local_normalize': False, # shared with ts_subseq settings to fill na
     
 
@@ -97,7 +95,7 @@ config_dict = {
     'patience': 500,
     'num_saves': 10,
     'num_epochs': 1000,
-    'alpha': 1/1000, # weight of reconstruction loss
+    'alpha': 1/100, # weight of reconstruction loss
     'beta': 1.0, # weight of kl loss
     
     # Text configuration

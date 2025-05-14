@@ -179,16 +179,17 @@ def eval_ts_similarity(df, # df can be df_train / df_test
                       model, config_dict, w,  y_col, 
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
                       b=200,
-                      global_standardize=False,
                       ths = (None, None),
                       round_to = 4,
                       n_patches=None,
                       aug_type='conditional'):
     
-    if global_standardize:
-        df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
-        global_mean = np.nanmean(df_ts.values)        # ignores NaNs
-        global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
+    if config_dict['ts_global_normalize']:
+        # df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
+        # global_mean = np.nanmean(df_ts.values)        # ignores NaNs
+        # global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
+        global_mean = config_dict['ts_normalize_mean']
+        global_std  = config_dict['ts_normalize_std']
     
     if conditions is not None:
         for condition in conditions:
@@ -240,10 +241,10 @@ def eval_ts_similarity(df, # df can be df_train / df_test
             ref_df = df[df[y_col] == ref_level]   
             ref_ts_list = [ref_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(ref_df))]
             
-            if global_standardize:
+            if config_dict['ts_global_normalize']:
                 tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list] # globally standardize time series
                 ref_ts_list = [(ref_ts - global_mean) / global_std for ref_ts in ref_ts_list]
-                aug_ts_list = [(aug_ts - global_mean) / global_std for aug_ts in aug_ts_list]
+                # aug_ts_list = [(aug_ts - global_mean) / global_std for aug_ts in aug_ts_list]
             else:
                 if ths[0] is not None or ths[1] is not None:
                     # ref_ts_list = [_scale_to_range(ref_ts, ths) for ref_ts in ref_ts_list]
@@ -439,14 +440,16 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditi
 
 # ----------------- point-wise distance evaluation on synthetic with ground truth data --------------------------------
 # only used for synthetic_gt data
-def eval_pw_dist(df, model, config_dict, w, aug_type='conditional', global_standardize=True):
+def eval_pw_dist(df, model, config_dict, w, aug_type='conditional'):
     model.eval()
     text_pairs = config_dict['text_config']['text_pairs']
 
-    if global_standardize:
-        df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
-        global_mean = np.nanmean(df_ts.values)        # ignores NaNs
-        global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
+    if config_dict['ts_global_normalize']:
+        # df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
+        # global_mean = np.nanmean(df_ts.values)        # ignores NaNs
+        # global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
+        global_mean = config_dict['ts_normalize_mean']
+        global_std  = config_dict['ts_normalize_std']
 
 
     pw_df_all = pd.DataFrame()
@@ -475,7 +478,7 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional', global_stand
                 # target time series
                 df_tgt = df.loc[df["segment"+str(att_idx+1)] == tgt_level,:]
                 tgt_ts_list = [df_tgt[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(df_tgt))]
-                if global_standardize:
+                if config_dict['ts_global_normalize']:
                     tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list] # globally standardize time series
 
                 # augmented time series
@@ -483,8 +486,8 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional', global_stand
                 aug_df = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
                 aug_df['ts_hat'] = aug_df['ts_hat'].apply(lambda x: x.cpu().detach().numpy())
                 aug_ts_list = [aug_df['ts_hat'][i] for i in range(len(aug_df))]
-                if global_standardize:
-                    aug_ts_list = [(aug - global_mean) / global_std for aug in aug_ts_list] # globally standardize time series
+                # if config_dict['ts_global_normalize']:
+                #     aug_ts_list = [(aug - global_mean) / global_std for aug in aug_ts_list] # globally standardize time series
 
                 # point-wise performance by mse and mae
                 mse = []

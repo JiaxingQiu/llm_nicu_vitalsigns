@@ -8,6 +8,16 @@ model_path = output_dir+'/model.pth'
 eval_path = output_dir+'/evals.pth'
 config_path = output_dir+'/config.pth'
 
+# -- assign global normalization mean and std --
+if config_dict['ts_global_normalize']:
+    train_mean_std = {'mean': np.nanmean(df_train[[str(i+1) for i in range(config_dict['seq_length'])]].values), 
+                      'std': np.nanstd(df_train[[str(i+1) for i in range(config_dict['seq_length'])]].values, ddof=0) }
+    # config_dict['ts_normalize_mean'] = train_mean_std['mean']
+    # config_dict['ts_normalize_std'] = train_mean_std['std']
+    update_config(ts_normalize_mean = train_mean_std['mean'], 
+                  ts_normalize_std = train_mean_std['std'])
+    config_dict = get_config_dict()
+
 
 if overwrite or not os.path.exists(model_path):
     # ------------------------- ready eval inputs for CLIP -------------------------

@@ -36,8 +36,7 @@ if 'text_pairs' in config_dict['text_config'] :
                                             model, 
                                             config_dict, 
                                             w, 
-                                            aug_type=aug_type, 
-                                            global_standardize=True)
+                                            aug_type=aug_type)
                 df_pw_dists['aug_type'] = aug_type
                 df_pw_dists_all = pd.concat([df_pw_dists_all, df_pw_dists], ignore_index=True)
 
@@ -71,7 +70,6 @@ if ts_dist:
                                                 y_col = y_col,
                                                 conditions = args[y_col],
                                                 b = 500 if aug_type == 'marginal' else 200, 
-                                                global_standardize=True,
                                                 aug_type=aug_type)  
                     df_type['aug_type'] = aug_type
                     df = pd.concat([df, df_type], ignore_index=True)
