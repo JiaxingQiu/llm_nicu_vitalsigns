@@ -1,34 +1,6 @@
 # configurations goes here
 import torch
-
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-text_config = {
-    'cl': {
-        'die7d': True,
-        'fio2': False
-    },
-    'demo': {
-        'ga_bwt': True,
-        'gre': False, # gender_race_ethnicity
-        'apgar_mage': False
-    },
-    'ts': {
-        # dynamic
-        'ts_event': {
-            'sumb': True, # sum_brady
-            'sumd': False, # sum_desat
-            'simple': False,
-            'full': False,
-            'event1': True},
-        # static and categorical
-        'succ_inc': True,
-        'succ_unc': True,
-        'histogram': True
-    },
-    'split': False
-}
 
 # Initialize the config dictionary with default values
 config_dict = {
@@ -38,24 +10,24 @@ config_dict = {
 
     # Eval (clip)
     # ts2txt
-    'y_col': 'cl_event', # column name for the classification outcome, ie. 'cl_event'
-    'y_levels': ['This infant will die in 7 days.', 'This infant will survive.'], # important: only y_levels are kept in the data after downsampling. (i.e. high, low, moderate need to be explicitly listed here)
-    'y_pred_levels': ['will die in 7 days', 'will survive'],
+    'y_col': '', # column name for the classification outcome, ie. 'cl_event'
+    'y_levels': [], # important: only y_levels are kept in the data after downsampling. (i.e. high, low, moderate need to be explicitly listed here)
+    'y_pred_levels': [],
     'y_pred_cols_ls': None,
     # txt2ts
-    'txt2ts_y_cols': ['description_histogram', 'description_succ_unc', 'description_succ_inc'],
-    'sub_caption_col': 'ts_description', # only used for 3d models
+    'txt2ts_y_cols': [],
+    # 'sub_caption_col': 'ts_description', # only used for 3d models
 
 
 
     # Data settings
     # text features to be embedded
-    'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother'] # for 3d
-    'text_col': 'text', # for 2d, can be other text columns to replace 'text'
+    # 'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother'] # for 3d
+    'text_col': '', # for 2d, can be other text columns to replace 'text'
     'seq_length': 300,
     # ts features to be embedded
-    'downsample': True,
-    'downsample_levels': ['This infant will survive.'],
+    'downsample': False,
+    'downsample_levels': [],
     'downsample_size': 1000,
     'ts_aug': False,
     'ts_aug_max_size': None,
@@ -80,26 +52,26 @@ config_dict = {
     
 
     # Model settings
-    'model_name': 'hey_you_forget_to_name_your_model',
+    'model_name': '',
     '3d': False, # **{'3d': False/True} to change in update_config
     'embedded_dim': 768,
     'model_init': None,
     'concat_embeddings': False,
     'clip_mu': False,
-    'variational': True,
+    'variational': False,
     'train_type': 'joint', # or 'vae', 'clip'
     'clip_target_type': 'by_target', # or 'by_label'
 
     # Training settings
     'init_lr': 1e-4,
     'patience': 500,
-    'num_saves': 10,
+    'num_saves': 1,
     'num_epochs': 1000,
-    'alpha': 1/100, # weight of reconstruction loss
-    'beta': 1.0, # weight of kl loss
+    'alpha': 1/1000, # weight of reconstruction loss
+    'beta': 0.0, # weight of kl loss
     
     # Text configuration
-    'text_config': text_config
+    'text_config': None
 }
 
 
@@ -152,20 +124,20 @@ def get_config_dict():
     
     # Validate y_levels and y_pred_levels match
     assert len(config['y_levels']) == len(config['y_pred_levels'])
-    n_levels = len(config['y_levels'])
+    # n_levels = len(config['y_levels'])
 
-    # Generate y_pred_cols_ls for 3D models
-    if config['3d']:
-        pred_cols = [f'text{i+1}' for i in range(n_levels)]
-        y_pred_cols_ls = []
-        for text_col in pred_cols:
-            new_cols = [text_col if x == config['y_col'] else x 
-                       for x in config['text_col_ls']]
-            y_pred_cols_ls.append(new_cols)
-    else:
-        y_pred_cols_ls = None
+    # # Generate y_pred_cols_ls for 3D models
+    # if config['3d']:
+    #     pred_cols = [f'text{i+1}' for i in range(n_levels)]
+    #     y_pred_cols_ls = []
+    #     for text_col in pred_cols:
+    #         new_cols = [text_col if x == config['y_col'] else x 
+    #                    for x in config['text_col_ls']]
+    #         y_pred_cols_ls.append(new_cols)
+    # else:
+    #     y_pred_cols_ls = None
 
-    config['y_pred_cols_ls'] = y_pred_cols_ls
+    # config['y_pred_cols_ls'] = y_pred_cols_ls
 
     if not config['variational']:
         config['beta'] = 0.0 # no kl loss for non-variational models

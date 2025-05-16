@@ -81,10 +81,7 @@ os.environ['LD_LIBRARY_PATH'] = f"{r_home}/lib:" + os.environ.get('LD_LIBRARY_PA
 
 
 2. To install new packages
-cd /home/jq2uw/llm_nicu_vitalsigns
+cd ~/llm_nicu_vitalsigns
 conda activate ./clip_env
 pip install package_name
-jupyter kernelspec uninstall clip_env
-python -m ipykernel install --user --name clip_env --display-name "CLIP"
-
 

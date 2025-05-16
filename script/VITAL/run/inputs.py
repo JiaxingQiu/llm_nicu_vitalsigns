@@ -17,7 +17,10 @@ if config_dict['ts_global_normalize']:
     update_config(ts_normalize_mean = train_mean_std['mean'], 
                   ts_normalize_std = train_mean_std['std'])
     config_dict = get_config_dict()
-
+else:
+    update_config(ts_normalize_mean = None, 
+                  ts_normalize_std = None)
+    config_dict = get_config_dict()
 
 if overwrite or not os.path.exists(model_path):
     # ------------------------- ready eval inputs for CLIP -------------------------

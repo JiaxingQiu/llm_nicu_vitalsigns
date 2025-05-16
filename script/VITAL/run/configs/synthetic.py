@@ -40,15 +40,12 @@ update_config(
     downsample_size = 10000,
     downsample_levels = [t[0]for t in text_config['text_pairs'][attr_id-1]],
     custom_target_cols = ['segment1', 'segment2', 'segment3', 'segment4', 'label'], # 'label' is the same as the default "by_label" target 
-    
+    ts_global_normalize = True, 
     
     # Model settings
     model_name = model_name,
-    variational = False,
     
     # Train settings
-    init_lr = 1e-4,
-    num_saves = 4,
     
     # Text configuration
     text_config = text_config

@@ -7,10 +7,7 @@ from config import *
 def plot_reconstructions(model,
                          df, 
                          config_dict,
-                         text_col = 'text', 
-                         text_col_ls = ['demo', 'cl_event', 'ts_description'],
                          num_samples=20,
-                         # start_idx=0, 
                          title="Data Reconstructions"):
     """
     Plot original and reconstructed time series from a VAE model.
@@ -32,12 +29,12 @@ def plot_reconstructions(model,
     # df = df.iloc[start_idx:(start_idx + num_samples)]  
     
     if config_dict['3d']:
-        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
+        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = config_dict['text_col_ls'])
         ts_f = ts_f.to(device)
         tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
         _, ts_hat, _, _ = model(ts_f, tx_f_ls)
     else:
-        ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
+        ts_f, tx_f, _ = get_features(df, config_dict, text_col = 'text')
         ts_f = ts_f.to(device)
         tx_f = tx_f.to(device)
         _, ts_hat, _, _ = model(ts_f, tx_f)
@@ -64,8 +61,6 @@ def plot_reconstructions(model,
 def plot_reconstruction_from_distances(model, 
                                        df, 
                                        config_dict,
-                                       text_col = 'text', 
-                                       text_col_ls = ['demo', 'cl_event', 'ts_description'],
                                        sample_idx=1, 
                                        distances=[0, 5e-4, 7.5e-4, 1e-3, 2e-3]):
     """
@@ -86,13 +81,13 @@ def plot_reconstruction_from_distances(model,
     # get row start_idx:start_idx + num_samples
     df = df.iloc[[sample_idx]]  
     if config_dict['3d']:
-        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_col_ls)
+        ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = config_dict['text_col_ls'])
         ts_f = ts_f.to(device)
         tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
         tx_emb, _ = model.text_encoder(tx_f_ls)
         x = ts_f[0]
     else:
-        ts_f, tx_f, _ = get_features(df, config_dict, text_col = text_col)
+        ts_f, tx_f, _ = get_features(df, config_dict, text_col = 'text')
         ts_f = ts_f.to(device)
         tx_f = tx_f.to(device)
         tx_emb = model.text_encoder(tx_f)

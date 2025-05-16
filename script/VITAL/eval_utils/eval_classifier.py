@@ -35,12 +35,15 @@ def train_clf(
         y_levels,
         *,
         device="cpu",
-        epochs=100,
+        epochs=10000,
         batch_size=256,
-        lr=1e-3,
+        lr=1e-5,
+        patience=20,                 # ← new: how many epochs to wait
+        min_delta=0.0,               # ← new: minimal improvement to count
         plot=False):
     """
     Fit `clf` (any nn.Module) on `df_train`.
+    Early‑stops if val‑loss doesn’t improve for `patience` epochs.
     Returns the trained model plus (train_losses, val_losses).
     """
     # label ↔ index map
@@ -66,7 +69,10 @@ def train_clf(
     optimizer = torch.optim.AdamW(clf.parameters(), lr=lr)
 
     train_losses, val_losses = [], []
+    best_val = float("inf")          # ← track best validation loss
+    stale = 0                        # ← epochs since last improvement
     interval = max(1, epochs // 5)
+
     for ep in tqdm(range(epochs)):
         run = 0.0
         for xb, yb in train_loader:
@@ -86,9 +92,22 @@ def train_clf(
         val_loss = run / val_len
         val_losses.append(val_loss)
         clf.train()
-        if plot: # for debugging
-            if (ep + 1) % interval == 0 or ep == 0:
-                print(f"epoch {ep+1:03d} | train {train_loss:.4f} | val {val_loss:.4f}")
+
+        # ---- early‑stopping logic ----
+        if val_loss < best_val - min_delta:
+            best_val = val_loss
+            stale = 0                 # reset counter
+            best_state = clf.state_dict()  # optional: keep best weights
+        else:
+            stale += 1
+            if stale >= patience:
+                print(f"Early stopping at epoch {ep+1}")
+                clf.load_state_dict(best_state)  # restore best model
+                break
+        # --------------------------------
+
+        if plot and ((ep + 1) % interval == 0 or ep == 0):
+            print(f"epoch {ep+1:03d} | train {train_loss:.4f} | val {val_loss:.4f}")
 
     if plot:
         plt.plot(train_losses, label="train")
@@ -217,11 +236,10 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         df2aug_src = df2aug[ts_str_cols + [y_col, 'text', 'label']].copy()
         df2pred_src = pd.concat([df2pred_src, df2aug_src], ignore_index=True)
 
-        # generate edited time series
+        # generate edited time series (standardized inside interpolate_ts_tx if config_dict['ts_global_normalize'] is True)
         ts_hat_ls = interpolate_ts_tx(df2aug, model, config_dict, ['new_text'], w)
         tmp = pd.DataFrame(ts_hat_ls['new_text'], columns=['aug_text', 'ts_hat'])
         tmp['ts_hat'] = tmp['ts_hat'].apply(lambda x: x.cpu().detach().numpy() )
-
         # add y_col and update ts_str_cols 
         df2aug[y_col] = tgt_level #tmp['aug_text'].values               
         df2aug[ts_str_cols] = np.vstack(tmp['ts_hat'].to_numpy())
@@ -230,7 +248,19 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         df2aug = df2aug[ts_str_cols + [y_col, 'text', 'new_text']].copy()
         df2pred_aug = pd.concat([df2pred_aug, df2aug], ignore_index=True)
 
+    # --- global standardization df2train[ts_str_cols] and df2pred_src[ts_str_cols] ------------------------------------------------------
+    if config_dict['ts_global_normalize']:
+        # df2train_org = df2train.copy()
+        # df2pred_src_org = df2pred_src.copy()
+        global_mean = config_dict['ts_normalize_mean']
+        global_std  = config_dict['ts_normalize_std']
+        df2train[ts_str_cols] = (df2train[ts_str_cols] - global_mean) / global_std
+        df2pred_src[ts_str_cols] = (df2pred_src[ts_str_cols] - global_mean) / global_std
+
     # --- train and predict ---------------------------------------------------------------------------------------------------------------
+    # print(df2train.head())
+    # print(df2pred_src.head())
+    # print(df2pred_aug.head())
     clf, _ = train_clf(
         clf,
         df2train,                 # dataframe with predictors + label col
@@ -238,7 +268,7 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         y_col,
         y_levels,
         device=device,
-        epochs=100,
+        epochs=10000,
         plot=False
     )
     df2pred_aug = predict_with_clf(

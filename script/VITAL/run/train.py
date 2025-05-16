@@ -118,7 +118,6 @@ if overwrite or not os.path.exists(model_path):
             plot_reconstructions(model, 
                                 df=df_test, 
                                 config_dict = config_dict, 
-                                text_col_ls = config_dict['text_col_ls'],
                                 title="Test Data Reconstructions")
             # distances = [0, 0.1, 0.25, 0.3, 0.6]
             # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
@@ -174,7 +173,6 @@ else:
     plot_reconstructions(model, 
                         df = df_test, 
                         config_dict = config_dict, 
-                        text_col_ls = config_dict['text_col_ls'],
                         title="Test Data Reconstructions")
     # distances = [0, 0.1, 0.25, 0.3, 0.6]
     # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)

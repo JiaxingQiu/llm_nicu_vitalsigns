@@ -26,7 +26,7 @@ if math:
 
 # ---------------------------------------  TS distance eval ---------------------------------------
 # point-wise distance (to syn-gt only()
-if 'text_pairs' in config_dict['text_config'] : 
+if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']:
     if config_dict['text_config']['gt']:
         filename = output_dir+'/df_pw_dists_all'+suffix+'.pt.gz'
         if overwrite or (not os.path.exists(filename)):
