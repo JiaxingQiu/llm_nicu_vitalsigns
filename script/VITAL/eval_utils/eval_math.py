@@ -812,8 +812,18 @@ import numpy as np
 import gc
 from tqdm import tqdm
 
+# Add the tedit_lite folder to the system path
+import sys, os
+tedit_path = os.path.abspath("../../../tedit_lite")
+if tedit_path not in sys.path:
+    sys.path.append(tedit_path)
+from tedit_generation import tedit_generate_ts_tx
+
 # calculate the math properties of the generated time series (calculate on all time series i.e. df_train.sample(500))
-def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None):
+def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None, 
+                        meta = None, # tedit meta
+                        configs = None # teidt configs
+):
     model.eval()
     df_augmented = pd.DataFrame()
     if y_cols is None:
@@ -826,6 +836,7 @@ def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None):
     for y_col in y_cols:
         y_levels = list(df[y_col].unique())
         for i in range(len(y_levels)):
+            
             df_level = df[df[y_col] == y_levels[i]].reset_index(drop=False).copy()
             
             # add new text conditions
@@ -843,7 +854,23 @@ def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None):
                 
             # Augment the time series with the given text conditions
             text_cols = ['text' + str(j) for j in range(len(y_levels))]
-            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, text_cols, w)
+            # mapping text_col to y_level
+            col_level_map = dict(zip(['text' + str(j) for j in range(len(y_levels))], y_levels))
+    
+            # ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, text_cols, w)
+            # tedit model
+            if meta is not None: 
+                new_level_col_map = {k: v for k, v in col_level_map.items() if k in text_cols}
+                ts_hat_ls = tedit_generate_ts_tx(df_level,
+                                                meta,
+                                                config_dict,
+                                                configs,         # used by tedit_generate
+                                                y_col,
+                                                new_level_col_map)
+            # vital model
+            else:
+                ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, text_cols, w)
+
 
             # Calculate the math properties of the generated time series
             df_prop_all = pd.DataFrame()
@@ -851,7 +878,7 @@ def eval_math_properties(df, model, config_dict, aug_type, w, y_cols = None):
                 df_prop = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
                 
                 n_cores = min(max(1, int(multiprocessing.cpu_count() * 0.7)), 10)
-                properties = Parallel(n_jobs=n_cores)(
+                properties = Parallel(n_jobs=n_cores, backend="threading")(
                     delayed(get_all_stats)(x.detach().cpu().numpy()) for x in tqdm(df_prop['ts_hat'], desc="Calculating math statistics")
                 )
                 

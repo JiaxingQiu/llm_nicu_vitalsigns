@@ -9,6 +9,14 @@ from tqdm import tqdm
 from generation import interpolate_ts_tx
 import copy
 
+# Add the tedit_lite folder to the system path
+import sys, os
+tedit_path = os.path.abspath("../../../tedit_lite")
+if tedit_path not in sys.path:
+    sys.path.append(tedit_path)
+from tedit_generation import tedit_generate_ts_tx
+
+#
 
 # ─────────────── define a classifer ──────────────────────────────
 def _get_mean(enc, x):
@@ -185,7 +193,10 @@ def eval_ts_classifier(df, # df can be df_train / df_test
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
                       b=None, # number to bootstrap
                       finetune=True, 
-                      aug_type='conditional'):
+                      aug_type='conditional',
+                      meta = None, # tedit meta
+                      configs = None # teidt configs
+                      ):
     
     model.eval()
     y_levels = list(df[y_col].unique())
@@ -215,7 +226,7 @@ def eval_ts_classifier(df, # df can be df_train / df_test
     else:
         df2train = df.copy()
 
-    df2train = df2train[ts_str_cols + [y_col, 'text', 'label']].copy()
+    df2train = df2train[ts_str_cols + config_dict['txt2ts_y_cols'] + ['text', 'label']].copy()
 
     # --- prepare dataframe to predict by clf a softmax prob for the given y_col ------------------------------------------------------------
     df2pred_aug = pd.DataFrame()
@@ -233,11 +244,29 @@ def eval_ts_classifier(df, # df can be df_train / df_test
             for org_level in org_levels:
                 df2aug['new_text'] = df2aug['new_text'].str.replace(org_level, tgt_level)
             
-        df2aug_src = df2aug[ts_str_cols + [y_col, 'text', 'label']].copy()
+        # df2aug_src = df2aug[ts_str_cols + [y_col, 'text', 'label']].copy()
+        df2aug_src = df2aug[ts_str_cols + config_dict['txt2ts_y_cols'] + ['text', 'label']].copy()
         df2pred_src = pd.concat([df2pred_src, df2aug_src], ignore_index=True)
 
         # generate edited time series (standardized inside interpolate_ts_tx if config_dict['ts_global_normalize'] is True)
-        ts_hat_ls = interpolate_ts_tx(df2aug, model, config_dict, ['new_text'], w)
+        new_text_cols = ['new_text']
+        # derive mapping: new_text_col target level
+        col_level_map = {col: tgt_level for col in new_text_cols}
+
+        # tedit model
+        if meta is not None: 
+            new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
+            ts_hat_ls = tedit_generate_ts_tx(df2aug,
+                                            meta,
+                                            config_dict,
+                                            configs,         # used by tedit_generate
+                                            y_col,
+                                            new_level_col_map)
+        # vital model
+        else:
+            ts_hat_ls = interpolate_ts_tx(df2aug, model, config_dict, ['new_text'], w)
+        
+        # ts_hat_ls = interpolate_ts_tx(df2aug, model, config_dict, ['new_text'], w)
         tmp = pd.DataFrame(ts_hat_ls['new_text'], columns=['aug_text', 'ts_hat'])
         tmp['ts_hat'] = tmp['ts_hat'].apply(lambda x: x.cpu().detach().numpy() )
         # add y_col and update ts_str_cols 

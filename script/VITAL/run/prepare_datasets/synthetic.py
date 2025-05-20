@@ -17,14 +17,15 @@ if 'text_pairs' in config_dict['text_config'] : # use mixture of attributes inst
         df = df.reset_index(drop=True)
         df = add_y_col(df, config_dict)
         print(df.text.value_counts())
-        #  split: 70% train, 20% test, 10% left
-        df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df[config_dict['y_col']], random_state=config_dict['random_state'])
-        df_test, df_left = train_test_split(df_temp, test_size=1/3,stratify=df_temp[config_dict['y_col']],random_state=config_dict['random_state'])
-        # downsample negative levels
+
+        # downsample negative levels first
         if config_dict['downsample']:
-            df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-            df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
-            df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
+            df = downsample_neg_levels(df, config_dict, config_dict['random_state'])
+
+        # then split: 70% train, 20% test, 10% left
+        df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df[config_dict['y_col']], random_state=config_dict['random_state'])
+        df_test, df_left = train_test_split(df_temp, test_size=1/3, stratify=df_temp[config_dict['y_col']], random_state=config_dict['random_state'])
+        print("train, test, left: ", len(df_train), len(df_test), len(df_left))
 
 df_train['label'] = df_train.index.to_series()
 df_test['label'] = df_test.index.to_series()
@@ -44,7 +45,6 @@ print('\n\nfinal distribution of text prediction')
 print(df_train['text'].value_counts())
 print(df_test['text'].value_counts())
 print(df_left['text'].value_counts())
-
 
 
 

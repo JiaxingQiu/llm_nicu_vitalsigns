@@ -1,3 +1,7 @@
+if 'meta' not in locals():
+    meta = None
+if 'configs' not in locals():
+    configs = None
 
 # ---------------------------------------  Math eval ---------------------------------------
 # Math properties (applicable to quantitative time series attributes)
@@ -8,7 +12,8 @@ if math:
         df = df_eval.sample(1000)
         df_stats_all = pd.DataFrame()
         for aug_type in ['conditional', 'marginal']:
-            df_stats = eval_math_properties(df, model, config_dict, aug_type = aug_type, w = w)
+            df_stats = eval_math_properties(df, model, config_dict, aug_type = aug_type, w = w, 
+                                            meta = meta, configs = configs)
             df_stats['aug_type'] = aug_type
             df_stats_all = pd.concat([df_stats_all, df_stats], ignore_index=True)
         
@@ -21,7 +26,7 @@ if math:
         # Load compressed file
         with gzip.open(filename, 'rb') as f:
             buffer = io.BytesIO(f.read())
-            df_stats_all = torch.load(buffer, map_location=device)
+            df_stats_all = torch.load(buffer, map_location=device, weights_only=False)
 
 
 # ---------------------------------------  TS distance eval ---------------------------------------
@@ -36,7 +41,8 @@ if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']
                                             model, 
                                             config_dict, 
                                             w, 
-                                            aug_type=aug_type)
+                                            aug_type=aug_type, 
+                                            meta = meta, configs = configs)
                 df_pw_dists['aug_type'] = aug_type
                 df_pw_dists_all = pd.concat([df_pw_dists_all, df_pw_dists], ignore_index=True)
 
@@ -48,7 +54,7 @@ if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']
             # Load compressed file
             with gzip.open(filename, 'rb') as f:
                 buffer = io.BytesIO(f.read())
-                df_pw_dists_all = torch.load(buffer, map_location=device)
+                df_pw_dists_all = torch.load(buffer, map_location=device, weights_only=False)
 
 
 
@@ -70,7 +76,8 @@ if ts_dist:
                                                 y_col = y_col,
                                                 conditions = args[y_col],
                                                 b = 500 if aug_type == 'marginal' else 200, 
-                                                aug_type=aug_type)  
+                                                aug_type = aug_type, 
+                                                meta = meta, configs = configs)  
                     df_type['aug_type'] = aug_type
                     df = pd.concat([df, df_type], ignore_index=True)
                 df['attr'] = y_col
@@ -84,13 +91,16 @@ if ts_dist:
         # Load compressed file
         with gzip.open(filename, 'rb') as f:
             buffer = io.BytesIO(f.read())
-            df_dists_ls = torch.load(buffer, map_location=device)
+            df_dists_ls = torch.load(buffer, map_location=device, weights_only=False)
             
             
 
 # ---------------------------------------  RaTS eval ---------------------------------------
 # RaTS from classifiers (to both quantitative and qualitative attritbutes)
 if rats:
+    if meta is None:
+        vital_model = model # defined as vital
+    
     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
         
     filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
@@ -101,8 +111,8 @@ if rats:
             for y_col in args.keys():
                 df = pd.DataFrame()
                 for aug_type in ['conditional', 'marginal']:
-                    df_type, _ = eval_ts_classifier(df_eval_rats, model, config_dict,
-                                                    w = w, y_col = y_col, conditions = args[y_col], aug_type = aug_type)
+                    df_type, _ = eval_ts_classifier(df_eval_rats, vital_model, config_dict,
+                                                    w = w, y_col = y_col, conditions = args[y_col], aug_type = aug_type, meta = meta, configs = configs)
                     df = pd.concat([df, df_type], ignore_index=True)
                 df_rats = pd.concat([df_rats, df], ignore_index=True)
             df_rats_ls.append(df_rats)
@@ -114,5 +124,5 @@ if rats:
         # Load compressed file
         with gzip.open(filename, 'rb') as f:
             buffer = io.BytesIO(f.read())
-            df_rats_ls = torch.load(buffer, map_location=device)
+            df_rats_ls = torch.load(buffer, map_location=device, weights_only=False)
 

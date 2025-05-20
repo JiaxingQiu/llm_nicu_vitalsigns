@@ -50,9 +50,11 @@ if overwrite or not os.path.exists(model_path):
     torch.save(config_dict, config_path)
     # overwrite = False # reset overwrite to False
 else:
-    config_dict = torch.load(config_path, map_location=torch.device(device))
+    config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False)
     model = config_dict['model_init']
     print(nn_summary(model))
     model.device = device
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(device), weights_only=False))
+    
 
     

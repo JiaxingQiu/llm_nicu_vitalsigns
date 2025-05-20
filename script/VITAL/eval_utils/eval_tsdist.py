@@ -12,6 +12,14 @@ import pandas as pd
 from generation import interpolate_ts_tx
 from numpy.lib.stride_tricks import sliding_window_view   # NumPy ≥ 1.20
 
+# Add the tedit_lite folder to the system path
+import sys, os
+tedit_path = os.path.abspath("../../../tedit_lite")
+if tedit_path not in sys.path:
+    sys.path.append(tedit_path)
+from tedit_generation import tedit_generate_ts_tx
+
+
 def _split_patches(ts, *, n_patches=8):
     ts = np.ascontiguousarray(ts)   # uniform stride‑layout
     n  = ts.size
@@ -117,7 +125,7 @@ def calculate_similarity_parallel(ref_ts_list, aug_ts_list, n_jobs=None, n_patch
             for i, ref_ts in enumerate(ref_ts_list)
             for j, aug_ts in enumerate(aug_ts_list)]
 
-    results = Parallel(n_jobs=n_jobs, backend="loky")(
+    results = Parallel(n_jobs=n_jobs, backend="threading")(
         delayed(_process_pair)(*job) for job in tqdm(jobs, desc="Similarity")
     )
 
@@ -182,7 +190,10 @@ def eval_ts_similarity(df, # df can be df_train / df_test
                       ths = (None, None),
                       round_to = 4,
                       n_patches=None,
-                      aug_type='conditional'):
+                      aug_type='conditional',
+                      meta = None, # tedit meta
+                      configs = None # teidt configs
+                      ):
     
     if config_dict['ts_global_normalize']:
         # df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
@@ -220,9 +231,20 @@ def eval_ts_similarity(df, # df can be df_train / df_test
     
         # only augment towards NEW text conditions except original aug_text
         new_text_cols = ['text' + str(j) for j in range(len(y_levels)) if y_levels[j] != ref_level]
-        # augment towards new text conditions with w!
-        ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, new_text_cols, w) # 
         
+        # tedit model
+        if meta is not None: 
+            new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
+            ts_hat_ls = tedit_generate_ts_tx(df_level,
+                                            meta,
+                                            config_dict,
+                                            configs,         # used by tedit_generate
+                                            y_col,
+                                            new_level_col_map)
+        # vital mdoel
+        else: 
+            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, new_text_cols, w) # 
+    
         for text_col, pairs in ts_hat_ls.items():
 
             aug_level = col_level_map[text_col]
@@ -440,7 +462,10 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditi
 
 # ----------------- point-wise distance evaluation on synthetic with ground truth data --------------------------------
 # only used for synthetic_gt data
-def eval_pw_dist(df, model, config_dict, w, aug_type='conditional'):
+def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
+                 meta = None, # tedit meta
+                 configs = None # teidt configs
+                ):
     model.eval()
     text_pairs = config_dict['text_config']['text_pairs']
 
@@ -470,8 +495,21 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional'):
                 elif aug_type == 'conditional':
                     df_src_level['text'+str(tgt_id+1)] = df_src_level['text'].str.replace(src_level, tgt_level) # sub src_level with tgt_level  in 'text'+str(tgt_id+1)
             new_text_cols = ['text'+str(tgt_id+1) for tgt_id, _ in enumerate(tgt_levels)]
-            ts_hat_ls = interpolate_ts_tx(df_src_level, model, config_dict, new_text_cols, w) 
+            # mapping text_col to y_level
+            col_level_map = dict(zip(['text' + str(j+1) for j in range(len(tgt_levels))], tgt_levels))
 
+            # tedit model
+            if meta is not None: 
+                new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
+                ts_hat_ls = tedit_generate_ts_tx(df_src_level,
+                                                meta,
+                                                config_dict,
+                                                configs,         # used by tedit_generate
+                                                "segment"+str(att_idx+1),
+                                                new_level_col_map)
+            # vital mdoel
+            else: 
+                ts_hat_ls = interpolate_ts_tx(df_src_level, model, config_dict, new_text_cols, w) # 
             
             # target level to modify towards
             for text_col,tgt_level in zip(new_text_cols, tgt_levels):

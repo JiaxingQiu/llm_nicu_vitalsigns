@@ -49,7 +49,8 @@ config_dict = {
     'ts_encoder_name': 'hr_vae_linear_medium',
     'ts_global_normalize': False, 
     'ts_local_normalize': False, # shared with ts_subseq settings to fill na
-    
+    'ts_normalize_mean': None,
+    'ts_normalize_std': None,
 
     # Model settings
     'model_name': '',

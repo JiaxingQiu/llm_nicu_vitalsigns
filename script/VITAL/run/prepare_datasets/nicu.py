@@ -24,7 +24,8 @@ df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
 df = text_gen_input_column(df, config_dict)
 df['rowid'] = df.index.to_series() 
 df_train = df
-
+if config_dict['downsample']:
+    df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
 
 # Test Data
 df_y_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
@@ -45,17 +46,18 @@ df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'],
 df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
 df_test = text_gen_input_column(df_test, config_dict)
 df_test_org = df_test[df.columns]
-df_test, df_left = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
-
-
-# df_train, df_test = train_test_split(df_train, test_size=0.2, stratify=df_train[config_dict['y_col']], random_state=config_dict['random_state']) 
-# ---- downsample negative class(es) ----
 if config_dict['downsample']:
-    df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-    df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
-    df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
+    df_test_org = downsample_neg_levels(df_test_org, config_dict, config_dict['random_state'])
+df_test, df_left = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
+print("train, test, left: ", len(df_train), len(df_test), len(df_left))
 
-# ---- augment + balance train data----
+# # ---- downsample negative class(es) ----
+# if config_dict['downsample']:
+#     df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
+#     df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
+#     df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
+
+# # ---- augment + balance train data----
 # target_event_rate = len(df_test[df_test[config_dict['y_col']]==config_dict['y_levels'][0]])/len(df_test)
 if config_dict['ts_aug']:
     df_train = augment_balance_data(df_train, 

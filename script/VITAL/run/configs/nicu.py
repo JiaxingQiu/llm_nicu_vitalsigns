@@ -47,7 +47,7 @@ update_config(
     # Data settings
     text_col = 'ts_description',
     downsample = True,
-    downsample_size = 15000,
+    downsample_size = 20000,
     downsample_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'],
     custom_target_cols = ['description_succ_inc', 'description_histogram', 'description_ts_event_binary', 'label'], #  description_ts_event_binary 'description_succ_unc', 
     ts_global_normalize = True, 
@@ -58,6 +58,7 @@ update_config(
     # Train settings
     alpha = 1/100,
     num_saves = 5,
+    init_lr = 1e-5,
     
     # Text configuration
     text_config = text_config
