@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .encoder import ResidualBlock, AddChannelDim
 import math
+from torch.utils.checkpoint import checkpoint
 
 # ------- custom ts decoder_layers -------
 class ResNetDecoder(nn.Module):
@@ -673,12 +674,12 @@ class TransformerDecoderPreAuto(nn.Module):
         dim_feedforward: int = 2048,
         dropout: float = 0.0,
         k = 10, # number of condition tokens per embedding
+        use_checkpoint: bool = True,  # Enable gradient checkpointing
     ):
         super().__init__()
         self.k = k
-        self.ts_dim = ts_dim
-        self.output_dim = output_dim
         self.d_model = nhead * 4
+        self.use_checkpoint = use_checkpoint
 
         # ---------- Conditioning projections ----------
         self.start_token = nn.Linear(output_dim * 2, 1)
@@ -694,8 +695,13 @@ class TransformerDecoderPreAuto(nn.Module):
                                 dim_feedforward=dim_feedforward,
                                 dropout=dropout,
                                 batch_first=True)
-        self.decoder  = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
+        
+        self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
         self.output_projection = nn.Linear(self.d_model, 1)
+        
+    def _decoder_forward(self, tgt, memory, tgt_mask):
+        """Helper function for checkpointing"""
+        return self.decoder(tgt, memory, tgt_mask=tgt_mask)
         
     def forward(self, ts_emb:torch.Tensor, txt_emb:torch.Tensor, ts:torch.Tensor):
         """
@@ -709,28 +715,31 @@ class TransformerDecoderPreAuto(nn.Module):
         # sos   = ts[:, :1]                       # [B,1] raw first value
         sos = self.start_token(torch.cat([ts_emb, txt_emb], dim=1))  # [B,1]
         ts_in = torch.cat([sos, ts[:, :-1]], 1) # [B,T]
-        T     = ts_in.size(1)                   # T_full
+        T = ts_in.size(1)
 
         # 2) build per-time-step memory (same as before, but for T+2k)
         T_plus = T + 2 * self.k
-        ts_emb_t = ts_emb.unsqueeze(1).repeat(1, T_plus, 1)    # [B,T+2k,E]
-        txt_emb_t= txt_emb.unsqueeze(1).repeat(1, T_plus, 1)   # [B,T+2k,E]
-        memory_cat = torch.cat([ts_emb_t, txt_emb_t], 2)       # [B,T+2k,2E]
-        memory     = self.mem_proj(memory_cat)                 # [B,T+2k,d]
+        ts_emb_t = ts_emb.unsqueeze(1).expand(-1, T_plus, -1)
+        txt_emb_t = txt_emb.unsqueeze(1).expand(-1, T_plus, -1)
+
+        memory = self.mem_proj(torch.cat([ts_emb_t, txt_emb_t], 2))  # [B,T+2k,d]
 
         # 3) prepend 2k condition tokens to the decoder input
-        cond_ts  = self.cond_proj(ts_emb).view(B, self.k, self.d_model)        # [B,k,d]
-        cond_txt = self.cond_proj(txt_emb).view(B, self.k, self.d_model)        # [B,k,d]
-        tgt_ts   = self.tgt_proj(ts_in.unsqueeze(-1))          # [B,T,d]
-
-        tgt = torch.cat([cond_ts, cond_txt, tgt_ts], 1)        # [B,T+2k,d]
+        cond_ts = self.cond_proj(ts_emb).view(B, self.k, self.d_model)  # [B,k,d]
+        cond_txt = self.cond_proj(txt_emb).view(B, self.k, self.d_model)  # [B,k,d]
+        tgt_ts = self.tgt_proj(ts_in.unsqueeze(-1))  # [B,T,d]
+        tgt = torch.cat([cond_ts, cond_txt, tgt_ts], 1)  # [B,T+2k,d]
 
         # 4) causal mask (allow reading cond tokens + past)
         causal_mask = self.strict_causal_mask[:T_plus, :T_plus].to(ts.device)
 
-        # 5) decode
-        dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)   # [B,T+2k,d]
-        ts_hat  = self.output_projection(dec_out[:, 2*self.k:]).squeeze(-1)  # drop cond tokens → [B,T]
+        # 5) decode with checkpointing if enabled
+        if self.use_checkpoint and self.training:
+            dec_out = checkpoint(self._decoder_forward, tgt, memory, causal_mask)
+        else:
+            dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)
+            
+        ts_hat = self.output_projection(dec_out[:, 2*self.k:]).squeeze(-1)  # drop cond tokens → [B,T]
 
         return ts_hat
     
@@ -742,40 +751,22 @@ class TransformerDecoderPreAuto(nn.Module):
         ts_emb:   torch.Tensor| None = None,            # [B, E]  ts embedding
         ts_ctx:   torch.Tensor | None = None,  # optional observed prefix [B, T_ctx]
     ) -> torch.Tensor:
-        """
-        Autoregressively extend `ts_ctx` by `horizon` steps.
-        If `ts_ctx` is None or empty, starts from scratch (generation).
-
-        Returns
-        -------
-        seq : torch.Tensor  shape [B, T_ctx + horizon]
-        """
         if ts_emb is None:
             ts_emb = txt_emb.clone()
 
-        device = ts_emb.device
-        dtype  = ts_emb.dtype
-        B      = ts_emb.size(0)
+        device, dtype = ts_emb.device, ts_emb.dtype
+        B             = ts_emb.size(0)
+        seq = torch.empty(B, 0, device=device, dtype=dtype) if ts_ctx is None \
+              else ts_ctx.to(device=device, dtype=dtype).clone()
 
-        # --- initial context -------------------------------------------------
-        if ts_ctx is None:
-            seq = torch.empty(B, 0, device=device, dtype=dtype)   # start fresh
-        else:
-            seq = ts_ctx.to(device=device, dtype=dtype).clone()
-
-        # --- autoregressive rollout -----------------------------------------
         for _ in range(horizon):
             T_cur = seq.size(1)
+            dummy_ts = torch.zeros(B, max(1, T_cur), device=device, dtype=dtype)
+            if T_cur:
+                dummy_ts[:, :T_cur] = seq
+            ts_hat = self(ts_emb, txt_emb, dummy_ts)
+            seq    = torch.cat([seq, ts_hat[:, -1:]], dim=1)
 
-            # build dummy input for forward() : context + placeholder
-            if T_cur == 0:
-                dummy_ts = torch.zeros(B, 1, device=device, dtype=dtype)
-            else:
-                dummy_ts = torch.cat([seq, torch.zeros(B, 1, device=device, dtype=dtype)], dim=1)
+        return seq  # [B, T_ctx + horizon]    
+    
 
-            # model forward (learned start token handles step-0)
-            ts_hat = self(ts_emb, txt_emb, dummy_ts)          # [B, T_cur+1]
-            next_val = ts_hat[:, -1:]                         # newest prediction
-            seq = torch.cat([seq, next_val], dim=1)           # append
-
-        return seq                                            # [B, T_ctx + horizon]
