@@ -137,8 +137,8 @@ class TSEncoder(nn.Module):
             # default encoder layers
             self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
                                                     output_dim=output_dim,
-                                                    kernel_sizes=[100, 50, 25, 5],
-                                                    hidden_num_channel=8,
+                                                    kernel_sizes=[150, 100, 50, 10],
+                                                    hidden_num_channel=16,
                                                     dropout=0.0)
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module

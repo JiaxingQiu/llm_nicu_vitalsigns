@@ -337,7 +337,7 @@ class Diff_CSDI_MultiPatch_Weaver_Parallel(nn.Module):
         )
 
         self.attr_projector = AttrProjector(
-                n_attrs=1,  # Since we're using a single attribute embedding
+                n_attrs=config["n_attrs"],  # Since we're using a single attribute embedding
                 dim_in=config["attr_dim"], 
                 dim_hid=config["channels"], 
                 dim_out=config["channels"],

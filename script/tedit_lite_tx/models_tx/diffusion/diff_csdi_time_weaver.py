@@ -72,20 +72,20 @@ class Diff_CSDI_TimeWeaver(nn.Module):
         self.output_projection2 = Conv1d_with_init(self.channels, 1, 1)
         nn.init.zeros_(self.output_projection2.weight)
         
-        if "attr_proj_type" in config and config["attr_proj_type"] == "avg":
-            self.attr_projector = AttrProjectorAvg(
-                dim_in=config["attr_dim"], 
-                dim_hid=config["channels"], 
-                dim_out=config["channels"],
-            )
-        else:
-            self.attr_projector = AttrProjector(
-                n_attrs=config["n_attrs"],
-                dim_in=config["attr_dim"], 
-                dim_hid=config["channels"], 
-                dim_out=config["channels"], 
-                n_heads=config["attr_heads"], 
-                n_layers=config["attr_layers"])
+        # if "attr_proj_type" in config and config["attr_proj_type"] == "avg":
+        #     self.attr_projector = AttrProjectorAvg(
+        #         dim_in=config["attr_dim"], 
+        #         dim_hid=config["channels"], 
+        #         dim_out=config["channels"],
+        #     )
+        # else:
+        self.attr_projector = AttrProjector(
+            n_attrs=config["n_attrs"],
+            dim_in=config["attr_dim"], 
+            dim_hid=config["channels"], 
+            dim_out=config["channels"], 
+            n_heads=8, 
+            n_layers=2)
 
         self.residual_layers = nn.ModuleList(
             [

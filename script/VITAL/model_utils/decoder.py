@@ -529,20 +529,140 @@ class TransformerDecoderTXTS(nn.Module):
         ts_hat = self.output_projection(dec_out) # ts_hat: [B, 1, ts_dim]
         return ts_hat
 
-class TransformerDecoderAuto(nn.Module):
-    """
-    Autoregressive decoder that takes:
-      • ts_emb + txt_emb → memory (concatenated and projected)
-      • ts → target (raw time series for autoregressive prediction)
+# class TransformerDecoderAuto(nn.Module):
+#     """
+#     Autoregressive decoder that takes:
+#       • ts_emb + txt_emb → memory (concatenated and projected)
+#       • ts → target (raw time series for autoregressive prediction)
     
-    Args:
-        ts_dim: original time-series dimension
-        output_dim: shared embedding size of ts_emb / txt_emb
-        nhead: number of attention heads
-        num_layers: number of transformer layers
-        dim_feedforward: dimension of feedforward network
-        dropout: dropout probability
-    """
+#     Args:
+#         ts_dim: original time-series dimension
+#         output_dim: shared embedding size of ts_emb / txt_emb
+#         nhead: number of attention heads
+#         num_layers: number of transformer layers
+#         dim_feedforward: dimension of feedforward network
+#         dropout: dropout probability
+#     """
+
+#     def __init__(
+#         self,
+#         ts_dim: int,           # original time-series dimension
+#         output_dim: int,          # shared embedding dim of ts_emb / txt_emb
+#         nhead: int = 8,
+#         num_layers: int = 6,
+#         dim_feedforward: int = 2048,
+#         dropout: float = 0.0,
+#     ):
+#         super().__init__()
+        
+#         self.ts_dim = ts_dim  # time series length
+#         self.output_dim = output_dim  # embeddings' dimension
+#         self.d_model = nhead * 2 # if set to 1, decoder runs in 1D (scalar) space (i.e. univariate time series)
+        
+
+#         # self.memory_attention = nn.MultiheadAttention(embed_dim=output_dim, num_heads=nhead, dropout=dropout, batch_first=True)
+#         self.memory_query = nn.Parameter(torch.randn(1, output_dim))  # [1, E]
+#         self.mem_proj = nn.Linear(output_dim * 2, self.d_model)  # [B, T, E] → [B, T, d_model]
+#         self.tgt_proj = nn.Linear(1, self.d_model)  # project tgt to d_model
+
+       
+#        # Register causal mask once with diagonal=1 to allow current position
+#         self.register_buffer("strict_causal_mask", torch.triu(torch.ones(5000, 5000), diagonal=1).bool())
+        
+#         self.decoder_layer = nn.TransformerDecoderLayer(
+#             d_model=self.d_model,  # Decoder runs in 1D (scalar) space
+#             nhead=nhead,    # Must be 1 if d_model=1
+#             dim_feedforward=dim_feedforward,
+#             dropout=dropout,
+#             batch_first=True,
+#         )
+#         self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
+#         self.output_projection = nn.Linear(self.d_model, 1)
+
+
+#     @staticmethod
+#     def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+#         """Ensure input is [B, 1, E] if originally [B, E]"""
+#         return x.unsqueeze(1) if x.dim() == 2 else x
+
+
+#     def forward(self, ts_emb: torch.Tensor,
+#                     txt_emb: torch.Tensor,
+#                     ts:      torch.Tensor):
+        
+#         B, T_full = ts.shape
+#         if T_full < 2:
+#             raise ValueError("Need at least 2 timesteps for teacher forcing")
+
+#         # ---------- 1.  SHIFT  ----------
+#         sos = ts[:, :1]         # [B,1] Prepend ⟨SOS⟩
+#         ts_in  = torch.cat([sos, ts[:, :-1]], 1)            # [B, T]
+#         T = ts_in.size(1) # T = T_full
+
+#         # ---------- 2.  MEMORY ----------
+#         # Repeat ts/text embeddings across time steps
+#         ts_emb_tiled  = ts_emb.unsqueeze(1).repeat(1, T, 1)   # [B,T,E]
+#         txt_emb_tiled = txt_emb.unsqueeze(1).repeat(1, T, 1)  # [B,T,E]
+
+#         memory_cat = torch.cat([ts_emb_tiled, txt_emb_tiled], dim=2)  # [B,T,2E]
+#         memory     = self.mem_proj(memory_cat)                        # [B,T,d_model]
+        
+#         # ---------- 3.  TGT EMBEDDING ----------
+#         tgt = self.tgt_proj(ts_in.unsqueeze(-1))                  # [B,T,d_model]
+        
+#         # ---------- 4.  CAUSAL MASK ----------
+#         # allow self, block future
+#         causal_mask = self.strict_causal_mask[:T, :T].to(ts.device)
+
+#         # ---------- 5.  DECODER ----------
+#         dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)  # [B,T,d_model]
+#         ts_hat  = self.output_projection(dec_out).squeeze(-1)      # [B,T]
+
+#         return ts_hat 
+    
+#     def _compute_memory(self, ts_emb: torch.Tensor,
+#                         txt_emb: torch.Tensor,
+#                         T_out: int) -> torch.Tensor:
+#         B = ts_emb.size(0)
+#         ts_emb_tiled  = ts_emb.unsqueeze(1).repeat(1, T_out, 1)   # [B,T,E]
+#         txt_emb_tiled = txt_emb.unsqueeze(1).repeat(1, T_out, 1)  # [B,T,E]
+#         memory_cat = torch.cat([ts_emb_tiled, txt_emb_tiled], dim=2)  # [B,T,2E]
+#         memory     = self.mem_proj(memory_cat)                        # [B,T,d_model]
+#         return memory
+
+    
+#     @torch.no_grad()
+#     def forecast(self,
+#                  ts_emb:   torch.Tensor,     # [B, E]
+#                  txt_emb:  torch.Tensor,     # [B, E]
+#                  ts_ctx:   torch.Tensor,     # [B, T_ctx]   observed part
+#                  horizon:  int = 1) -> torch.Tensor:
+#         """
+#         Public function forautoregressive forecasting method
+
+#         Returns tensor of shape [B, T_ctx + horizon] = original context + predictions.
+#         """
+#         device = ts_ctx.device
+#         seq    = ts_ctx.clone()          # running buffer  (doesn't alter caller's tensor)
+
+#         for _ in range(horizon):
+#             T_cur   = seq.size(1)                        # length so far
+#             memory  = self._compute_memory(ts_emb, txt_emb, T_cur)
+#             sos     = seq[:, :1]                         # prepend first value
+#             ts_in   = torch.cat([sos, seq[:, :-1]], 1)   # teacher-forcing shift
+#             tgt     = self.tgt_proj(ts_in.unsqueeze(-1)) # [B,T_cur,d_model]
+
+#             causal_mask = self.strict_causal_mask[:T_cur, :T_cur].to(device)
+#             dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)  # [B,T_cur,d_model]
+#             ts_hat  = self.output_projection(dec_out).squeeze(-1)      # [B,T_cur]
+
+#             next_val = ts_hat[:, -1:]                # prediction for step T_cur
+#             seq      = torch.cat([seq, next_val], 1) # append and continue
+
+#         return seq
+
+
+class TransformerDecoderPreAuto(nn.Module):
 
     def __init__(
         self,
@@ -552,74 +672,110 @@ class TransformerDecoderAuto(nn.Module):
         num_layers: int = 6,
         dim_feedforward: int = 2048,
         dropout: float = 0.0,
+        k = 10, # number of condition tokens per embedding
     ):
         super().__init__()
-        
-        self.ts_dim = ts_dim  # Store ts_dim for output projection
-        self.memory_feature_dim = output_dim  # Use output_dim as the feature dimension
-        
-        self.memory_attention = nn.MultiheadAttention(embed_dim=output_dim, num_heads=1, dropout=dropout, batch_first=True)
-        self.memory_query = nn.Parameter(torch.randn(1, output_dim))  # [1, E]
-        self.memory_projection = nn.Linear(output_dim, 1)  # [B, T, E] → [B, T, 1]
+        self.k = k
+        self.ts_dim = ts_dim
+        self.output_dim = output_dim
+        self.d_model = nhead * 4
 
-        # Register causal mask once with diagonal=1 to allow current position
-        self.register_buffer(
-            "strict_causal_mask",
-            torch.triu(torch.ones(5000, 5000), diagonal=1).bool()  # allow current position, block future
-        )
-        
+        # ---------- Conditioning projections ----------
+        self.start_token = nn.Linear(output_dim * 2, 1)
+        self.cond_proj = nn.Sequential(nn.Linear(output_dim, k * self.d_model), nn.GELU())
+        self.mem_proj  = nn.Sequential(nn.Linear(output_dim * 2, self.d_model), nn.GELU())
+        self.tgt_proj  = nn.Sequential(nn.Linear(1, self.d_model), nn.GELU())
+
+        # ---------- Decoder stack ----------
+        self.register_buffer("strict_causal_mask", torch.triu(torch.ones(5000,5000),1).bool())
         self.decoder_layer = nn.TransformerDecoderLayer(
-            d_model=1,  # Decoder runs in 1D (scalar) space
-            nhead=1,    # Must be 1 if d_model=1
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            batch_first=True,
-        )
-        self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
-        self.output_projection = nn.Linear(1, 1)
-
-
-    @staticmethod
-    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
-        """Ensure input is [B, 1, E] if originally [B, E]"""
-        return x.unsqueeze(1) if x.dim() == 2 else x
-
-
-    def forward(self, ts_emb: torch.Tensor,
-                    txt_emb: torch.Tensor,
-                    ts:      torch.Tensor):
+                                d_model=self.d_model, 
+                                nhead=nhead,
+                                dim_feedforward=dim_feedforward,
+                                dropout=dropout,
+                                batch_first=True)
+        self.decoder  = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
+        self.output_projection = nn.Linear(self.d_model, 1)
         
+    def forward(self, ts_emb:torch.Tensor, txt_emb:torch.Tensor, ts:torch.Tensor):
+        """
+        Returns ts_hat of shape [B, T] (same length as input series).
+        """
         B, T_full = ts.shape
-        if T_full < 2:
-            raise ValueError("Need at least 2 timesteps for teacher forcing")
+        if T_full < 1:
+            raise ValueError("need at least one step")
 
-        # ---------- 1.  SHIFT  ----------
-        # Prepend ⟨SOS⟩  → length T  (teacher forcing)
-        sos = ts[:, :1]         # [B,1]
-        ts_in  = torch.cat([sos, ts[:, :-1]], 1)            # [B, T-1 + 1] inputs
-        T = ts_in.size(1) # T = T_full now
+        # 1) teacher-forcing shift
+        # sos   = ts[:, :1]                       # [B,1] raw first value
+        sos = self.start_token(torch.cat([ts_emb, txt_emb], dim=1))  # [B,1]
+        ts_in = torch.cat([sos, ts[:, :-1]], 1) # [B,T]
+        T     = ts_in.size(1)                   # T_full
 
-        # ---------- 2.  MEMORY ----------
-        ts_emb = self._as_sequence(ts_emb)         # [B,1,E]
-        txt_emb = self._as_sequence(txt_emb)       # [B,1,E]
-        memory  = torch.cat([ts_emb, txt_emb], 1)  # [B,2,E]
-        
-        # Use attention to project memory to [B,T,1]
-        memory_query = self.memory_query.unsqueeze(0).expand(B, T, -1)  # [B,T,E]
-        
-        memory_attn, _ = self.memory_attention(query=memory_query, key=memory, value=memory)  # [B,T,E]
-        memory = self.memory_projection(memory_attn)  # [B,T,1]
+        # 2) build per-time-step memory (same as before, but for T+2k)
+        T_plus = T + 2 * self.k
+        ts_emb_t = ts_emb.unsqueeze(1).repeat(1, T_plus, 1)    # [B,T+2k,E]
+        txt_emb_t= txt_emb.unsqueeze(1).repeat(1, T_plus, 1)   # [B,T+2k,E]
+        memory_cat = torch.cat([ts_emb_t, txt_emb_t], 2)       # [B,T+2k,2E]
+        memory     = self.mem_proj(memory_cat)                 # [B,T+2k,d]
 
-        # ---------- 3.  TGT EMBEDDING ----------
-        tgt = ts_in.unsqueeze(-1)                  # [B,T,1]
-        
-        # ---------- 4.  CAUSAL MASK ----------
-        # allow self, block future
-        causal_mask = self.strict_causal_mask[:T, :T].to(ts.device)
+        # 3) prepend 2k condition tokens to the decoder input
+        cond_ts  = self.cond_proj(ts_emb).view(B, self.k, self.d_model)        # [B,k,d]
+        cond_txt = self.cond_proj(txt_emb).view(B, self.k, self.d_model)        # [B,k,d]
+        tgt_ts   = self.tgt_proj(ts_in.unsqueeze(-1))          # [B,T,d]
 
-        # ---------- 5.  DECODER ----------
-        dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)  # [B,T,1]
-        ts_hat  = self.output_projection(dec_out).squeeze(-1)      # [B,T]
+        tgt = torch.cat([cond_ts, cond_txt, tgt_ts], 1)        # [B,T+2k,d]
 
-        return ts_hat        # return targets so loss can be computed outside
+        # 4) causal mask (allow reading cond tokens + past)
+        causal_mask = self.strict_causal_mask[:T_plus, :T_plus].to(ts.device)
 
+        # 5) decode
+        dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)   # [B,T+2k,d]
+        ts_hat  = self.output_projection(dec_out[:, 2*self.k:]).squeeze(-1)  # drop cond tokens → [B,T]
+
+        return ts_hat
+    
+    @torch.no_grad()
+    def forecast(
+        self,
+        txt_emb:  torch.Tensor,            # [B, E]  text embedding
+        horizon:  int,                     # how many steps to produce
+        ts_emb:   torch.Tensor| None = None,            # [B, E]  ts embedding
+        ts_ctx:   torch.Tensor | None = None,  # optional observed prefix [B, T_ctx]
+    ) -> torch.Tensor:
+        """
+        Autoregressively extend `ts_ctx` by `horizon` steps.
+        If `ts_ctx` is None or empty, starts from scratch (generation).
+
+        Returns
+        -------
+        seq : torch.Tensor  shape [B, T_ctx + horizon]
+        """
+        if ts_emb is None:
+            ts_emb = txt_emb.clone()
+
+        device = ts_emb.device
+        dtype  = ts_emb.dtype
+        B      = ts_emb.size(0)
+
+        # --- initial context -------------------------------------------------
+        if ts_ctx is None:
+            seq = torch.empty(B, 0, device=device, dtype=dtype)   # start fresh
+        else:
+            seq = ts_ctx.to(device=device, dtype=dtype).clone()
+
+        # --- autoregressive rollout -----------------------------------------
+        for _ in range(horizon):
+            T_cur = seq.size(1)
+
+            # build dummy input for forward() : context + placeholder
+            if T_cur == 0:
+                dummy_ts = torch.zeros(B, 1, device=device, dtype=dtype)
+            else:
+                dummy_ts = torch.cat([seq, torch.zeros(B, 1, device=device, dtype=dtype)], dim=1)
+
+            # model forward (learned start token handles step-0)
+            ts_hat = self(ts_emb, txt_emb, dummy_ts)          # [B, T_cur+1]
+            next_val = ts_hat[:, -1:]                         # newest prediction
+            seq = torch.cat([seq, next_val], dim=1)           # append
+
+        return seq                                            # [B, T_ctx + horizon]

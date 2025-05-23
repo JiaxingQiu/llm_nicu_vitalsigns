@@ -222,6 +222,7 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
     ts_f = ts_f.to(device)
     raw_ts = ts_f[0].detach().cpu().numpy()
     tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+        
 
     # ----- ts_embeddings -----
     _, ts_emb_mean, ts_emb_log_var, x_mean, x_std = model.ts_encoder(ts_f)
@@ -233,6 +234,7 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
     ts_emb = model.ts_encoder.reparameterization(ts_emb_mean, ts_emb_log_var, ep=ep) # (b, dim)
     x_mean = x_mean.repeat(b, 1)
     x_std = x_std.repeat(b, 1)
+    ts_f = ts_f.repeat(b, 1)  # [b, seq_length] raw time series
         
     ts_hat_ls = {}
     for txid in range(len(tx_f_ls)):
@@ -247,11 +249,6 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
         else:
             emb = ts_emb_inter
             
-        # Ensure ts_f has the correct shape [B,L,ts_dim]
-        # First repeat for batch size, then add sequence dimension
-        ts_f = ts_f[0].repeat(b, 1)  # [b, seq_length]
-        ts_f = ts_f.unsqueeze(1)     # [b, 1, seq_length]
-        ts_f = torch.zeros_like(ts_f)
         
         ts_hat = model.ts_decoder(emb, tx_emb, ts_f)
         if plot:
