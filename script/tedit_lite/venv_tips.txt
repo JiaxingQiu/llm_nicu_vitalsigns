@@ -1,0 +1,21 @@
+in terminal (rivanna)
+- cd ~/tedit_lite
+- python3 -m venv tedit_env
+- source tedit_env/bin/activate
+- pip install --upgrade pip
+- pip install -r requirements.txt
+- pip install ipykernel
+- python -m ipykernel install --user --name=tedit_env --display-name "tedit_env"
+
+to remove
+- deactivate #Leave the venv if it’s active (tedit_env) shown
+- jupyter kernelspec list
+- jupyter kernelspec uninstall tedit_env      # or: jupyter kernelspec remove tedit_env
+- rm -rf ~/tedit_lite/tedit_env
+
+to run as documented
+- cd ~/tedit_lite
+- source tedit/bin/activate
+- bash-4.4$b
+import os
+import yamlash scripts/air/pretrain_multi_weaver.sh

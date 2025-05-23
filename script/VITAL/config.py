@@ -66,9 +66,9 @@ config_dict = {
     # Training settings
     'init_lr': 1e-4,
     'patience': 500,
-    'num_saves': 1,
-    'num_epochs': 1000,
-    'alpha': 1/1000, # weight of reconstruction loss
+    'num_saves': 10,
+    'num_epochs': 500,
+    'alpha': 1/10000, # weight of reconstruction loss
     'beta': 0.0, # weight of kl loss
     
     # Text configuration

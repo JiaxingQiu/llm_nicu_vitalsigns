@@ -12,12 +12,19 @@ import pandas as pd
 from generation import interpolate_ts_tx
 from numpy.lib.stride_tricks import sliding_window_view   # NumPy ≥ 1.20
 
-# Add the tedit_lite folder to the system path
+# Add the tedit_lite and tedit_lite_tx folders to the system path
 import sys, os
-tedit_path = os.path.abspath("../../../tedit_lite")
-if tedit_path not in sys.path:
-    sys.path.append(tedit_path)
-from tedit_generation import tedit_generate_ts_tx
+# Path for tedit_lite
+tedit_attr_path = os.path.abspath("../tedit_lite")
+if tedit_attr_path not in sys.path:
+    sys.path.append(tedit_attr_path)
+from tedit_generation import tedit_generate_ts_tx as tedit_generate_ts_tx
+
+# Path for tedit_lite_tx
+tedit_tx_path = os.path.abspath("../tedit_lite_tx")
+if tedit_tx_path not in sys.path:
+    sys.path.append(tedit_tx_path)
+from tedit_tx_generation import tedit_generate_ts_tx as tedit_tx_generate_ts_tx
 
 
 def _split_patches(ts, *, n_patches=8):
@@ -192,13 +199,23 @@ def eval_ts_similarity(df, # df can be df_train / df_test
                       n_patches=None,
                       aug_type='conditional',
                       meta = None, # tedit meta
-                      configs = None # teidt configs
+                      configs = None, # teidt configs
+                      model_type = None # if None, will be auto-detected
                       ):
     
+    # Auto-detect model type if not specified
+    if model_type is None:
+        if meta is None:
+            model_type = 'vital'
+        else:
+            if 'level_maps' in meta:
+                model_type = 'tedit'
+            elif 'attr_emb_dim' in meta:
+                model_type = 'tedit_tx'
+            else:
+                raise ValueError("Could not determine model type from meta dictionary")
+       
     if config_dict['ts_global_normalize']:
-        # df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
-        # global_mean = np.nanmean(df_ts.values)        # ignores NaNs
-        # global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
         global_mean = config_dict['ts_normalize_mean']
         global_std  = config_dict['ts_normalize_std']
     
@@ -232,31 +249,36 @@ def eval_ts_similarity(df, # df can be df_train / df_test
         # only augment towards NEW text conditions except original aug_text
         new_text_cols = ['text' + str(j) for j in range(len(y_levels)) if y_levels[j] != ref_level]
         
-        # tedit model
-        if meta is not None: 
+        # Choose model based on model_type
+        if model_type == 'tedit_tx':
+            new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
+            ts_hat_ls = tedit_tx_generate_ts_tx(df_level,
+                                               meta,
+                                               config_dict,
+                                               configs,
+                                               y_col,
+                                               new_level_col_map)
+        elif model_type == 'tedit':
             new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
             ts_hat_ls = tedit_generate_ts_tx(df_level,
                                             meta,
                                             config_dict,
-                                            configs,         # used by tedit_generate
+                                            configs,
                                             y_col,
                                             new_level_col_map)
-        # vital mdoel
-        else: 
-            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, new_text_cols, w) # 
+        else:  # vital model
+            ts_hat_ls = interpolate_ts_tx(df_level, model, config_dict, new_text_cols, w)
     
         for text_col, pairs in ts_hat_ls.items():
-
             aug_level = col_level_map[text_col]
 
             # augmented time series
             aug_df = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
-            # aug_text = aug_df['aug_text'].unique()[0] # # augment towards text
             aug_df['ts_hat'] = aug_df['ts_hat'].apply(lambda x: x.cpu().detach().numpy())
             aug_ts_list = [aug_df['ts_hat'][i] for i in range(len(aug_df))]
             
             # target time series
-            tgt_df = df[df[y_col] == aug_level] # this will make tgt_df['text'] mismatch with aug_df['aug_text']
+            tgt_df = df[df[y_col] == aug_level]
             tgt_ts_list = [tgt_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(tgt_df))]
             
             # orginal time series (reference time series) 
@@ -264,18 +286,15 @@ def eval_ts_similarity(df, # df can be df_train / df_test
             ref_ts_list = [ref_df[[str(i+1) for i in range(config_dict['seq_length'])]].to_numpy()[i] for i in range(len(ref_df))]
             
             if config_dict['ts_global_normalize']:
-                tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list] # globally standardize time series
+                tgt_ts_list = [(tgt - global_mean) / global_std for tgt in tgt_ts_list]
                 ref_ts_list = [(ref_ts - global_mean) / global_std for ref_ts in ref_ts_list]
-                # aug_ts_list = [(aug_ts - global_mean) / global_std for aug_ts in aug_ts_list]
             else:
                 if ths[0] is not None or ths[1] is not None:
-                    # ref_ts_list = [_scale_to_range(ref_ts, ths) for ref_ts in ref_ts_list]
                     aug_ts_list = [_scale_to_range(aug_ts, ths) for aug_ts in aug_ts_list]
-                    # ref_ts_list = [ref_ts.clip(ths[0], ths[1]) for ref_ts in ref_ts_list]
-                    # aug_ts_list = [aug_ts.clip(ths[0], ths[1]) for aug_ts in aug_ts_list]
                 if round_to is not None:
                     ref_ts_list = [np.round(ref_ts, round_to) for ref_ts in ref_ts_list]
                     aug_ts_list = [np.round(aug_ts, round_to) for aug_ts in aug_ts_list]
+
             # plot 20 time series in aug_ts_list
             fig, axs = plt.subplots(4, 5, figsize=(20, 8))
             for i in range(20):
@@ -290,7 +309,6 @@ def eval_ts_similarity(df, # df can be df_train / df_test
             _, _, _, _, dtw_aug2tgt, lcss_aug2tgt, mse_aug2tgt, mae_aug2tgt = calculate_similarity_parallel(aug_ts_list, tgt_ts_list, n_patches=n_patches)
             _, _, _, _, dtw_ref2tgt, lcss_ref2tgt, mse_ref2tgt, mae_ref2tgt = calculate_similarity_parallel(ref_ts_list, tgt_ts_list, n_patches=n_patches)
             
-
             aug_df['dtw_aug2tgt'] = dtw_aug2tgt
             aug_df['lcss_aug2tgt'] = lcss_aug2tgt
             aug_df['mse_aug2tgt'] = mse_aug2tgt
@@ -464,27 +482,31 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditi
 # only used for synthetic_gt data
 def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
                  meta = None, # tedit meta
-                 configs = None # teidt configs
+                 configs = None, # teidt configs
+                 model_type = None # if None, will be auto-detected
                 ):
+    # Auto-detect model type if not specified
+    if model_type is None:
+        if meta is None:
+            model_type = 'vital'
+        else:
+            if 'level_maps' in meta:
+                model_type = 'tedit'
+            elif 'attr_emb_dim' in meta:
+                model_type = 'tedit_tx'
+            else:
+                raise ValueError("Could not determine model type from meta dictionary")
+
     model.eval()
     text_pairs = config_dict['text_config']['text_pairs']
 
     if config_dict['ts_global_normalize']:
-        # df_ts = df[[str(i+1) for i in range(config_dict['seq_length'])]] 
-        # global_mean = np.nanmean(df_ts.values)        # ignores NaNs
-        # global_std  = np.nanstd(df_ts.values, ddof=0) # population std, ignores NaNs
         global_mean = config_dict['ts_normalize_mean']
         global_std  = config_dict['ts_normalize_std']
-
 
     pw_df_all = pd.DataFrame()
     # attribute to be modified
     for att_idx, att in enumerate(text_pairs):  
-        # # attributes to be conditioned on
-        # condition_attrs = sorted(
-        #     set(f"segment{aid+1}_srcid" for aid in range(len(text_pairs)))
-        #     - {f"segment{att_idx+1}_srcid"}
-        # )  
         # source level to be modified
         for src_level, _ in tqdm(att):   
             df_src_level = df.loc[df["segment"+str(att_idx+1)] == src_level,:]
@@ -498,18 +520,25 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
             # mapping text_col to y_level
             col_level_map = dict(zip(['text' + str(j+1) for j in range(len(tgt_levels))], tgt_levels))
 
-            # tedit model
-            if meta is not None: 
+            # Choose model based on model_type
+            if model_type == 'tedit_tx':
+                new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
+                ts_hat_ls = tedit_tx_generate_ts_tx(df_src_level,
+                                                   meta,
+                                                   config_dict,
+                                                   configs,
+                                                   "segment"+str(att_idx+1),
+                                                   new_level_col_map)
+            elif model_type == 'tedit':
                 new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
                 ts_hat_ls = tedit_generate_ts_tx(df_src_level,
                                                 meta,
                                                 config_dict,
-                                                configs,         # used by tedit_generate
+                                                configs,
                                                 "segment"+str(att_idx+1),
                                                 new_level_col_map)
-            # vital mdoel
-            else: 
-                ts_hat_ls = interpolate_ts_tx(df_src_level, model, config_dict, new_text_cols, w) # 
+            else:  # vital model
+                ts_hat_ls = interpolate_ts_tx(df_src_level, model, config_dict, new_text_cols, w)
             
             # target level to modify towards
             for text_col,tgt_level in zip(new_text_cols, tgt_levels):
@@ -524,8 +553,6 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
                 aug_df = pd.DataFrame(pairs, columns=['aug_text', 'ts_hat'])
                 aug_df['ts_hat'] = aug_df['ts_hat'].apply(lambda x: x.cpu().detach().numpy())
                 aug_ts_list = [aug_df['ts_hat'][i] for i in range(len(aug_df))]
-                # if config_dict['ts_global_normalize']:
-                #     aug_ts_list = [(aug - global_mean) / global_std for aug in aug_ts_list] # globally standardize time series
 
                 # point-wise performance by mse and mae
                 mse = []
@@ -534,7 +561,7 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
                     diff = tgt - aug
                     mse.append(np.mean(diff ** 2))
                     mae.append(np.mean(np.abs(diff)))
-                pw_df = pd.DataFrame({ "MSE": mse, "MAE": mae}) #"pair_id": range(len(mse)),
+                pw_df = pd.DataFrame({ "MSE": mse, "MAE": mae})
                 pw_df['src_level'] = src_level
                 pw_df['tgt_level'] = tgt_level
                 pw_df['attr'] = 'segment'+str(att_idx+1)
@@ -542,7 +569,6 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
                 pw_df_all = pd.concat([pw_df_all, pw_df], ignore_index=True)
 
     # reformat
-    # pw_df_all has columns : pair_id	MSE	MAE	src_level	tgt_level	attr	aug_type
     mse_df = pw_df_all[['aug_type', 'attr', 'src_level', 'tgt_level', 'MSE']] 
     mse_df.rename(columns={'MSE': 'score'}, inplace=True)
     mae_df = pw_df_all[['aug_type', 'attr', 'src_level', 'tgt_level', 'MAE']] 

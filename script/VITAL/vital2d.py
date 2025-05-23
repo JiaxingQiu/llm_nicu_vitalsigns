@@ -30,12 +30,15 @@ class VITAL(nn.Module):
             ts_encoder: Optional custom time series encoder
             text_encoder: Optional custom text encoder
             ts_decoder: Optional custom time series decoder
+            variational: Whether to use VAE (default: True)
+            clip_mu: Whether to use mean for CLIP instead of sampled z (default: False)
+            concat_embeddings: Whether to concatenate embeddings before decoding (default: False)
         """
 
         super().__init__()
         
         # ts_encoder
-        self.ts_encoder = TSVAEEncoder(ts_dim, output_dim, encoder_layers = ts_encoder)
+        self.ts_encoder = TSEncoder(ts_dim, output_dim, encoder_layers = ts_encoder, variational = variational)
         
         # text_encoder
         self.text_encoder = TextEncoder(text_dim, output_dim, encoder_layers = text_encoder)
@@ -45,7 +48,7 @@ class VITAL(nn.Module):
             decode_dim = 2*output_dim
         else:
             decode_dim = output_dim
-        self.ts_decoder = TSVAEDecoder(ts_dim = ts_dim, output_dim = decode_dim, decoder_layers = ts_decoder)
+        self.ts_decoder = TSDecoder(ts_dim = ts_dim, output_dim = decode_dim, decoder_layers = ts_decoder)
         
         
         self.device = device
@@ -97,7 +100,8 @@ class VITAL(nn.Module):
             decode_input = torch.cat([z, text_embedded], dim=1)
         else:
             decode_input = z
-        ts_hat = self.ts_decoder(decode_input, x_mean, x_std)
+        
+        ts_hat = self.ts_decoder(decode_input, text_embedded, ts)
 
         return logits, ts_hat, mean, log_var
 
@@ -116,48 +120,33 @@ class LocalNorm(nn.Module):
         
         return x_norm, mean, std
 
-class TSVAEEncoder(nn.Module):
-    def __init__(self, ts_dim: int, output_dim: int, encoder_layers = None):
+class TSEncoder(nn.Module):
+    def __init__(self, ts_dim: int, output_dim: int, encoder_layers = None, variational: bool = False):
         """Time series encoder with progressive architecture
         
         Args:
             ts_dim (int): Input time series dimension
             output_dim (int): Output embedding dimension
+            encoder_layers (nn.Module): Custom encoder layers (default: None)
+            variational (bool): Whether to enable VAE sampling (default: True)
         """
         super().__init__()
+        self.variational = variational
         self.local_norm = LocalNorm()
         if encoder_layers is None:
             # default encoder layers
             self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
                                                     output_dim=output_dim,
-                                                    kernel_sizes=[150, 100, 50, 10],
-                                                    hidden_num_channel=16,
-                                                    dropout=0)
-            # # old default encoder layers
-            # nn.Sequential(
-            #     MultiLSTMEncoder(
-            #         ts_dim=ts_dim, 
-            #         output_dim=256,
-            #         hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
-            #         num_layers=2,
-            #         dropout=0,
-            #         bidirectional=False,
-            #         mask=0  # mask 0 with 0 to suppress the effect of masked values
-            #     ),
-            #     nn.LayerNorm(256),  # Add LayerNorm at the end
-            #     nn.Linear(256, 512),
-            #     nn.LeakyReLU(0.2),
-            #     nn.LayerNorm(512),
-            #     nn.Linear(512, output_dim),
-            #     nn.LeakyReLU(0.2),
-            #     nn.LayerNorm(output_dim)
-            # )
+                                                    kernel_sizes=[100, 50, 25, 5],
+                                                    hidden_num_channel=8,
+                                                    dropout=0.0)
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
-        # Latent mean and variance 
-        self.mean_layer = nn.Linear(output_dim, output_dim)
-        self.logvar_layer = nn.Linear(output_dim, output_dim)
+        # Only create mean and log variance layers if variational is True
+        if self.variational:
+            self.mean_layer = nn.Linear(output_dim, output_dim)
+            self.logvar_layer = nn.Linear(output_dim, output_dim)
     
     def reparameterization(self, mean, log_var, ep=1):
         var = ep * torch.exp(0.5 * log_var) # slower than using log_var directly
@@ -168,53 +157,68 @@ class TSVAEEncoder(nn.Module):
         return z
     
     def forward(self, x):
-        
-        _, x_mean, x_std =  self.local_norm(x)
+        _, x_mean, x_std = self.local_norm(x)
         #  ---- encode -----
         x_encoded = self.encoder_layers(x)
-        mean = self.mean_layer(x_encoded)
-        mean = F.normalize(mean, dim=1) 
-        
-        log_var = self.logvar_layer(x_encoded)
 
-        #  ---- reparameterization -----
-        z = self.reparameterization(mean, log_var)
-        # z = F.normalize(z, dim=1)
+        if self.variational:
+            mean = self.mean_layer(x_encoded)
+            log_var = self.logvar_layer(x_encoded)
+            z = self.reparameterization(mean, log_var)
+        else:
+            mean = x_encoded
+            log_var = torch.full_like(mean, -1e2)  # effectively 0 variance
+            z = mean
+             
+        z = F.normalize(z, dim=1)
+        mean = F.normalize(mean, dim=1)
         
         return z, mean, log_var, x_mean, x_std
 
-
-class TSVAEDecoder(nn.Module):
+import inspect
+class TSDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
+        self.ts_dim = ts_dim  # Store ts_dim for zero initialization
         if decoder_layers is None:
-            self.decoder = TransformerDecoder(ts_dim = ts_dim, 
-                                              output_dim = output_dim, 
-                 nhead = 4,
-                 num_layers = 6,
-                 dim_feedforward = 512,
-                 dropout = 0.0)
-            # # old default decoder layers
-            # nn.Sequential(
-            #     nn.Linear(output_dim, 256), # +2 2 for x_mean and x_std
-            #     nn.LeakyReLU(0.2),
-            #     nn.Linear(256, 256),
-            #     nn.LeakyReLU(0.2),
-            #     nn.Linear(256, ts_dim)
-            # )
+            self.decoder = TransformerDecoderTXTS(
+                ts_dim     = ts_dim,
+                output_dim = output_dim,
+                nhead      = 1,
+                num_layers = 1,
+                dim_feedforward = 512,
+                dropout    = 0.0,
+            )
         else:
             self.decoder = decoder_layers
+        
+        # ---------- figure out how many positional args it needs --------
+        sig = inspect.signature(self.decoder.forward)
+        # skip the first ("self") parameter
+        required_params_count = 0
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and param.default == inspect.Parameter.empty:
+                required_params_count += 1
+        self._n_required_args = required_params_count
     
-    def forward(self, z, x_mean, x_std):
-        # z = torch.cat([z, x_mean, x_std], dim=1) # can help the decoder to learn faster but not good for reconstruct shift means
-        x_hat = self.decoder(z)
-        # # scale back to raw scale
-        # x_hat = x_hat * x_std + x_mean
-        # # round to 0 decimal places
-        # x_hat = torch.round(x_hat)
+    def forward(self, ts_emb, txt_emb = None, ts = None):
+        if self._n_required_args == 1:
+            x_hat = self.decoder(ts_emb)                         # e.g. AttentionDecoder
+        elif self._n_required_args == 2:
+            x_hat = self.decoder(ts_emb, txt_emb)                # e.g. TransformerDecoderTXTS
+        elif self._n_required_args == 3:
+            if ts is None:
+                # If ts is not provided, use zeros as initial sequence with correct ts_dim
+                ts = torch.zeros(ts_emb.size(0), 1, self.ts_dim, device=ts_emb.device)
+            x_hat = self.decoder(ts_emb, txt_emb, ts)            # e.g. TransformerDecoderAuto
+        else:
+            raise TypeError(
+                f"{self.decoder.__class__.__name__}.forward takes "
+                f"{self._n_required_args} positional args; only 1, 2, or 3 supported."
+            )
+        x_hat = x_hat.squeeze(1) if x_hat.dim() == 3 and x_hat.size(1) == 1 else x_hat         # [B, ts_dim]
+        
         return x_hat
-# import inspect
-# print(inspect.getsource(model.ts_decoder.forward))
 
 class TextEncoder(nn.Module):
     def __init__(self, text_dim: int, output_dim: int, encoder_layers = None):
@@ -227,13 +231,12 @@ class TextEncoder(nn.Module):
         """
         super().__init__()
         if encoder_layers is None:
-            self.encoder_layers = TextEncoderMultiCNN(text_dim = text_dim,
-                                   output_dim=output_dim,
-                                   kernel_sizes=[768, 384, 192],  # Different context windows
-                                   hidden_num_channel=16,
-                                   dropout=0.0)
-            # # old default encoder layers
-            # TextEncoderMLP(text_dim, output_dim)
+            self.encoder_layers = TextEncoderAttention(
+                text_dim=text_dim,
+                output_dim=output_dim,
+                num_heads=1,
+                dropout=0.0
+            )   
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
@@ -242,27 +245,3 @@ class TextEncoder(nn.Module):
         tx_emb = F.normalize(tx_emb, dim=1)
         return tx_emb
 
-# # test text encoder
-# # Initialize text encoder
-# text_dim = 768  # typical BERT dimension
-# output_dim = 10
-# text_encoder = TextEncoder(text_dim, output_dim)
-# # Create a single random vector
-# single_vector = torch.randn(text_dim)
-# # Create a batch of repeated vectors
-# batch_size = 4
-# repeated_batch = single_vector.unsqueeze(0).repeat(batch_size, 1)
-# # Create a mixed batch where first element is single_vector and rest are random
-# mixed_batch = torch.cat([
-#     single_vector.unsqueeze(0),  # First element is single_vector
-#     torch.randn(batch_size - 1, text_dim)  # Rest are random
-# ], dim=0)
-# # Process single vector
-# single_output = text_encoder(single_vector.unsqueeze(0))[0]  # Take first element since encoder expects batch
-# # Process repeated batch
-# repeated_output = text_encoder(repeated_batch)
-# # Process mixed batch
-# mixed_output = text_encoder(mixed_batch)
-# print(single_output)
-# print(repeated_output[0])
-# print(mixed_output[0])

@@ -32,7 +32,8 @@ def interpolate_ts_tx(df, model, config_dict, text_cols, w):
             emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
         else:
             emb = ts_emb_inter # torch.cat([ts_emb_inter, x_mean, x_std], dim=1)
-        ts_hat = model.ts_decoder(emb, x_mean, x_std)
+        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)   
+        
         text_condition = df[text_cols[txid]]
         ts_hat_ls[text_cols[txid]] = list(zip(text_condition, ts_hat))
     
@@ -67,7 +68,7 @@ def interpolate_ts_tx_single(df, model, config_dict, text_cols, w, label = False
             emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
         else:
             emb = ts_emb_inter # torch.cat([ts_emb_inter, x_mean, x_std], dim=1)
-        ts_hat = model.ts_decoder(emb, x_mean, x_std)
+        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)
         # # plot the ts_hat
         # plt.plot(ts_hat[0].detach().cpu().numpy())
         # plt.show()
@@ -102,7 +103,7 @@ def plot_interpolate_ts_tx_ws(df, model, config_dict, text_cols, w_values=None, 
     if w_values is None:
         w_values = np.arange(0, 1.1, 0.1)
     
-    # Get ground truth reconstruction
+    # Get ground truth reconstruction       
     _, ts_hats, raw_ts = interpolate_ts_tx_single(df, model, config_dict, 
                                          text_cols = ['text'], # ground truth text condition
                                          w=0, # reconstruction only on ground truth text condition
@@ -229,7 +230,6 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
         ts_emb_log_var = torch.zeros_like(ts_emb_mean) - 1e2   
     else:
         ts_emb_log_var = ts_emb_log_var.expand(b, -1)
-        # ts_emb_log_var = torch.zeros_like(ts_emb_mean) - 1e2   
     ts_emb = model.ts_encoder.reparameterization(ts_emb_mean, ts_emb_log_var, ep=ep) # (b, dim)
     x_mean = x_mean.repeat(b, 1)
     x_std = x_std.repeat(b, 1)
@@ -246,8 +246,14 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
             emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
         else:
             emb = ts_emb_inter
-        ts_hat = model.ts_decoder(emb, x_mean, x_std)
+            
+        # Ensure ts_f has the correct shape [B,L,ts_dim]
+        # First repeat for batch size, then add sequence dimension
+        ts_f = ts_f[0].repeat(b, 1)  # [b, seq_length]
+        ts_f = ts_f.unsqueeze(1)     # [b, 1, seq_length]
+        ts_f = torch.zeros_like(ts_f)
         
+        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)
         if plot:
             ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0) 
             ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0)

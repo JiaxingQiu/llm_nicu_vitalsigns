@@ -3,6 +3,7 @@ res/
 lit/
 .DS_Store
 .Rhistory
+.ipynb_checkpoints/
 script/VAE/results/
 script/CLIP/results/
 script/CLIP/tmp/
@@ -11,6 +12,9 @@ script/WSDIST/results/
 script/VITAL/results/
 script/VITAL/tmp/
 script/VITAL/test/
+script/diffCLIP
+script/tedit_lite/tedit_save/
+script/tedit_lite_tx/tedit_save/
 __pycache__/
 .vscode/
 clip_env/

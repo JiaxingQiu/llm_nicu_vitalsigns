@@ -76,8 +76,8 @@ def vital_contrast_infer(df, model, config_dict,
             z_tx_embedded = torch.cat([z, tx_embedded], dim=1)
         else:
             z_tx_embedded = z
-        ts_hat = model.ts_decoder(z_tx_embedded, x_mean, x_std)
-        
+        ts_hat = model.ts_decoder(z_tx_embedded, tx_embedded, ts_f)
+
         logits = model.clip(z, tx_embedded)
         logits = torch.diag(logits).reshape(-1, 1)
         logits_ls.append(logits)

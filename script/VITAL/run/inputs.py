@@ -8,6 +8,18 @@ model_path = output_dir+'/model.pth'
 eval_path = output_dir+'/evals.pth'
 config_path = output_dir+'/config.pth'
 
+
+# ---- prepare target matrix ----
+if len(config_dict['custom_target_cols']) > 0:
+    target_train = gen_target(df_train, config_dict['custom_target_cols'])
+    target_test = gen_target(df_test, config_dict['custom_target_cols'])
+    target_left = gen_target(df_left, config_dict['custom_target_cols'])
+else:
+    target_train = None
+    target_test = None
+    target_left = None
+
+
 # -- assign global normalization mean and std --
 if config_dict['ts_global_normalize']:
     train_mean_std = {'mean': np.nanmean(df_train[[str(i+1) for i in range(config_dict['seq_length'])]].values), 
@@ -60,14 +72,24 @@ if overwrite or not os.path.exists(model_path):
                                                                 config_dict,
                                                                 text_col_ls = config_dict['text_col_ls'])
         test_dataloader = VITAL3DDataset(ts_f_test, tx_f_test_ls, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])
+        ts_f_left, tx_f_left_ls, labels_left = get_features3d(df_left, 
+                                                                config_dict,
+                                                                text_col_ls = config_dict['text_col_ls'])
+        left_dataloader = VITAL3DDataset(ts_f_left, tx_f_left_ls, labels_left, target_left).dataloader(batch_size=config_dict['batch_size'])
     else: 
-        ts_f_train, tx_f_train, labels_train = get_features(df_train,
-                                                            config_dict)
+        ts_f_train, tx_f_train, labels_train = get_features(df_train, config_dict)
+        if target_train is None: 
+            target_train = gen_text_similarity_target(tx_f_train)
         train_dataloader = VITALDataset(ts_f_train, tx_f_train, labels_train, target_train).dataloader(batch_size=config_dict['batch_size'])
-        ts_f_test, tx_f_test, labels_test = get_features(df_test,
-                                                            config_dict)
+        ts_f_test, tx_f_test, labels_test = get_features(df_test, config_dict)
+        if target_test is None: 
+            target_test = gen_text_similarity_target(tx_f_test)
         test_dataloader = VITALDataset(ts_f_test, tx_f_test, labels_test, target_test).dataloader(batch_size=config_dict['batch_size'])
-
+        ts_f_left, tx_f_left, labels_left = get_features(df_left, config_dict)
+        if target_left is None: 
+            target_left = gen_text_similarity_target(tx_f_left)
+        left_dataloader = VITALDataset(ts_f_left, tx_f_left, labels_left, target_left).dataloader(batch_size=config_dict['batch_size'])
+        
 # ------------------------- ready input features dimension -------------------------
 # get the dimension of input features
 if 'ts_f_dim' not in locals():

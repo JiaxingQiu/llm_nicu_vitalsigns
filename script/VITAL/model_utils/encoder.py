@@ -262,6 +262,105 @@ class MultiCNNEncoder(nn.Module):
         
         return combined_output
 
+
+# old default encoder layers
+# MultiCNNEncoder(ts_dim = ts_dim,
+#                 output_dim=output_dim,
+#                 kernel_sizes=[150, 100, 50, 10],
+#                 hidden_num_channel=16,
+#                 dropout=0)
+
+class MultiCNNEncoderScalar(nn.Module):
+    """
+    Multi-resolution CNN encoder that fuses branch embeddings with a **learned
+    softmax weight per kernel size** (“scalar gating”).
+
+    Each branch → (B, D); stack → (B, n_k, D); softmax over a trainable
+    vector `alpha` gives weights that are applied and summed.
+    """
+
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        kernel_sizes=[80, 50, 20, 5],
+        hidden_num_channel: int = 16,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        self.cnns = nn.ModuleList(
+            [
+                CNNEncoder(
+                    ts_dim,
+                    output_dim,
+                    num_channels=[hidden_num_channel],
+                    kernel_size=k,
+                    dropout=dropout,
+                )
+                for k in kernel_sizes
+            ]
+        )
+
+        self.layer_norm = nn.LayerNorm(output_dim)
+
+        # one score per branch, initialised to zero → uniform weights
+        self.alpha = nn.Parameter(torch.zeros(len(kernel_sizes)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        branch_embeds = torch.stack([cnn(x) for cnn in self.cnns], dim=1)  # (B,n_k,D)
+        branch_embeds = self.layer_norm(branch_embeds)
+
+        w = torch.softmax(self.alpha, 0)                                   # (n_k,)
+        combined = (branch_embeds * w.view(1, -1, 1)).sum(1)              # (B,D)
+
+        return combined
+
+
+class MultiCNNEncoderMaxPool(nn.Module):
+    """
+    Multi-resolution CNN encoder that takes the **feature-wise maximum**
+    across kernel branches (parameter-free).
+
+    Good when informative patterns appear strongly in just one scale.
+    """
+
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        kernel_sizes=[80, 50, 20, 5],
+        hidden_num_channel: int = 16,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        self.cnns = nn.ModuleList(
+            [
+                CNNEncoder(
+                    ts_dim,
+                    output_dim,
+                    num_channels=[hidden_num_channel],
+                    kernel_size=k,
+                    dropout=dropout,
+                )
+                for k in kernel_sizes
+            ]
+        )
+
+        self.layer_norm = nn.LayerNorm(output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        branch_embeds = torch.stack([cnn(x) for cnn in self.cnns], dim=1)  # (B,n_k,D)
+        branch_embeds = self.layer_norm(branch_embeds)
+
+        combined, _ = branch_embeds.max(dim=1)                             # (B,D)
+
+        return combined
+
+
+
+
 class MLPEncoder(nn.Module):
     def __init__(self, ts_dim, output_dim, hidden_dim=128, num_hidden_layers=6, dropout=0.2):
         """
@@ -465,80 +564,41 @@ class MultiLSTMEncoder(nn.Module):
 # model = CLIPModel(ts_encoder=multi_lstm_encoder, text_encoder=None)
 
 
-# # ts vae encoder wrapper for custom ts encoders
-# class TSVAEEncoderWrapper(nn.Module):
-#     def __init__(self, ts_encoder_layers, output_dim=None):
-#         super().__init__()
-#         self.local_norm = LocalNorm()
-
-#         # ts_encoder_layers must be a instance of a class defined similarly as belows
-#         self.encoder_layers = ts_encoder_layers
-        
-#         # Get the hidden dimension from the encoder's output
-#         hidden_dim = ts_encoder_layers.output_dim
-#         if output_dim is None:
-#             output_dim = hidden_dim
-        
-#         # Latent mean and variance 
-#         self.mean_layer = nn.Linear(hidden_dim, output_dim)
-#         self.logvar_layer = nn.Linear(hidden_dim, output_dim)
-
-
-#     def reparameterization(self, mean, log_var, lam=1):
-#         var = lam * torch.exp(0.5 * log_var) # calculate the variance from the log_var 
-#         # var = log_var
-#         epsilon = torch.randn_like(var).to(device)      
-#         z = mean + var*epsilon  # Using var directly
-#         # z = F.softmax(z,dim=1) # This variable follows a Dirichlet distribution
-#         return z
-    
-    
-#     def forward(self, x):
-#         _, x_mean, x_std = self.local_norm(x)
-
-#         #  ---- encode -----
-#         x_encoded = self.encoder_layers(x)
-#         mean = self.mean_layer(x_encoded)
-#         log_var = self.logvar_layer(x_encoded)
-
-#         #  ---- reparameterization -----
-#         z = self.reparameterization(mean, log_var)
-#         return z, mean, log_var, x_mean, x_std
-
-# # usage:
-# """
-# lstm_encoder = MultiLSTMEncoder(
-#     ts_dim=300, 
-#     output_dim=128,
-#     hidden_dims=[128, 256, 64],  # Three LSTMs with different sizes
-#     num_layers=2
+# # old default encoder layers
+# nn.Sequential(
+#     MultiLSTMEncoder(
+#         ts_dim=ts_dim, 
+#         output_dim=256,
+#         hidden_dims=[512, 512, 256, 256],  # LSTMs with different sizes
+#         num_layers=2,
+#         dropout=0,
+#         bidirectional=False,
+#         mask=0  # mask 0 with 0 to suppress the effect of masked values
+#     ),
+#     nn.LayerNorm(256),  # Add LayerNorm at the end
+#     nn.Linear(256, 512),
+#     nn.LeakyReLU(0.2),
+#     nn.LayerNorm(512),
+#     nn.Linear(512, output_dim),
+#     nn.LeakyReLU(0.2),
+#     nn.LayerNorm(output_dim)
 # )
-# ts_encoder = TSVAEEncoderWrapper(lstm_encoder)
-# for batch_idx, (ts_features, text_features, labels) in enumerate(train_dataloader):
-
-#     ts_features = ts_features.to(device)
-#     print(ts_encoder(ts_features))
-#     break
-# """
-
-
-# # ts vae decoder wrapper for custom ts decoders
-# class TSVAEDecoderWrapper(nn.Module):
-#     def __init__(self, ts_decoder):
-#         super().__init__()
-#         self.decoder = ts_decoder
-        
-#     def forward(self, z, x_mean, x_std):
-#         x_hat = self.decoder(z)
-#         x_hat = x_hat * x_std + x_mean
-#         # x_hat = torch.round(x_hat)
-#         return x_hat
-
-
 
 
 
 # ------- custom text encoder_layers (for VITAL embedding generation) -------
+
+class IdenticalEncoder(nn.Module):
+    def __init__(self, text_dim: int, output_dim: int):
+        super().__init__()
+        if text_dim != output_dim:
+            raise ValueError(
+                f"Identity mapping requires text_dim == output_dim "
+                f"(got {text_dim} vs {output_dim})."
+            )
+    def forward(self, text_features):
+        return text_features
+
 # MLP text encoder
 class TextEncoderMLP(nn.Module):
     def __init__(self, 
@@ -687,11 +747,93 @@ class TextEncoderMultiCNN(nn.Module):
         return combined_output
 
 # Usage example:
-# text_encoder = TextEncoderMultiCNN(
+# old default text encoder layer 
+# TextEncoderMultiCNN(text_dim = text_dim,
+#                     output_dim=output_dim,
+#                     kernel_sizes=[768, 384, 192],  # Different context windows
+#                     hidden_num_channel=16,
+#                     dropout=0.0)
+
+class TextEncoderAttention(nn.Module):
+    """
+    A minimal text encoder that summarizes a sequence of token embeddings
+    with a single trainable–query multi-head attention layer.
+
+    Args
+    ----
+    text_dim   : int  – dimension of the incoming token embeddings
+    output_dim : int  – dimension of the fixed-length text representation
+    num_heads  : int  – number of attention heads (≥ 1)
+    dropout    : float
+    """
+
+    def __init__(
+        self,
+        text_dim: int,
+        output_dim: int,
+        num_heads: int = 1, # single head
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        # Single-layer (self-)attention that pools the whole sequence.
+        self.attn = nn.MultiheadAttention(
+            embed_dim=text_dim,  # Use text_dim directly
+            num_heads=num_heads,
+            batch_first=True,  # (B, L, D) I/O layout
+        )
+
+        # Single trainable query that "asks" the sequence for information.
+        self.query = nn.Parameter(torch.randn(1, 1, text_dim))  # Match text_dim
+
+        # Project to output dimension after attention
+        self.output_proj = nn.Linear(text_dim, output_dim)
+        self.gelu = nn.GELU()
+
+        # Normalization & dropout for a touch of stability.
+        # self.norm = nn.LayerNorm(text_dim)  # Normalize text_dim
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, text_features: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        text_features : Tensor, shape (batch, text_dim) or (batch, seq_len, text_dim)
+            Token embeddings (e.g. from a pretrained word / sentence encoder).
+            If 2D, will be treated as a single-token sequence.
+
+        Returns
+        -------
+        pooled_repr : Tensor, shape (batch, output_dim)
+            Fixed-length embedding summarizing the whole sequence.
+        """
+        # Handle 2D input by adding sequence length dimension
+        if text_features.dim() == 2:
+            text_features = text_features.unsqueeze(1)  # (B, 1, D)
+
+        # Normalize input tokens
+        tokens = text_features # self.norm(text_features)  # (B, L, D)
+
+        # Expand the shared query to the current batch size.
+        q = self.query.expand(tokens.size(0), -1, -1)  # (B, 1, D)
+
+        # Attention pooling.
+        pooled, _ = self.attn(query=q, key=tokens, value=tokens)  # (B, 1, D)
+        pooled = pooled.squeeze(1)                               # (B, D)
+
+        # Project to output dimension
+        pooled = self.output_proj(pooled)  # (B, output_dim)
+        pooled = self.gelu(pooled)
+        pooled = self.dropout(pooled)
+
+        return pooled
+
+
+# usage:
+# text_encoder = TextEncoderAttention(
 #     text_dim=768,  # e.g., BERT embedding dimension
 #     output_dim=128,
-#     kernel_sizes=[50, 20, 10, 5],
-#     hidden_num_channel=16,
+#     num_heads=4,
 #     dropout=0.1
 # )
 
@@ -738,3 +880,27 @@ class TextEncoderMultiCNN(nn.Module):
 #         tx_emb = self.encoder(text_features)
 #         tx_emb = F.normalize(tx_emb, dim=1)
 #         return tx_emb
+# # test text encoder
+# # Initialize text encoder
+# text_dim = 768  # typical BERT dimension
+# output_dim = 10
+# text_encoder = TextEncoder(text_dim, output_dim)
+# # Create a single random vector
+# single_vector = torch.randn(text_dim)
+# # Create a batch of repeated vectors
+# batch_size = 4
+# repeated_batch = single_vector.unsqueeze(0).repeat(batch_size, 1)
+# # Create a mixed batch where first element is single_vector and rest are random
+# mixed_batch = torch.cat([
+#     single_vector.unsqueeze(0),  # First element is single_vector
+#     torch.randn(batch_size - 1, text_dim)  # Rest are random
+# ], dim=0)
+# # Process single vector
+# single_output = text_encoder(single_vector.unsqueeze(0))[0]  # Take first element since encoder expects batch
+# # Process repeated batch
+# repeated_output = text_encoder(repeated_batch)
+# # Process mixed batch
+# mixed_output = text_encoder(mixed_batch)
+# print(single_output)
+# print(repeated_output[0])
+# print(mixed_output[0])

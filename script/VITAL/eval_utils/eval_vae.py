@@ -120,7 +120,8 @@ def plot_reconstruction_from_distances(model,
                 z_text_embedded = torch.cat([z, tx_emb], dim=1)
             else:
                 z_text_embedded = z
-            x_hat = model.ts_decoder(z_text_embedded, x_mean, x_std)
+            
+            x_hat = model.ts_decoder(z_text_embedded, tx_emb, x)
             
             _, z_mean_hat, _, _, _ = model.ts_encoder(x_hat)
             

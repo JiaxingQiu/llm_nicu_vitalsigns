@@ -125,15 +125,6 @@ else:
         df_test['label'] = df_test['rowid'].astype(int)
         df_left['label'] = df_left['rowid'].astype(int)
 
-# ---- prepare target matrix ----
-if len(config_dict['custom_target_cols']) > 0:
-    target_train = gen_target(df_train, config_dict['custom_target_cols'])
-    target_test = gen_target(df_test, config_dict['custom_target_cols'])
-    target_left = gen_target(df_left, config_dict['custom_target_cols'])
-else:
-    target_train = None
-    target_test = None
-    target_left = None
 
 print('\n\nfinal distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())

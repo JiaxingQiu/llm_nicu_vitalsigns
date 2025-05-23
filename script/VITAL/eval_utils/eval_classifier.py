@@ -9,14 +9,20 @@ from tqdm import tqdm
 from generation import interpolate_ts_tx
 import copy
 
-# Add the tedit_lite folder to the system path
+# Add the tedit_lite and tedit_lite_tx folders to the system path
 import sys, os
-tedit_path = os.path.abspath("../../../tedit_lite")
-if tedit_path not in sys.path:
-    sys.path.append(tedit_path)
-from tedit_generation import tedit_generate_ts_tx
+# Path for tedit_lite
+tedit_attr_path = os.path.abspath("../tedit_lite")
+if tedit_attr_path not in sys.path:
+    sys.path.append(tedit_attr_path)
+from tedit_generation import tedit_generate_ts_tx as tedit_generate_ts_tx
 
-#
+# Path for tedit_lite_tx
+tedit_tx_path = os.path.abspath("../tedit_lite_tx")
+if tedit_tx_path not in sys.path:
+    sys.path.append(tedit_tx_path)
+from tedit_tx_generation import tedit_generate_ts_tx as tedit_tx_generate_ts_tx
+
 
 # ─────────────── define a classifer ──────────────────────────────
 def _get_mean(enc, x):
@@ -51,7 +57,7 @@ def train_clf(
         plot=False):
     """
     Fit `clf` (any nn.Module) on `df_train`.
-    Early‑stops if val‑loss doesn’t improve for `patience` epochs.
+    Early‑stops if val‑loss doesn't improve for `patience` epochs.
     Returns the trained model plus (train_losses, val_losses).
     """
     # label ↔ index map
@@ -195,9 +201,22 @@ def eval_ts_classifier(df, # df can be df_train / df_test
                       finetune=True, 
                       aug_type='conditional',
                       meta = None, # tedit meta
-                      configs = None # teidt configs
+                      configs = None, # teidt configs
+                      model_type = None # if None, will be auto-detected
                       ):
     
+    # Auto-detect model type if not specified
+    if model_type is None:
+        if meta is None:
+            model_type = 'vital'
+        else:
+            if 'level_maps' in meta:
+                model_type = 'tedit'
+            elif 'attr_emb_dim' in meta:
+                model_type = 'tedit_tx'
+            else:
+                raise ValueError("Could not determine model type from meta dictionary")
+
     model.eval()
     y_levels = list(df[y_col].unique())
     ts_str_cols = [str(i+1) for i in range(config_dict['seq_length'])]
@@ -256,12 +275,20 @@ def eval_ts_classifier(df, # df can be df_train / df_test
         # tedit model
         if meta is not None: 
             new_level_col_map = {k: v for k, v in col_level_map.items() if k in new_text_cols}
-            ts_hat_ls = tedit_generate_ts_tx(df2aug,
-                                            meta,
-                                            config_dict,
-                                            configs,         # used by tedit_generate
-                                            y_col,
-                                            new_level_col_map)
+            if model_type == 'tedit_tx':
+                ts_hat_ls = tedit_tx_generate_ts_tx(df2aug,
+                                                   meta,
+                                                   config_dict,
+                                                   configs,         # used by tedit_generate
+                                                   y_col,
+                                                   new_level_col_map)
+            else:  # tedit model
+                ts_hat_ls = tedit_generate_ts_tx(df2aug,
+                                                meta,
+                                                config_dict,
+                                                configs,         # used by tedit_generate
+                                                y_col,
+                                                new_level_col_map)
         # vital model
         else:
             ts_hat_ls = interpolate_ts_tx(df2aug, model, config_dict, ['new_text'], w)

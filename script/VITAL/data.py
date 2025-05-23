@@ -286,6 +286,8 @@ def get_features3d(df,
 
 def gen_target(df, 
                cluster_cols = ['label']):
+    if len(cluster_cols) == 0:
+        return None
     targets = {}
     for cluster_col in cluster_cols:
         label_mapping = {cat: idx+1 for idx, cat in enumerate(sorted(df[cluster_col].unique()))}
@@ -300,4 +302,21 @@ def gen_target(df,
     # Method 2: Normalize by count
     target_normalized = target_sum / len(cluster_cols)
     return target_normalized
+
+
+def gen_text_similarity_target(text_features):
+    """
+    Generate pairwise target matrix based on cosine similarity between text features.
+    
+    Args:
+        text_features: Text features tensor of shape [N, D] where N is number of samples and D is feature dimension
+        
+    Returns:
+        target: Normalized similarity matrix of shape [N, N] with values between 0 and 1
+    """
+    text_features_norm = torch.nn.functional.normalize(text_features, p=2, dim=1)
+    similarity = torch.mm(text_features_norm, text_features_norm.t())
+    similarity = (similarity + 1) / 2
+    
+    return similarity
 

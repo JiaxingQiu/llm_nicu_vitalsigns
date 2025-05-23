@@ -6,37 +6,28 @@ import numpy as np
 
 
 def compute_clip_loss(logits, labels, targets, 
-                      target_type = 'by_label', 
+                      target_type = 'by_target', 
                       ts_embedded=None, text_embedded=None): # embedded or features
-    if target_type == 'by_label':
-        # # build block-diagonal target matrix based on labels
-        # batch_size = logits.shape[0]
-        # targets = torch.zeros((batch_size, batch_size), device=logits.device)
-        # for i in range(batch_size):
-        #     for j in range(batch_size):
-        #         if labels[i] == labels[j]:
-        #             targets[i,j] = 1
-        # Vectorized operation on GPU!!
+    if target_type == 'by_label': # diagonal target matrix
         labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
         targets = labels_equal.float()
         loss_ts = cross_entropy(logits, targets)
         loss_tx = cross_entropy(logits.T, targets.T)
         clip_loss = (loss_ts + loss_tx) / 2
 
-    if target_type == 'by_target':
+    if target_type == 'by_target': # use external target matrix
         loss_ts = cross_entropy(logits, targets)
         loss_tx = cross_entropy(logits.T, targets.T)
         clip_loss = (loss_ts + loss_tx) / 2
     
-    if target_type == 'by_similarity':
+    if target_type == 'by_similarity': # use current step calculated similarity matrix
         batch_size = logits.shape[0]
-        with torch.no_grad():  # Detach the similarity computation
+        with torch.no_grad(): 
             targets = get_similarity_target(ts_embedded, text_embedded)
         assert targets.shape == (batch_size, batch_size)
         loss_ts = cross_entropy(logits, targets)
         loss_tx = cross_entropy(logits.T, targets.T)
         clip_loss = (loss_ts + loss_tx) / 2
-    # default
         
     return clip_loss
 
@@ -85,7 +76,7 @@ def compute_kl_loss(mean, log_var):
     return kl_loss
 
 
-def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_label', train_type='joint', alpha=1.0, beta=0.1):
+def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_target', train_type='joint', alpha=1.0, beta=0.1):
     # initialized to return
     loss = 0
     clip_loss = 0
@@ -117,7 +108,7 @@ def compute_loss(model, ts, text_features, labels, targets, target_type = 'by_la
 
 
 
-def train_epoch(model, train_dataloader, optimizer, target_type = 'by_label', train_type='joint', alpha=1.0, beta=1.0): 
+def train_epoch(model, train_dataloader, optimizer, target_type = 'by_target', train_type='joint', alpha=1.0, beta=1.0): 
     # alpha controls the balance between vae loss and clip loss
     # beta controls the balance between reconstruction loss and kl loss
     model.train()
@@ -157,7 +148,7 @@ def train_epoch(model, train_dataloader, optimizer, target_type = 'by_label', tr
 
 
 
-def test_epoch(model, test_dataloader, target_type = 'by_label', train_type='joint', alpha=1.0, beta=0.1):
+def test_epoch(model, test_dataloader, target_type = 'by_target', train_type='joint', alpha=1.0, beta=0.1):
     model.eval()
     total_loss = 0
     total_clip_loss = 0 
@@ -186,7 +177,8 @@ def test_epoch(model, test_dataloader, target_type = 'by_label', train_type='joi
 
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, 
-                target_type = 'by_label', train_type='joint', alpha=1.0, beta = 1.0):
+                target_type = 'by_target', train_type='joint', alpha=1.0, beta = 1.0,
+                es_patience=300):  # Add patience parameter for early stopping
     
     # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
     torch.manual_seed(333)
@@ -199,6 +191,10 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     # Keep track of best model
     best_loss = float('inf')
     best_model_state = None
+    
+    # Early stopping variables
+    counter = 0
+    best_test_loss = float('inf')
     
     try:
         for epoch in range(num_epochs):
@@ -240,6 +236,16 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
                     print(f'\tTesting Loss: {test_loss:.6f}')
                     print(f'\tLearning Rate: {current_lr:.9f}')
                     print(f'alpha: {alpha}, beta: {beta}')
+            
+            # Early stopping check
+            if test_loss < best_test_loss:
+                best_test_loss = test_loss
+                counter = 0
+            else:
+                counter += 1
+                if counter >= es_patience:
+                    print(f"\nEarly stopping triggered after {epoch + 1} epochs. No improvement in test loss for {es_patience} epochs.")
+                    break
             
             # Early stopping if learning rate becomes too small
             if current_lr <= scheduler.min_lrs[0]:
