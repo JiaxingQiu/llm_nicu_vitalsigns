@@ -530,6 +530,89 @@ class TransformerDecoderTXTS(nn.Module):
         ts_hat = self.output_projection(dec_out) # ts_hat: [B, 1, ts_dim]
         return ts_hat
 
+
+
+class TransformerDecoderTXTS2(nn.Module):
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,      # E
+        nhead: int = 4,
+        num_layers: int = 1, # one layer, higher dim_forward tend to work better
+        dim_feedforward: int = 2048,
+        dropout: float = 0.0,
+        project_input: bool = False,
+    ):
+        super().__init__()
+
+        hidden_dim = ts_dim if project_input else output_dim
+        self.project_input = project_input
+        if project_input:
+            self.input_projection = nn.Linear(output_dim, ts_dim)
+
+        # --- shared positional encoding ---
+        self.pos_encoder = PositionalEncoding(hidden_dim, dropout)
+
+        # --- full-size decoder for ts→txt ---
+        full_layer  = nn.TransformerDecoderLayer(
+            d_model=hidden_dim,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.decoder_ts2tx = nn.TransformerDecoder(full_layer,
+                                                   num_layers=num_layers)
+
+        # --- *smaller* decoder for txt→txt -------------
+        small_layer = nn.TransformerDecoderLayer(
+            d_model=hidden_dim,                 # keep width so shapes align
+            nhead=max(1, nhead // 2),           # fewer heads
+            dim_feedforward=max(256, dim_feedforward // 2),
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.decoder_tx2tx = nn.TransformerDecoder(
+            small_layer,         # independent weights
+            num_layers=max(1, num_layers // 2) 
+        )
+
+        # project concat([dec_out1, dec_out2]) → ts_dim
+        self.output_projection = nn.Linear(hidden_dim * 2, ts_dim)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+        return x.unsqueeze(1) if x.dim() == 2 else x
+
+    def forward(self,
+                ts_emb: torch.Tensor,
+                txt_emb: torch.Tensor,
+                src_txt_emb: torch.Tensor | None = None) -> torch.Tensor:
+
+        if src_txt_emb is None:
+            src_txt_emb = txt_emb
+
+        ts_in      = self._as_sequence(ts_emb)
+        tx_in      = self._as_sequence(txt_emb)
+        src_tx_in  = self._as_sequence(src_txt_emb)
+
+        if self.project_input:
+            ts_in      = self.input_projection(ts_in)
+            tx_in      = self.input_projection(tx_in)
+            src_tx_in  = self.input_projection(src_tx_in)
+
+        ts_in      = self.pos_encoder(ts_in)
+        tx_in      = self.pos_encoder(tx_in)
+        src_tx_in  = self.pos_encoder(src_tx_in)
+
+        dec_out1   = self.decoder_ts2tx(tgt=ts_in, memory=src_tx_in)  # [B,1,E]
+        dec_out2   = self.decoder_tx2tx(tgt=tx_in, memory=src_tx_in)  # [B,1,E]  (lighter)
+
+        fused      = torch.cat([dec_out1, dec_out2], dim=-1)          # [B,1,2E]
+        ts_hat     = self.output_projection(fused.squeeze(1))         # [B,ts_dim]
+        return ts_hat
+
 # class TransformerDecoderAuto(nn.Module):
 #     """
 #     Autoregressive decoder that takes:

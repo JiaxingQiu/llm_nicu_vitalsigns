@@ -32,7 +32,8 @@ if overwrite or not os.path.exists(model_path):
                     text_encoder = text_encoder,
                     clip_mu = config_dict['clip_mu'],
                     concat_embeddings = config_dict['concat_embeddings'],
-                    variational = config_dict['variational']
+                    variational = config_dict['variational'],
+                    gen_w_src_text = config_dict['gen_w_src_text']
                 )
     update_config(model_init = model)
     config_dict = get_config_dict()

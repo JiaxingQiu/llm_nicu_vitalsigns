@@ -83,7 +83,7 @@ class VITAL3D(nn.Module):
 
         # ---- VAE encoder ----
         # Encode time series
-        z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
+        z, mean, log_var = self.ts_encoder(ts) # ts in raw scale
         if not self.variational: # if not variational (AE instead of VAE), use the mean as the latent variable, 
             z = mean
         # --- Text encoder forward pass ---
@@ -96,7 +96,6 @@ class VITAL3D(nn.Module):
             logits = self.clip(z, text_embedded)
         
         # --- VAE decoder forward pass ---
-        # ts_hat = self.ts_decoder(z, x_mean, x_std) # ts_hat in raw scale
         if self.concat_embeddings:
             decode_input = torch.cat([z, text_embedded], dim=1)
         else:

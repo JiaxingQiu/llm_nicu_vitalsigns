@@ -19,7 +19,8 @@ class VITAL(nn.Module):
                  ts_decoder = None,
                  variational = True,
                  clip_mu = False,
-                 concat_embeddings = False):
+                 concat_embeddings = False,
+                 gen_w_src_text = False):
         """Initialize VITAL model
         
         Args:
@@ -56,6 +57,7 @@ class VITAL(nn.Module):
         self.clip_mu = clip_mu
         self.concat_embeddings = concat_embeddings
         self.variational = variational
+        self.gen_w_src_text = gen_w_src_text
         self.to(device)
         print(nn_summary(self))
     
@@ -81,7 +83,7 @@ class VITAL(nn.Module):
         """
 
         # ---- VAE encoder ----
-        z, mean, log_var, x_mean, x_std = self.ts_encoder(ts) # ts in raw scale
+        z, mean, log_var = self.ts_encoder(ts) # ts in raw scale
         if not self.variational: # if not variational (AE instead of VAE), use the mean as the latent variable, 
             z = mean
         
@@ -101,9 +103,38 @@ class VITAL(nn.Module):
         else:
             decode_input = z
         
-        ts_hat = self.ts_decoder(decode_input, text_embedded, ts)
+        ts_hat = self.ts_decoder(decode_input, text_embedded, ts, text_embedded) # during trining, only use text_embedded as source text embedding
 
         return logits, ts_hat, mean, log_var
+    
+    def generate(self, w, ts, tx_f_tgt, tx_f_src):
+        """
+        Generate a time series from a source time series and a target text features.
+
+        Args:
+            ts: [B, ts_dim], source time series
+            tx_f_tgt: [B, text_dim], target text features embedded by pretrained sentence encoder
+            w: [B, 1], interpolation weight
+            tx_f_src: [B, text_dim], source text features embedded by pretrained sentence encoder (should be from 'text' columm in the dataframe)
+        """
+        # tx_emb_tgt
+        tx_emb_tgt = self.text_encoder(tx_f_tgt)
+        
+        # tx_emb_src 
+        if self.gen_w_src_text: tx_f_src = tx_f_tgt # overwrite tx_f_src with tx_f_tgt
+        tx_emb_src = self.text_encoder(tx_f_src)
+
+        # ts_emb_src
+        ts_emb_src, ts_emb_src_mean, _ = self.ts_encoder(ts)
+        if not self.variational:
+            ts_emb_src = ts_emb_src_mean
+        
+        # ts_emb_tgt
+        ts_emb_tgt = (1-w)*ts_emb_src + w*tx_emb_tgt # interpolation of ts_emb and tx_emb
+        
+        ts_hat = self.ts_decoder(ts_emb_tgt, tx_emb_tgt, ts, tx_emb_src) # during generation, use tx_emb_src as source text embedding
+
+        return ts_hat, ts_emb_tgt, tx_emb_tgt, tx_emb_src
 
 class LocalNorm(nn.Module):
     def __init__(self, eps=1e-5):
@@ -137,7 +168,7 @@ class TSEncoder(nn.Module):
             # default encoder layers
             self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
                                                     output_dim=output_dim,
-                                                    kernel_sizes=[150, 100, 50, 10],
+                                                    kernel_sizes=[100, 50, 10],
                                                     hidden_num_channel=16,
                                                     dropout=0.0)
         else:
@@ -157,7 +188,7 @@ class TSEncoder(nn.Module):
         return z
     
     def forward(self, x):
-        _, x_mean, x_std = self.local_norm(x)
+        # _, x_mean, x_std = self.local_norm(x)
         #  ---- encode -----
         x_encoded = self.encoder_layers(x)
 
@@ -173,7 +204,7 @@ class TSEncoder(nn.Module):
         z = F.normalize(z, dim=1)
         mean = F.normalize(mean, dim=1)
         
-        return z, mean, log_var, x_mean, x_std
+        return z, mean, log_var
 
 import inspect
 class TSDecoder(nn.Module):
@@ -184,11 +215,10 @@ class TSDecoder(nn.Module):
             self.decoder = TransformerDecoderTXTS(
                 ts_dim     = ts_dim,
                 output_dim = output_dim,
-                nhead      = 1,
-                num_layers = 1,
-                dim_feedforward = 512,
-                dropout    = 0.0,
-            )
+                nhead = 1,
+                num_layers = 6,
+                dim_feedforward = 1024,
+                dropout = 0.0)
         else:
             self.decoder = decoder_layers
         
@@ -201,21 +231,16 @@ class TSDecoder(nn.Module):
                 required_params_count += 1
         self._n_required_args = required_params_count
     
-    def forward(self, ts_emb, txt_emb = None, ts = None):
-        if self._n_required_args == 1:
-            x_hat = self.decoder(ts_emb)                         # e.g. AttentionDecoder
-        elif self._n_required_args == 2:
-            x_hat = self.decoder(ts_emb, txt_emb)                # e.g. TransformerDecoderTXTS
-        elif self._n_required_args == 3:
-            if ts is None:
-                # If ts is not provided, use zeros as initial sequence with correct ts_dim
-                ts = torch.zeros(ts_emb.size(0), 1, self.ts_dim, device=ts_emb.device)
-            x_hat = self.decoder(ts_emb, txt_emb, ts)            # e.g. TransformerDecoderAuto
+    def forward(self, ts_emb, txt_emb = None, ts = None, src_txt_emb = None):
+        if isinstance(self.decoder, TransformerDecoderTXTS2):
+            x_hat = self.decoder(ts_emb, txt_emb, src_txt_emb)
+        elif isinstance(self.decoder, TransformerDecoderTXTS):
+            x_hat = self.decoder(ts_emb, txt_emb)
+        elif isinstance(self.decoder, TransformerDecoderPreAuto):
+            x_hat = self.decoder(ts_emb, txt_emb, ts)
         else:
-            raise TypeError(
-                f"{self.decoder.__class__.__name__}.forward takes "
-                f"{self._n_required_args} positional args; only 1, 2, or 3 supported."
-            )
+            x_hat = self.decoder(ts_emb)
+        
         x_hat = x_hat.squeeze(1) if x_hat.dim() == 3 and x_hat.size(1) == 1 else x_hat         # [B, ts_dim]
         
         return x_hat

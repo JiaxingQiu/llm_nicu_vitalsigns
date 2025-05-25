@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from config import *
-from data import get_features3d
+from data import get_features3d, get_features
 
 
 # ----------------- Augment Time Series by Text Instructions --------------------------------
@@ -15,25 +15,17 @@ def interpolate_ts_tx(df, model, config_dict, text_cols, w):
     ts_f, tx_f_ls, _ = get_features3d(df, config_dict, text_col_ls = text_cols)
     ts_f = ts_f.to(device)
     tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
+    _, tx_f_src, _ = get_features(df, config_dict, text_col = 'text')
+    tx_f_src = tx_f_src.to(device)
 
     # ----- ts_embeddings -----
-    ts_emb, ts_emb_mean, _, x_mean, x_std = model.ts_encoder(ts_f)
+    ts_emb, ts_emb_mean, _ = model.ts_encoder(ts_f)
     if not model.variational:
         ts_emb = ts_emb_mean
 
     ts_hat_ls = {}
     for txid in range(len(tx_f_ls)):
-        # ----- text_embeddings -----
-        tx_emb = model.text_encoder(tx_f_ls[txid])
-        # ----- interpolation -----
-        ts_emb_inter = (1-w)*ts_emb + w*tx_emb # interpolation of ts_emb and tx_emb
-        # ----- decoder -----
-        if model.concat_embeddings:
-            emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
-        else:
-            emb = ts_emb_inter # torch.cat([ts_emb_inter, x_mean, x_std], dim=1)
-        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)   
-        
+        ts_hat, _, _, _ = model.generate(w, ts_f, tx_f_ls[txid], tx_f_src)
         text_condition = df[text_cols[txid]]
         ts_hat_ls[text_cols[txid]] = list(zip(text_condition, ts_hat))
     
@@ -48,27 +40,15 @@ def interpolate_ts_tx_single(df, model, config_dict, text_cols, w, label = False
     ts_f = ts_f.to(device)
     raw_ts = ts_f[0].detach().cpu().numpy()
     tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
-
-    # ----- ts_embeddings -----
-    ts_emb, ts_emb_mean, _, x_mean, x_std = model.ts_encoder(ts_f)
-    if not model.variational:
-        ts_emb = ts_emb_mean
+    _, tx_f_src, _ = get_features(df, config_dict, text_col = 'text')
+    tx_f_src = tx_f_src.to(device)
     
     ts_hat_ls = {}
     simi = {}
     l1 = {}
     l2 = {}
     for txid in range(len(tx_f_ls)):
-        # ----- text_embeddings -----
-        tx_emb = model.text_encoder(tx_f_ls[txid])
-        # ----- interpolation -----
-        ts_emb_inter = (1-w)*ts_emb + w*tx_emb # interpolation of ts_emb and tx_emb
-        # ----- decoder -----
-        if model.concat_embeddings:
-            emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
-        else:
-            emb = ts_emb_inter # torch.cat([ts_emb_inter, x_mean, x_std], dim=1)
-        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)
+        ts_hat, ts_emb_tgt, tx_emb_tgt, _ = model.generate(w, ts_f, tx_f_ls[txid], tx_f_src)
         # # plot the ts_hat
         # plt.plot(ts_hat[0].detach().cpu().numpy())
         # plt.show()
@@ -78,10 +58,10 @@ def interpolate_ts_tx_single(df, model, config_dict, text_cols, w, label = False
             text_condition = text_cols[txid]
 
         ts_hat_ls[text_condition] = ts_hat[0].detach().cpu().numpy()
-        logits = torch.matmul(ts_emb_inter, tx_emb.T) 
+        logits = torch.matmul(ts_emb_tgt, tx_emb_tgt.T) 
         simi[text_condition] = torch.diag(logits).detach().cpu().numpy()# torch.exp()
-        l2[text_condition] = torch.norm(ts_emb_inter - tx_emb, dim=1, p=2).detach().cpu().numpy()  
-        l1[text_condition] = torch.norm(ts_emb_inter - tx_emb, dim=1, p=1).detach().cpu().numpy()
+        l2[text_condition] = torch.norm(ts_emb_tgt - tx_emb_tgt, dim=1, p=2).detach().cpu().numpy()  
+        l1[text_condition] = torch.norm(ts_emb_tgt - tx_emb_tgt, dim=1, p=1).detach().cpu().numpy()
         
     ts2tx_distances = {'simi': simi, 'l1': l1, 'l2': l2}
     
@@ -222,35 +202,29 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
     ts_f = ts_f.to(device)
     raw_ts = ts_f[0].detach().cpu().numpy()
     tx_f_ls = [tx_f.to(device) for tx_f in tx_f_ls]
-        
+    
+    # Get source text features
+    _, tx_f_src, _ = get_features(df, config_dict, text_col = 'text')
+    tx_f_src = tx_f_src.to(device)
+    tx_f_src = tx_f_src.repeat(b, 1)  # Repeat for batch size
 
     # ----- ts_embeddings -----
-    _, ts_emb_mean, ts_emb_log_var, x_mean, x_std = model.ts_encoder(ts_f)
+    _, ts_emb_mean, ts_emb_log_var = model.ts_encoder(ts_f)
     ts_emb_mean = ts_emb_mean.expand(b, -1)
     if not model.variational:
         ts_emb_log_var = torch.zeros_like(ts_emb_mean) - 1e2   
     else:
         ts_emb_log_var = ts_emb_log_var.expand(b, -1)
     ts_emb = model.ts_encoder.reparameterization(ts_emb_mean, ts_emb_log_var, ep=ep) # (b, dim)
-    x_mean = x_mean.repeat(b, 1)
-    x_std = x_std.repeat(b, 1)
     ts_f = ts_f.repeat(b, 1)  # [b, seq_length] raw time series
-        
+
     ts_hat_ls = {}
     for txid in range(len(tx_f_ls)):
-        # ----- text_embeddings -----
-        tx_emb = model.text_encoder(tx_f_ls[txid])
-        tx_emb = tx_emb.repeat(b, 1)
-        # ----- interpolation -----
-        ts_emb_inter = (1-w)*ts_emb + w*tx_emb # interpolation of ts_emb and tx_emb
-        # ----- decoder -----
-        if model.concat_embeddings:
-            emb = torch.cat([ts_emb_inter, tx_emb], dim=1)
-        else:
-            emb = ts_emb_inter
-            
-        
-        ts_hat = model.ts_decoder(emb, tx_emb, ts_f)
+        tx_f_tgt = tx_f_ls[txid]
+        tx_f_tgt = tx_f_tgt.repeat(b, 1)
+
+        ts_hat, _, _, _ = model.generate(w, ts_f, tx_f_tgt, tx_f_src)
+
         if plot:
             ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0) 
             ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0)
@@ -268,13 +242,13 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
         ts_hat_ls[text_condition] = ts_hat.detach().cpu()
 
         # Clean up CUDA memory
-        del tx_emb, ts_emb_inter, emb, ts_hat
+        del tx_f_tgt
         if plot:
             del ts_hat_r, ts_hat_q, ts_hat_i
         torch.cuda.empty_cache()
     
     # Clean up remaining CUDA tensors
-    del ts_f, ts_emb_mean, ts_emb_log_var, ts_emb, x_mean, x_std
+    del ts_f, ts_emb_mean, ts_emb_log_var, ts_emb, tx_f_src
     for tx_f in tx_f_ls:
         del tx_f
     torch.cuda.empty_cache()

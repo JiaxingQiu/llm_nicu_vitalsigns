@@ -53,7 +53,7 @@ config_dict = {
     'ts_normalize_std': None,
 
     # Model settings
-    'model_name': '',
+    'model_name': None,
     '3d': False, # **{'3d': False/True} to change in update_config
     'embedded_dim': 768,
     'model_init': None,
@@ -62,13 +62,14 @@ config_dict = {
     'variational': False,
     'train_type': 'joint', # or 'vae', 'clip'
     'clip_target_type': 'by_target', # or 'by_label'
+    'gen_w_src_text': False, # generate w_src_text for interpolation
 
     # Training settings
     'init_lr': 1e-4,
     'patience': 500,
     'num_saves': 10,
     'num_epochs': 500,
-    'alpha': 1/10000, # weight of reconstruction loss
+    'alpha': 1/1000, # weight of reconstruction loss
     'beta': 0.0, # weight of kl loss
     
     # Text configuration
@@ -142,7 +143,9 @@ def get_config_dict():
 
     if not config['variational']:
         config['beta'] = 0.0 # no kl loss for non-variational models
-
+    
+    assert config['model_name'] is not None, "model_name is required"
+    
     return config
 
 

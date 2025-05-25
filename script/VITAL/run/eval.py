@@ -126,3 +126,52 @@ if rats:
             buffer = io.BytesIO(f.read())
             df_rats_ls = torch.load(buffer, map_location=device, weights_only=False)
 
+
+
+# define a function to summarize the scores
+def summarize_scores(df_all, aug_type= 'conditional'):
+    df_conditional = df_all[df_all['aug_type'] == aug_type]
+
+    stats_table = df_conditional.groupby('metric')['score'].agg(
+        mean='mean',
+        std='std',
+        q25=lambda x: x.quantile(0.25),
+        q50=lambda x: x.quantile(0.50),
+        q75=lambda x: x.quantile(0.75)
+    ).round(3)
+
+    stats_table['final_score'] = stats_table.apply(
+        lambda row: f"{row['q50']:.2f} [{row['q25']:.2f}, {row['q75']:.2f}]",
+        axis=1
+    )
+
+    final_score_row = stats_table['final_score'].to_frame().T
+    final_score_row.index = ['final_score']
+    # Rename columns if necessary
+    if 'mse' in final_score_row.columns:
+        final_score_row = final_score_row.rename(columns={
+            'mse': 'Point-wise MSE ↓',
+            'mae': 'Point-wise MAE ↓',
+            'delta_dtw': 'DTW similarity improvement ↑',
+            'RaTS': 'RaTS ↑'
+        })
+    else:
+        final_score_row = final_score_row.rename(columns={
+            'delta_dtw': 'DTW similarity improvement ↑',
+            'RaTS': 'RaTS ↑'
+        })
+    if 'delta_lcss' in final_score_row.columns:
+        final_score_row = final_score_row.rename(columns={
+            'delta_lcss': 'LCSS similarity improvement ↑'
+        })
+
+    # Reorder columns (only keep those that exist)
+    desired_order = [
+        'Point-wise MSE ↓',
+        'Point-wise MAE ↓',
+        'DTW similarity improvement ↑',
+        'LCSS similarity improvement ↑',
+        'RaTS ↑'
+    ]
+    final_score_row = final_score_row[[col for col in desired_order if col in final_score_row.columns]]
+    return final_score_row

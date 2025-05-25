@@ -178,7 +178,7 @@ def test_epoch(model, test_dataloader, target_type = 'by_target', train_type='jo
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, 
                 target_type = 'by_target', train_type='joint', alpha=1.0, beta = 1.0,
-                es_patience=300):  # Add patience parameter for early stopping
+                es_patience=100):  # Add patience parameter for early stopping
     
     # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
     torch.manual_seed(333)
