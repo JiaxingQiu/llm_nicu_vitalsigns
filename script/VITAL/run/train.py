@@ -11,8 +11,7 @@ if overwrite or not os.path.exists(model_path):
         optimizer, 
         mode='min',
         factor=0.9,         
-        patience=config_dict['patience'],      
-        verbose=True,
+        patience=config_dict['patience'],    
         min_lr=1e-20,        
         threshold=1e-4,      
         cooldown=20          
@@ -33,7 +32,8 @@ if overwrite or not os.path.exists(model_path):
                                                         target_type = config_dict['clip_target_type'],
                                                         train_type = config_dict['train_type'],
                                                         alpha = config_dict['alpha'],
-                                                        beta = config_dict['beta'])
+                                                        beta = config_dict['beta'],
+                                                        es_patience = config_dict['es_patience'])
         train_losses = train_losses + train_losses_tmp
         test_losses = test_losses + test_losses_tmp
         # every num_epochs, evaluate the model

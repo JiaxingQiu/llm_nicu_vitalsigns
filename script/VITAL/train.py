@@ -178,7 +178,7 @@ def test_epoch(model, test_dataloader, target_type = 'by_target', train_type='jo
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, 
                 target_type = 'by_target', train_type='joint', alpha=1.0, beta = 1.0,
-                es_patience=100):  # Add patience parameter for early stopping
+                es_patience=50):  # Add patience parameter for early stopping
     
     # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
     torch.manual_seed(333)
@@ -195,15 +195,24 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     # Early stopping variables
     counter = 0
     best_test_loss = float('inf')
+    alpha_init = alpha
     
     try:
         for epoch in range(num_epochs):
-
             # Train for one epoch
             train_loss, train_clip_loss, train_reconstruction_loss, train_kl_loss = train_epoch(model, train_dataloader, optimizer, target_type, train_type, alpha, beta)
             
             # Test for one epoch
             test_loss, test_clip_loss, test_reconstruction_loss, test_kl_loss = test_epoch(model, test_dataloader, target_type, train_type, alpha, beta)
+            
+            # Recalibrate alpha after 10th epoch
+            if epoch == 10:
+                # Use the recalibrate_alpha function
+                alpha = recalibrate_alpha(train_clip_loss, train_reconstruction_loss/alpha_init, target_ratio=100)
+                alpha = min(alpha, 1e-3)
+                print("-"*100)
+                print(f"\nRecalibrating alpha to: {alpha:.2e}")
+                print("-"*100)
             
             # Store losses
             train_losses.append(train_loss)
@@ -263,3 +272,31 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
 
 
 
+def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=1000):
+    """
+    Calculate alpha to make reconstruction_loss * alpha approximately target_ratio times smaller than clip_loss
+    
+    Example:
+    If clip_loss = 900 (9 * 10^2)
+    and reconstruction_loss = 2000 (2 * 10^3)
+    and you want reconstruction_loss to be 1000x smaller than clip_loss:
+    
+    clip_loss = 9 * 10^2
+    reconstruction_loss = 2 * 10^3
+    target_ratio = 1000
+    
+    Then alpha should be approximately 10^-4 to make:
+    reconstruction_loss * alpha ≈ 2 * 10^3 * 10^-4 = 2 * 10^-1
+    which is 1000x smaller than clip_loss (9 * 10^2)
+    """
+    # Get the order of magnitude (power of 10) for each loss
+    clip_power = int(np.log10(clip_loss))
+    recon_power = int(np.log10(reconstruction_loss))
+    
+    # Calculate the difference in powers
+    power_diff = clip_power - recon_power
+    
+    # Calculate alpha to achieve target ratio
+    alpha = 10 ** -(np.log10(target_ratio) - power_diff)
+    
+    return alpha

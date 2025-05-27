@@ -1,4 +1,4 @@
-model_name = 'syn4_gt_at'
+model_name = 'syn_gt_at'
 
 text1 = ('No trend.',1)
 text2 = ('No seasonal pattern.',1)

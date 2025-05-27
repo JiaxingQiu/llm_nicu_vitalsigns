@@ -1,8 +1,7 @@
-import torch
+import torch, math
 import torch.nn as nn
 import torch.nn.functional as F
 from .encoder import ResidualBlock, AddChannelDim
-import math
 from torch.utils.checkpoint import checkpoint
 
 # ------- custom ts decoder_layers -------
@@ -254,7 +253,7 @@ class MultiLSTMDecoder(nn.Module):
                  hidden_dims=[128, 256, 64],  # Multiple LSTM sizes
                  num_layers=2, 
                  dropout=0.1, 
-                 bidirectional=False, 
+                 bidirectional=False,
                  mask=-1): # it is the indicator of masked values in the time series (i.e. -1), default to -1
         super().__init__()
         
@@ -492,7 +491,7 @@ class TransformerDecoderTXTS(nn.Module):
             
         # Add positional encoding
         self.pos_encoder = PositionalEncoding(hidden_dim, dropout)
-            
+
         layer = nn.TransformerDecoderLayer(
             d_model=hidden_dim,
             nhead=nhead,
@@ -502,8 +501,17 @@ class TransformerDecoderTXTS(nn.Module):
         )
 
         self.decoder = nn.TransformerDecoder(layer, num_layers=num_layers)
-        self.output_projection = nn.Linear(hidden_dim, ts_dim)
+        #  self.output_projection = nn.Linear(hidden_dim, ts_dim)
         
+        # Replace simple linear projection with feed-forward network
+        self.output_ln = nn.LayerNorm(hidden_dim)
+        self.output_ffn = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim * 4),  # Expand dimension
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim * 4, ts_dim)  # Project to final dimension
+        )
+
     @staticmethod
     def _as_sequence(x: torch.Tensor) -> torch.Tensor:
         """Accept [B,E] or [B,L,E] and return [B,L,E]."""
@@ -527,7 +535,11 @@ class TransformerDecoderTXTS(nn.Module):
         memory = self.pos_encoder(memory)
 
         dec_out = self.decoder(tgt=tgt, memory=memory) # [B, 1, E]
-        ts_hat = self.output_projection(dec_out) # ts_hat: [B, 1, ts_dim]
+        # ts_hat = self.output_projection(dec_out) # ts_hat: [B, 1, ts_dim]
+        
+        # Apply feed-forward network with layer norm
+        dec_out = self.output_ln(dec_out)
+        ts_hat = self.output_ffn(dec_out) # ts_hat: [B, 1, ts_dim]
         return ts_hat
 
 
@@ -613,137 +625,6 @@ class TransformerDecoderTXTS2(nn.Module):
         ts_hat     = self.output_projection(fused.squeeze(1))         # [B,ts_dim]
         return ts_hat
 
-# class TransformerDecoderAuto(nn.Module):
-#     """
-#     Autoregressive decoder that takes:
-#       • ts_emb + txt_emb → memory (concatenated and projected)
-#       • ts → target (raw time series for autoregressive prediction)
-    
-#     Args:
-#         ts_dim: original time-series dimension
-#         output_dim: shared embedding size of ts_emb / txt_emb
-#         nhead: number of attention heads
-#         num_layers: number of transformer layers
-#         dim_feedforward: dimension of feedforward network
-#         dropout: dropout probability
-#     """
-
-#     def __init__(
-#         self,
-#         ts_dim: int,           # original time-series dimension
-#         output_dim: int,          # shared embedding dim of ts_emb / txt_emb
-#         nhead: int = 8,
-#         num_layers: int = 6,
-#         dim_feedforward: int = 2048,
-#         dropout: float = 0.0,
-#     ):
-#         super().__init__()
-        
-#         self.ts_dim = ts_dim  # time series length
-#         self.output_dim = output_dim  # embeddings' dimension
-#         self.d_model = nhead * 2 # if set to 1, decoder runs in 1D (scalar) space (i.e. univariate time series)
-        
-
-#         # self.memory_attention = nn.MultiheadAttention(embed_dim=output_dim, num_heads=nhead, dropout=dropout, batch_first=True)
-#         self.memory_query = nn.Parameter(torch.randn(1, output_dim))  # [1, E]
-#         self.mem_proj = nn.Linear(output_dim * 2, self.d_model)  # [B, T, E] → [B, T, d_model]
-#         self.tgt_proj = nn.Linear(1, self.d_model)  # project tgt to d_model
-
-       
-#        # Register causal mask once with diagonal=1 to allow current position
-#         self.register_buffer("strict_causal_mask", torch.triu(torch.ones(5000, 5000), diagonal=1).bool())
-        
-#         self.decoder_layer = nn.TransformerDecoderLayer(
-#             d_model=self.d_model,  # Decoder runs in 1D (scalar) space
-#             nhead=nhead,    # Must be 1 if d_model=1
-#             dim_feedforward=dim_feedforward,
-#             dropout=dropout,
-#             batch_first=True,
-#         )
-#         self.decoder = nn.TransformerDecoder(self.decoder_layer, num_layers=num_layers)
-#         self.output_projection = nn.Linear(self.d_model, 1)
-
-
-#     @staticmethod
-#     def _as_sequence(x: torch.Tensor) -> torch.Tensor:
-#         """Ensure input is [B, 1, E] if originally [B, E]"""
-#         return x.unsqueeze(1) if x.dim() == 2 else x
-
-
-#     def forward(self, ts_emb: torch.Tensor,
-#                     txt_emb: torch.Tensor,
-#                     ts:      torch.Tensor):
-        
-#         B, T_full = ts.shape
-#         if T_full < 2:
-#             raise ValueError("Need at least 2 timesteps for teacher forcing")
-
-#         # ---------- 1.  SHIFT  ----------
-#         sos = ts[:, :1]         # [B,1] Prepend ⟨SOS⟩
-#         ts_in  = torch.cat([sos, ts[:, :-1]], 1)            # [B, T]
-#         T = ts_in.size(1) # T = T_full
-
-#         # ---------- 2.  MEMORY ----------
-#         # Repeat ts/text embeddings across time steps
-#         ts_emb_tiled  = ts_emb.unsqueeze(1).repeat(1, T, 1)   # [B,T,E]
-#         txt_emb_tiled = txt_emb.unsqueeze(1).repeat(1, T, 1)  # [B,T,E]
-
-#         memory_cat = torch.cat([ts_emb_tiled, txt_emb_tiled], dim=2)  # [B,T,2E]
-#         memory     = self.mem_proj(memory_cat)                        # [B,T,d_model]
-        
-#         # ---------- 3.  TGT EMBEDDING ----------
-#         tgt = self.tgt_proj(ts_in.unsqueeze(-1))                  # [B,T,d_model]
-        
-#         # ---------- 4.  CAUSAL MASK ----------
-#         # allow self, block future
-#         causal_mask = self.strict_causal_mask[:T, :T].to(ts.device)
-
-#         # ---------- 5.  DECODER ----------
-#         dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)  # [B,T,d_model]
-#         ts_hat  = self.output_projection(dec_out).squeeze(-1)      # [B,T]
-
-#         return ts_hat 
-    
-#     def _compute_memory(self, ts_emb: torch.Tensor,
-#                         txt_emb: torch.Tensor,
-#                         T_out: int) -> torch.Tensor:
-#         B = ts_emb.size(0)
-#         ts_emb_tiled  = ts_emb.unsqueeze(1).repeat(1, T_out, 1)   # [B,T,E]
-#         txt_emb_tiled = txt_emb.unsqueeze(1).repeat(1, T_out, 1)  # [B,T,E]
-#         memory_cat = torch.cat([ts_emb_tiled, txt_emb_tiled], dim=2)  # [B,T,2E]
-#         memory     = self.mem_proj(memory_cat)                        # [B,T,d_model]
-#         return memory
-
-    
-#     @torch.no_grad()
-#     def forecast(self,
-#                  ts_emb:   torch.Tensor,     # [B, E]
-#                  txt_emb:  torch.Tensor,     # [B, E]
-#                  ts_ctx:   torch.Tensor,     # [B, T_ctx]   observed part
-#                  horizon:  int = 1) -> torch.Tensor:
-#         """
-#         Public function forautoregressive forecasting method
-
-#         Returns tensor of shape [B, T_ctx + horizon] = original context + predictions.
-#         """
-#         device = ts_ctx.device
-#         seq    = ts_ctx.clone()          # running buffer  (doesn't alter caller's tensor)
-
-#         for _ in range(horizon):
-#             T_cur   = seq.size(1)                        # length so far
-#             memory  = self._compute_memory(ts_emb, txt_emb, T_cur)
-#             sos     = seq[:, :1]                         # prepend first value
-#             ts_in   = torch.cat([sos, seq[:, :-1]], 1)   # teacher-forcing shift
-#             tgt     = self.tgt_proj(ts_in.unsqueeze(-1)) # [B,T_cur,d_model]
-
-#             causal_mask = self.strict_causal_mask[:T_cur, :T_cur].to(device)
-#             dec_out = self.decoder(tgt, memory, tgt_mask=causal_mask)  # [B,T_cur,d_model]
-#             ts_hat  = self.output_projection(dec_out).squeeze(-1)      # [B,T_cur]
-
-#             next_val = ts_hat[:, -1:]                # prediction for step T_cur
-#             seq      = torch.cat([seq, next_val], 1) # append and continue
-
-#         return seq
 
 
 class TransformerDecoderPreAuto(nn.Module):
@@ -853,3 +734,487 @@ class TransformerDecoderPreAuto(nn.Module):
         return seq  # [B, T_ctx + horizon]    
     
 
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+def timestep_embed(t: torch.Tensor, dim: int):
+    """Sinusoidal t-embedding   t: [B] → [B, dim]"""
+    half = dim // 2
+    freqs = torch.exp(torch.arange(half, device=t.device) * -(math.log(10_000.0) / half))
+    ang   = t[:, None] * freqs[None]
+    emb   = torch.cat([torch.sin(ang), torch.cos(ang)], dim=1)
+    return emb if dim % 2 == 0 else F.pad(emb, (0, 1))
+
+class ResidualAttentionBlock(nn.Module):
+    """(Multi-head self-attention + FFN) with residual & layernorm."""
+    def __init__(self, width: int, heads: int = 8, ffn_mult: int = 4, drop: float = 0.):
+        super().__init__()
+        self.ln1 = nn.LayerNorm(width)
+        self.attn = nn.MultiheadAttention(width, heads, dropout=drop, batch_first=True)
+        self.ln2 = nn.LayerNorm(width)
+        self.ffn = nn.Sequential(
+            nn.Linear(width, width * ffn_mult),
+            nn.GELU(),
+            nn.Dropout(drop),
+            nn.Linear(width * ffn_mult, width),
+        )
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x), self.ln1(x), self.ln1(x), need_weights=False)[0]
+        x = x + self.ffn(self.ln2(x))
+        return x
+
+class AttnEpsNet(nn.Module):
+    """
+    Input  tokens:  [x_t]  (ts_dim)           ← noisy target
+                    [c_ts] (emb_dim)          ← ts_emb
+                    [c_tx] (emb_dim)          ← txt_emb
+                    [t]    (time_dim)         ← timestep embedding
+    A small Transformer operates on this 4-token sequence.
+    Output: ε̂ prediction shaped like x_t.
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        emb_dim: int,
+        time_dim: int   = 128,
+        depth: int      = 4,
+        heads: int      = 8,
+        drop: float     = 0.0,
+    ):
+        super().__init__()
+        # Remove projections and use original dimensions
+        self.ts_dim = ts_dim
+        self.emb_dim = emb_dim
+        self.time_dim = time_dim
+
+        self.pos_encoder = PositionalEncoding(d_model=emb_dim, dropout=drop)
+        
+        # Only project timestep embedding
+        self.proj_xt = nn.Linear(ts_dim, emb_dim)
+        self.proj_t = nn.Linear(time_dim, emb_dim)
+
+        # Use emb_dim as the width for transformer blocks
+        self.blocks = nn.Sequential(*[
+            ResidualAttentionBlock(emb_dim, heads=heads, drop=drop) for _ in range(depth)
+        ])
+
+        self.out = nn.Sequential(
+            nn.LayerNorm(emb_dim),
+            nn.Linear(emb_dim, ts_dim)
+        )
+
+    def forward(self, x_t, ts_emb, txt_emb, t):
+        B = x_t.size(0)
+        t_emb = timestep_embed(t, self.time_dim)        # [B, time_dim]
+        t_emb = self.proj_t(t_emb)                      # [B, emb_dim]
+        x_t = self.proj_xt(x_t)                          # [B, emb_dim]
+
+        # Stack tokens with their original dimensions
+        tokens = torch.stack([
+            x_t,                    # noisy token [B, emb_dim]
+            ts_emb,                 # cond-ts token [B, emb_dim]
+            txt_emb,                # cond-txt token [B, emb_dim]
+            t_emb                   # time token [B, emb_dim]
+        ], dim=1)                   # → [B, 4, emb_dim]
+        tokens = self.pos_encoder(tokens)
+
+        h = self.blocks(tokens)     # Transformer
+        eps_hat = self.out(h[:, 0]) # take the first token's output
+        return eps_hat
+
+
+# ---------------------------------------------------------------------------
+# Diffusion decoder using the new ε-net
+# ---------------------------------------------------------------------------
+class DiffusionDecoderAtt(nn.Module):
+    """
+    Same DDIM sampler as before, but ε-net now = tiny Transformer with attention.
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        emb_dim: int,
+        steps: int = 20,
+        eta: float = 0.0,
+        depth: int = 4,
+        heads: int = 8,
+    ):
+        super().__init__()
+        self.steps = steps
+        self.eta   = eta
+
+        betas  = torch.linspace(1e-4, 0.02, steps)
+        alphas = 1. - betas
+        acp    = torch.cumprod(alphas, dim=0)
+
+        self.register_buffer("alphas_cumprod",                acp)
+        self.register_buffer("sqrt_one_minus_alphas_cumprod", (1 - acp).sqrt())
+        self.register_buffer("sqrt_recip_alphas_cumprod",     (1 / acp).sqrt())
+
+        self.eps_net = AttnEpsNet(ts_dim, emb_dim,depth=depth, heads=heads)
+
+    # --- one DDIM reverse step ------------------------------------------------
+    def ddim_step(self, x_t, t, ts_emb, txt_emb):
+        a_t      = self.alphas_cumprod[t].view(-1, 1)
+        sqrt1m   = self.sqrt_one_minus_alphas_cumprod[t].view(-1, 1)
+        recip_sqrt = self.sqrt_recip_alphas_cumprod[t].view(-1, 1)
+
+        eps      = self.eps_net(x_t, ts_emb, txt_emb, t)                    # ε̂
+        x0_pred  = (x_t - sqrt1m * eps) / recip_sqrt                        # predict x₀
+
+        if (t == 0).all():                                                  # final step
+            return x0_pred
+
+        t_prev  = torch.clamp(t - 1, min=0)
+        a_prev  = self.alphas_cumprod[t_prev].view(-1, 1)
+        sigma   = self.eta * ((1 - a_prev) / (1 - a_t) * (1 - a_t / a_prev)).sqrt()
+
+        dir_xt  = ((1 - a_prev - sigma**2).sqrt()) * eps
+        noise   = sigma * torch.randn_like(x_t) if self.eta > 0 else 0
+        return a_prev.sqrt() * x0_pred + dir_xt + noise
+
+    # --- full reverse process --------------------------------------------------
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor):
+        B   = ts_emb.size(0)
+        # x_t = torch.randn(B, ts_emb.size(1), device=ts_emb.device)          # same ts_dim
+        x_t = torch.randn(B, self.eps_net.proj_xt.in_features, device=ts_emb.device)
+
+
+        for i in reversed(range(self.steps)):
+            t  = torch.full((B,), i, dtype=torch.long, device=ts_emb.device)
+            x_t = self.ddim_step(x_t, t, ts_emb, txt_emb)
+
+        return x_t    # ts_hat
+
+
+# ---------------------------------------------------------------------------
+# Residual attention decoder that takes:
+#   • ts_emb  → target
+#   • txt_emb → context
+# ---------------------------------------------------------------------------
+class ResidualAttentionDecoderTXTS(nn.Module):
+    """
+    Residual-attention decoder that takes:
+      • ts_emb  → target
+      • txt_emb → context
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        nhead: int = 8,
+        num_layers: int = 6,
+        dim_feedforward: int = 1024,
+        dropout: float = 0.1,
+        project_input: bool = False,
+    ):
+        super().__init__()
+        hidden_dim = output_dim
+
+        self.project_input = project_input
+        if self.project_input:
+            self.proj_ts = nn.Linear(output_dim, ts_dim)
+            self.proj_text = nn.Linear(output_dim, ts_dim)
+            hidden_dim = ts_dim
+
+        self.pos_encoder = PositionalEncoding(hidden_dim)
+
+        self.blocks = nn.Sequential(*[
+            ResidualAttentionBlock(
+                width=hidden_dim,
+                heads=nhead,
+                ffn_mult=dim_feedforward // hidden_dim,
+                drop=dropout
+            ) for _ in range(num_layers)
+        ])
+
+        self.out = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, ts_dim)
+        )
+
+    @staticmethod
+    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+        return x.unsqueeze(1) if x.dim() == 2 else x  # [B, 1, E]
+
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor):
+        B = ts_emb.size(0)
+
+        tgt    = self._as_sequence(ts_emb)
+        memory = self._as_sequence(txt_emb)
+
+        if self.project_input:
+            tgt    = self.proj_ts(tgt)
+            memory = self.proj_text(memory)
+
+        tokens = torch.cat([tgt, memory], dim=1)  # [B, 2, hidden_dim]
+        tokens = self.pos_encoder(tokens)
+
+        h = self.blocks(tokens)
+        ts_hat = self.out(h[:, 0])  # return first token's prediction
+        return ts_hat.unsqueeze(1)  # shape: [B, 1, ts_dim]
+
+
+# ---------------------------------------------------------------------------
+# Residual attention decoder with a diffusion-style denoising tail
+# ---------------------------------------------------------------------------
+# class DiffusionRefiner(nn.Module):
+#     """
+#     Lightweight denoising refiner that improves ts_hat using iterative residual steps.
+#     Mimics diffusion-style denoising by progressively refining x₀ + noise.
+#     """
+#     def __init__(self, ts_dim, txt_dim, hidden_dim, n_steps=4):
+#         super().__init__()
+#         self.n_steps = n_steps
+#         self.txt_proj = nn.Linear(txt_dim, ts_dim)  # project text to match ts_dim
+
+#         self.step_blocks = nn.ModuleList([
+#             nn.Sequential(
+#                 nn.Linear(ts_dim * 2, hidden_dim),  # [x || txt_emb_projected]
+#                 nn.GELU(),
+#                 nn.Linear(hidden_dim, ts_dim)
+#             )
+#             for _ in range(n_steps)
+#         ])
+
+#     def forward(self, coarse_ts: torch.Tensor, txt_emb: torch.Tensor):
+#         x = coarse_ts + torch.randn_like(coarse_ts) * 0.1  # add noise
+
+#         txt_emb_proj = self.txt_proj(txt_emb)  # [B, ts_dim]
+
+#         for block in self.step_blocks:
+#             h = torch.cat([x, txt_emb_proj], dim=-1)  # [B, 2 * ts_dim]
+#             dx = block(h)
+#             x = x - dx  # residual denoising
+
+#         return x
+
+
+class DiffusionRefiner(nn.Module):
+    """
+    Lightweight denoising refiner that improves ts_hat using iterative residual steps.
+    Mimics diffusion-style denoising by progressively refining x₀ + noise.
+    """
+    def __init__(self, ts_dim, txt_dim, hidden_dim=None, n_steps=4):
+        
+        super().__init__()
+        if hidden_dim is None:
+            hidden_dim = int((ts_dim + txt_dim)/2)
+        self.n_steps = n_steps
+        self.step_blocks = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(ts_dim + txt_dim, hidden_dim),  # [x || txt_emb]
+                nn.GELU(),
+                nn.Linear(hidden_dim, ts_dim)
+            )
+            for _ in range(n_steps)
+        ])
+
+    def forward(self, coarse_ts: torch.Tensor, txt_emb: torch.Tensor):
+        x = coarse_ts + torch.randn_like(coarse_ts) * 0.1  # add noise
+        for block in self.step_blocks:
+            h = torch.cat([x, txt_emb], dim=-1)  # [B, ts_dim + txt_dim]
+            dx = block(h)
+            x = x - dx  # residual denoising
+        return x
+
+class ResAttDiffDecoder(nn.Module):
+    """
+    Residual-attention decoder with optional diffusion denoising tail.
+    Produces a coarse prediction and optionally refines it with learned noise steps.
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        nhead: int = 8,
+        num_layers: int = 3,
+        dim_feedforward: int = 768,
+        dropout: float = 0.1,
+        project_input: bool = False,
+        diffusion_steps: int = 10,  # if > 0, apply diffusion tail
+    ):
+        super().__init__()
+        hidden_dim = output_dim
+        self.diffusion_steps = diffusion_steps
+
+        self.project_input = project_input
+        if self.project_input:
+            self.proj_ts = nn.Linear(output_dim, ts_dim)
+            self.proj_text = nn.Linear(output_dim, ts_dim)
+            hidden_dim = ts_dim
+
+        self.pos_encoder = PositionalEncoding(hidden_dim)
+
+        self.blocks = nn.Sequential(*[
+            ResidualAttentionBlock(
+                width=hidden_dim,
+                heads=nhead,
+                ffn_mult=dim_feedforward // hidden_dim,
+                drop=dropout
+            ) for _ in range(num_layers)
+        ])
+
+        self.out = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, ts_dim)
+        )
+
+        # Optional diffusion tail
+        if diffusion_steps > 0:
+            self.diffusion_tail = DiffusionRefiner(
+                ts_dim=ts_dim,
+                txt_dim=hidden_dim,
+                n_steps=diffusion_steps
+            )
+
+    @staticmethod
+    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+        return x.unsqueeze(1) if x.dim() == 2 else x  # [B, 1, E]
+
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor, refine: bool = True):
+        B = ts_emb.size(0)
+
+        tgt    = self._as_sequence(ts_emb)
+        memory = self._as_sequence(txt_emb)
+
+        if self.project_input:
+            tgt    = self.proj_ts(tgt)
+            memory = self.proj_text(memory)
+
+        tokens = torch.cat([tgt, memory], dim=1)  # [B, 2, hidden_dim]
+        tokens = self.pos_encoder(tokens)
+
+        h = self.blocks(tokens)
+        ts_hat = self.out(h[:, 0])  # [B, ts_dim]
+
+        if self.diffusion_steps > 0 and refine:
+            # ts_hat = ts_hat + self.diffusion_tail(ts_hat, txt_emb)
+            ts_hat = self.diffusion_tail(ts_hat, txt_emb)
+
+        return ts_hat.unsqueeze(1)  # [B, 1, ts_dim]
+
+
+class DiffusionTail(nn.Module):
+    """
+    Learns to predict ε (the noise / residual) given a ts_emb and txt_emb.
+    Returns the predicted noise so the caller can compute x̂ = x_noisy - ε̂.
+    """
+    def __init__(self, ts_dim, emb_dim, n_steps: int = 4):
+        super().__init__()
+        
+        # One block per step: (ts_dim+txt_dim) ➜ hidden_dim ➜ ts_dim (noise)
+        self.blocks = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(emb_dim * 2, emb_dim),
+                nn.GELU(),
+                nn.Linear(emb_dim, ts_dim)
+            ) for _ in range(n_steps)
+        ])
+
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
+        x = ts_emb + torch.randn_like(ts_emb) * 0.1  # optional extra noise
+        eps_hat = 0.0
+
+        for block in self.blocks:
+            h   = torch.cat([x, txt_emb], dim=-1)
+            dx  = block(h)          # dx ≈ current noise estimate
+            eps_hat = eps_hat + dx  # accumulate noise prediction
+            x  = x - dx             # refine x (for next step)
+
+        return eps_hat             # final noise prediction
+
+
+# class DiffusionRefiner1(nn.Module):
+#     """
+#     Denoising refiner that maps [hidden_dim] → [ts_dim], conditioned on txt_emb.
+#     """
+#     def __init__(self, hidden_dim: int, ts_dim: int, n_steps: int = 4):
+#         super().__init__()
+#         self.n_steps = n_steps
+#         self.txt_proj = nn.Linear(hidden_dim, hidden_dim)
+
+#         self.step_blocks = nn.ModuleList([
+#             nn.Sequential(
+#                 nn.Linear(2 * hidden_dim, hidden_dim),
+#                 nn.GELU(),
+#                 nn.Linear(hidden_dim, hidden_dim)
+#             ) for _ in range(n_steps)
+#         ])
+
+#         self.out_proj = nn.Sequential(
+#             nn.LayerNorm(hidden_dim),
+#             nn.Linear(hidden_dim, ts_dim)
+#         )
+
+#     def forward(self, x: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
+#         x = x + torch.randn_like(x) * 0.1
+#         txt = self.txt_proj(txt_emb)
+
+#         for block in self.step_blocks:
+#             h = torch.cat([x, txt], dim=-1)
+#             dx = block(h)
+#             x = x - dx
+
+#         return self.out_proj(x)  # [B, ts_dim]
+
+
+# class ResAttDiffDecoder1(nn.Module):
+#     """
+#     Residual attention decoder with diffusion-style tail for final ts_hat.
+#     """
+#     def __init__(
+#         self,
+#         ts_dim: int,
+#         output_dim: int,
+#         nhead: int = 8,
+#         num_layers: int = 1,
+#         dim_feedforward: int = 768,
+#         dropout: float = 0.1,
+#         diffusion_steps: int = 4,
+#     ):
+#         super().__init__()
+        
+#         hidden_dim = output_dim
+#         self.pos_encoder = PositionalEncoding(hidden_dim)
+
+#         self.blocks = nn.Sequential(*[
+#             ResidualAttentionBlock(
+#                 width=hidden_dim,
+#                 heads=nhead,
+#                 ffn_mult=dim_feedforward // hidden_dim,
+#                 drop=dropout,
+#             ) for _ in range(num_layers)
+#         ])
+
+#         self.diffusion_tail = DiffusionRefiner(
+#             hidden_dim=hidden_dim,
+#             ts_dim=ts_dim,
+#             n_steps=diffusion_steps
+#         )
+
+#     @staticmethod
+#     def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+#         return x.unsqueeze(1) if x.dim() == 2 else x
+
+#     def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
+#         """
+#         Args:
+#             ts_emb:  [B, E] or [B, 1, E]
+#             txt_emb: [B, E] or [B, 1, E]
+#         Returns:
+#             ts_hat:  [B, 1, ts_dim]
+#         """
+#         tgt = self._as_sequence(ts_emb)
+#         memory = self._as_sequence(txt_emb)
+
+#         tokens = torch.cat([tgt, memory], dim=1)  # [B, 2, hidden_dim]
+#         tokens = self.pos_encoder(tokens)
+
+#         h = self.blocks(tokens)
+#         h0 = h[:, 0]  # use first token only
+
+#         ts_hat = self.diffusion_tail(h0, txt_emb)
+#         return ts_hat.unsqueeze(1)  # [B, 1, ts_dim]

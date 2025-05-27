@@ -82,10 +82,8 @@ class VITAL(nn.Module):
                 - log_var: Latent log variance of shape [batch_size, output_dim]
         """
 
-        # ---- VAE encoder ----
+        # ---- (V)AE encoder ----
         z, mean, log_var = self.ts_encoder(ts) # ts in raw scale
-        if not self.variational: # if not variational (AE instead of VAE), use the mean as the latent variable, 
-            z = mean
         
         # --- Text encoder forward pass ---
         text_embedded = self.text_encoder(text_features)
@@ -125,9 +123,7 @@ class VITAL(nn.Module):
         tx_emb_src = self.text_encoder(tx_f_src)
 
         # ts_emb_src
-        ts_emb_src, ts_emb_src_mean, _ = self.ts_encoder(ts)
-        if not self.variational:
-            ts_emb_src = ts_emb_src_mean
+        ts_emb_src, _, _ = self.ts_encoder(ts)
         
         # ts_emb_tgt
         ts_emb_tgt = (1-w)*ts_emb_src + w*tx_emb_tgt # interpolation of ts_emb and tx_emb
@@ -135,6 +131,7 @@ class VITAL(nn.Module):
         ts_hat = self.ts_decoder(ts_emb_tgt, tx_emb_tgt, ts, tx_emb_src) # during generation, use tx_emb_src as source text embedding
 
         return ts_hat, ts_emb_tgt, tx_emb_tgt, tx_emb_src
+
 
 class LocalNorm(nn.Module):
     def __init__(self, eps=1e-5):
@@ -194,15 +191,14 @@ class TSEncoder(nn.Module):
 
         if self.variational:
             mean = self.mean_layer(x_encoded)
+            mean = F.normalize(mean, dim=1)
             log_var = self.logvar_layer(x_encoded)
             z = self.reparameterization(mean, log_var)
         else:
             mean = x_encoded
-            log_var = torch.full_like(mean, -1e2)  # effectively 0 variance
+            mean = F.normalize(mean, dim=1)
+            log_var = torch.zeros_like(mean) 
             z = mean
-             
-        z = F.normalize(z, dim=1)
-        mean = F.normalize(mean, dim=1)
         
         return z, mean, log_var
 
@@ -239,7 +235,7 @@ class TSDecoder(nn.Module):
         elif isinstance(self.decoder, TransformerDecoderPreAuto):
             x_hat = self.decoder(ts_emb, txt_emb, ts)
         else:
-            x_hat = self.decoder(ts_emb)
+            x_hat = self.decoder(ts_emb, txt_emb)
         
         x_hat = x_hat.squeeze(1) if x_hat.dim() == 3 and x_hat.size(1) == 1 else x_hat         # [B, ts_dim]
         
