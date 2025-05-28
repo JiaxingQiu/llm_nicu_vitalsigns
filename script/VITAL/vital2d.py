@@ -197,7 +197,7 @@ class TSEncoder(nn.Module):
         else:
             mean = x_encoded
             mean = F.normalize(mean, dim=1)
-            log_var = torch.zeros_like(mean) 
+            log_var = torch.full_like(mean, -1e2)  # effectively 0 variance
             z = mean
         
         return z, mean, log_var
@@ -211,7 +211,7 @@ class TSDecoder(nn.Module):
             self.decoder = TransformerDecoderTXTS(
                 ts_dim     = ts_dim,
                 output_dim = output_dim,
-                nhead = 1,
+                nhead = 8,
                 num_layers = 6,
                 dim_feedforward = 1024,
                 dropout = 0.0)

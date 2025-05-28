@@ -997,12 +997,16 @@ class DiffusionRefiner(nn.Module):
     Lightweight denoising refiner that improves ts_hat using iterative residual steps.
     Mimics diffusion-style denoising by progressively refining x₀ + noise.
     """
-    def __init__(self, ts_dim, txt_dim, hidden_dim=None, n_steps=4):
+    def __init__(self, ts_dim, txt_dim, hidden_dim=None, n_steps=4, proj_txt = False):
         
         super().__init__()
         if hidden_dim is None:
             hidden_dim = int((ts_dim + txt_dim)/2)
         self.n_steps = n_steps
+        self.proj_txt = proj_txt
+        if proj_txt:
+            self.proj_txt = nn.Linear(txt_dim, ts_dim)
+            txt_dim = ts_dim
         self.step_blocks = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(ts_dim + txt_dim, hidden_dim),  # [x || txt_emb]
@@ -1014,6 +1018,8 @@ class DiffusionRefiner(nn.Module):
 
     def forward(self, coarse_ts: torch.Tensor, txt_emb: torch.Tensor):
         x = coarse_ts + torch.randn_like(coarse_ts) * 0.1  # add noise
+        if self.proj_txt:
+            txt_emb = self.proj_txt(txt_emb)
         for block in self.step_blocks:
             h = torch.cat([x, txt_emb], dim=-1)  # [B, ts_dim + txt_dim]
             dx = block(h)
@@ -1035,6 +1041,7 @@ class ResAttDiffDecoder(nn.Module):
         dropout: float = 0.1,
         project_input: bool = False,
         diffusion_steps: int = 10,  # if > 0, apply diffusion tail
+        diff_txt_proj: bool = False,
     ):
         super().__init__()
         hidden_dim = output_dim
@@ -1067,7 +1074,8 @@ class ResAttDiffDecoder(nn.Module):
             self.diffusion_tail = DiffusionRefiner(
                 ts_dim=ts_dim,
                 txt_dim=hidden_dim,
-                n_steps=diffusion_steps
+                n_steps=diffusion_steps,
+                proj_txt=diff_txt_proj
             )
 
     @staticmethod
@@ -1087,7 +1095,7 @@ class ResAttDiffDecoder(nn.Module):
         tokens = torch.cat([tgt, memory], dim=1)  # [B, 2, hidden_dim]
         tokens = self.pos_encoder(tokens)
 
-        h = self.blocks(tokens)
+        h = self.blocks(tokens) # [B, 2, hidden_dim]
         ts_hat = self.out(h[:, 0])  # [B, ts_dim]
 
         if self.diffusion_steps > 0 and refine:
@@ -1097,34 +1105,73 @@ class ResAttDiffDecoder(nn.Module):
         return ts_hat.unsqueeze(1)  # [B, 1, ts_dim]
 
 
-class DiffusionTail(nn.Module):
+class ResAttVDecoder(nn.Module):
     """
-    Learns to predict ε (the noise / residual) given a ts_emb and txt_emb.
-    Returns the predicted noise so the caller can compute x̂ = x_noisy - ε̂.
+    Residual-attention decoder with optional diffusion denoising tail.
+    Produces a coarse prediction and optionally refines it with learned noise steps.
     """
-    def __init__(self, ts_dim, emb_dim, n_steps: int = 4):
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        nhead: int = 8,
+        num_layers: int = 3,
+        dim_feedforward: int = 768,
+        dropout: float = 0.1,
+        project_input: bool = False
+    ):
         super().__init__()
-        
-        # One block per step: (ts_dim+txt_dim) ➜ hidden_dim ➜ ts_dim (noise)
-        self.blocks = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(emb_dim * 2, emb_dim),
-                nn.GELU(),
-                nn.Linear(emb_dim, ts_dim)
-            ) for _ in range(n_steps)
+        hidden_dim = output_dim 
+
+        self.project_input = project_input
+        if self.project_input:
+            self.proj_ts = nn.Linear(output_dim, ts_dim)
+            self.proj_text = nn.Linear(output_dim, ts_dim)
+            hidden_dim = ts_dim
+
+        self.pos_encoder = PositionalEncoding(hidden_dim)
+
+        self.blocks = nn.Sequential(*[
+            ResidualAttentionBlock(
+                width=hidden_dim,
+                heads=nhead,
+                ffn_mult=dim_feedforward // hidden_dim,
+                drop=dropout
+            ) for _ in range(num_layers)
         ])
 
-    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
-        x = ts_emb + torch.randn_like(ts_emb) * 0.1  # optional extra noise
-        eps_hat = 0.0
+        self.out = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, ts_dim)
+        )
+    
+    @staticmethod
+    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+        return x.unsqueeze(1) if x.dim() == 2 else x  # [B, 1, E]
 
-        for block in self.blocks:
-            h   = torch.cat([x, txt_emb], dim=-1)
-            dx  = block(h)          # dx ≈ current noise estimate
-            eps_hat = eps_hat + dx  # accumulate noise prediction
-            x  = x - dx             # refine x (for next step)
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor, refine: bool = True):
+        B = ts_emb.size(0)
 
-        return eps_hat             # final noise prediction
+        tgt    = self._as_sequence(ts_emb)
+        memory = self._as_sequence(txt_emb)
+
+        if self.project_input:
+            tgt    = self.proj_ts(tgt)
+            memory = self.proj_text(memory)
+
+        tokens = torch.cat([tgt, memory], dim=1)  # [B, 2, hidden_dim]
+        tokens = self.pos_encoder(tokens)
+
+        h = self.blocks(tokens) # [B, 2, hidden_dim]
+        ts_hat_mean = self.out(h[:, 0])  # [B, ts_dim]
+        ts_hat_std = self.out(h[:, 1])  # [B, ts_dim]
+
+        # Add noise with learned variance
+        noise = torch.randn_like(ts_hat_mean) * ts_hat_std
+        ts_hat = ts_hat_mean + noise
+
+        return ts_hat.unsqueeze(1)  # [B, 1, ts_dim]
+
 
 
 # class DiffusionRefiner1(nn.Module):
