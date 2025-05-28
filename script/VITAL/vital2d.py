@@ -19,116 +19,53 @@ class VITAL(nn.Module):
                  ts_decoder = None,
                  variational = True,
                  clip_mu = False,
-                 concat_embeddings = False,
                  gen_w_src_text = False):
-        """Initialize VITAL model
-        
-        Args:
-            ts_dim: Input time series dimension
-            text_dim: Input text embedding dimension
-            output_dim: Latent space dimension
-            beta: Weight for VAE loss
-            ts_encoder: Optional custom time series encoder
-            text_encoder: Optional custom text encoder
-            ts_decoder: Optional custom time series decoder
-            variational: Whether to use VAE (default: True)
-            clip_mu: Whether to use mean for CLIP instead of sampled z (default: False)
-            concat_embeddings: Whether to concatenate embeddings before decoding (default: False)
-        """
-
         super().__init__()
-        
         # ts_encoder
         self.ts_encoder = TSEncoder(ts_dim, output_dim, encoder_layers = ts_encoder, variational = variational)
-        
         # text_encoder
         self.text_encoder = TextEncoder(text_dim, output_dim, encoder_layers = text_encoder)
-        
         # ts_decoder
-        if concat_embeddings:
-            decode_dim = 2*output_dim
-        else:
-            decode_dim = output_dim
-        self.ts_decoder = TSDecoder(ts_dim = ts_dim, output_dim = decode_dim, decoder_layers = ts_decoder)
-        
+        self.ts_decoder = TSDecoder(ts_dim = ts_dim, output_dim = output_dim, decoder_layers = ts_decoder)
         
         self.device = device
         self.beta = beta
         self.clip_mu = clip_mu
-        self.concat_embeddings = concat_embeddings
         self.variational = variational
         self.gen_w_src_text = gen_w_src_text
         self.to(device)
         print(nn_summary(self))
     
     def clip(self, ts_embedded, text_embedded):
-        # ts_embedded = F.normalize(ts_embedded, dim=1)
-        # text_embedded = F.normalize(text_embedded, dim=1)
         logits = torch.matmul(ts_embedded, text_embedded.T) 
         return logits
     
     def forward(self, ts, text_features):
-        """Forward pass of the VITAL model.
-        
-        Args:
-            ts: Globally normalized time series of shape [batch_size, ts_dim]
-            text_features: Text features from pretrained encoder of shape [batch_size, text_dim]
-                
-        Returns:
-            tuple:
-                - logits: Similarity scores of shape [batch_size, batch_size]
-                - ts_hat: Reconstructed time series of shape [batch_size, ts_dim]
-                - mean: Latent mean of shape [batch_size, output_dim]
-                - log_var: Latent log variance of shape [batch_size, output_dim]
-        """
-
         # ---- (V)AE encoder ----
-        z, mean, log_var = self.ts_encoder(ts) # ts in raw scale
-        
+        ts_emb, mean, log_var = self.ts_encoder(ts) # ts in raw scale
         # --- Text encoder forward pass ---
         text_embedded = self.text_encoder(text_features)
-        
         # --- CLIP forward pass ---
         if self.clip_mu:
             logits = self.clip(mean, text_embedded)
         else:
-            logits = self.clip(z, text_embedded)
-        
+            logits = self.clip(ts_emb, text_embedded)
         # --- VAE decoder forward pass ---
-        if self.concat_embeddings:
-            # concate z and text_embedded 
-            decode_input = torch.cat([z, text_embedded], dim=1)
-        else:
-            decode_input = z
-        
-        ts_hat = self.ts_decoder(decode_input, text_embedded, ts, text_embedded) # during trining, only use text_embedded as source text embedding
-
+        ts_hat = self.ts_decoder(ts_emb, text_embedded, ts, text_embedded) # during trining, only use text_embedded as source text embedding
         return logits, ts_hat, mean, log_var
     
     def generate(self, w, ts, tx_f_tgt, tx_f_src):
-        """
-        Generate a time series from a source time series and a target text features.
-
-        Args:
-            ts: [B, ts_dim], source time series
-            tx_f_tgt: [B, text_dim], target text features embedded by pretrained sentence encoder
-            w: [B, 1], interpolation weight
-            tx_f_src: [B, text_dim], source text features embedded by pretrained sentence encoder (should be from 'text' columm in the dataframe)
-        """
-        # tx_emb_tgt
+        # embedding of target text conditions
         tx_emb_tgt = self.text_encoder(tx_f_tgt)
-        
-        # tx_emb_src 
-        if self.gen_w_src_text: tx_f_src = tx_f_tgt # overwrite tx_f_src with tx_f_tgt
-        tx_emb_src = self.text_encoder(tx_f_src)
-
-        # ts_emb_src
+        # embedding of source time series 
         ts_emb_src, _, _ = self.ts_encoder(ts)
-        
-        # ts_emb_tgt
+        # embedding of source text conditions
+        tx_emb_src = self.text_encoder(tx_f_src)
+        # target time series embeddings interpolated from source time series and target text conditions
         ts_emb_tgt = (1-w)*ts_emb_src + w*tx_emb_tgt # interpolation of ts_emb and tx_emb
-        
-        ts_hat = self.ts_decoder(ts_emb_tgt, tx_emb_tgt, ts, tx_emb_src) # during generation, use tx_emb_src as source text embedding
+        # (IMPORTANT) if generate with source text condition, overwrite tx_emb_tgt with tx_emb_src
+        if self.gen_w_src_text: tx_emb_tgt = tx_emb_src
+        ts_hat = self.ts_decoder(ts_emb_tgt, tx_emb_tgt) # during generation, use tx_emb_src as source text embedding
 
         return ts_hat, ts_emb_tgt, tx_emb_tgt, tx_emb_src
 
@@ -150,14 +87,6 @@ class LocalNorm(nn.Module):
 
 class TSEncoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, encoder_layers = None, variational: bool = False):
-        """Time series encoder with progressive architecture
-        
-        Args:
-            ts_dim (int): Input time series dimension
-            output_dim (int): Output embedding dimension
-            encoder_layers (nn.Module): Custom encoder layers (default: None)
-            variational (bool): Whether to enable VAE sampling (default: True)
-        """
         super().__init__()
         self.variational = variational
         self.local_norm = LocalNorm()
@@ -171,7 +100,6 @@ class TSEncoder(nn.Module):
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
-        # Only create mean and log variance layers if variational is True
         if self.variational:
             self.mean_layer = nn.Linear(output_dim, output_dim)
             self.logvar_layer = nn.Linear(output_dim, output_dim)
@@ -185,7 +113,6 @@ class TSEncoder(nn.Module):
         return z
     
     def forward(self, x):
-        # _, x_mean, x_std = self.local_norm(x)
         #  ---- encode -----
         x_encoded = self.encoder_layers(x)
 
@@ -206,7 +133,6 @@ import inspect
 class TSDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
-        self.ts_dim = ts_dim  # Store ts_dim for zero initialization
         if decoder_layers is None:
             self.decoder = TransformerDecoderTXTS(
                 ts_dim     = ts_dim,
@@ -227,18 +153,14 @@ class TSDecoder(nn.Module):
                 required_params_count += 1
         self._n_required_args = required_params_count
     
-    def forward(self, ts_emb, txt_emb = None, ts = None, src_txt_emb = None):
+    def forward(self, ts_emb, txt_emb, ts = None, src_txt_emb = None):
         if isinstance(self.decoder, TransformerDecoderTXTS2):
             x_hat = self.decoder(ts_emb, txt_emb, src_txt_emb)
-        elif isinstance(self.decoder, TransformerDecoderTXTS):
-            x_hat = self.decoder(ts_emb, txt_emb)
         elif isinstance(self.decoder, TransformerDecoderPreAuto):
             x_hat = self.decoder(ts_emb, txt_emb, ts)
         else:
-            x_hat = self.decoder(ts_emb, txt_emb)
-        
+            x_hat = self.decoder(ts_emb, txt_emb) 
         x_hat = x_hat.squeeze(1) if x_hat.dim() == 3 and x_hat.size(1) == 1 else x_hat         # [B, ts_dim]
-        
         return x_hat
 
 class TextEncoder(nn.Module):

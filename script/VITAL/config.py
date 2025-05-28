@@ -57,7 +57,6 @@ config_dict = {
     '3d': False, # **{'3d': False/True} to change in update_config
     'embedded_dim': 768,
     'model_init': None,
-    'concat_embeddings': False,
     'clip_mu': False,
     'variational': False,
     'train_type': 'joint', # or 'vae', 'clip'

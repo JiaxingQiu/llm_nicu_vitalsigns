@@ -27,11 +27,7 @@ def vital_contrast_infer(df, model, config_dict,
     # get the logits for each text (condition)
     for tx_f in tx_f_ls_repeated:
         tx_embedded = model.text_encoder(tx_f)
-        if model.concat_embeddings:
-            z_tx_embedded = torch.cat([z, tx_embedded], dim=1)
-        else:
-            z_tx_embedded = z
-        ts_hat = model.ts_decoder(z_tx_embedded, tx_embedded, ts_f, tx_embedded)
+        ts_hat = model.ts_decoder(z, tx_embedded, ts_f, tx_embedded)
 
         logits = model.clip(z, tx_embedded)
         logits = torch.diag(logits).reshape(-1, 1)

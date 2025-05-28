@@ -115,13 +115,7 @@ def plot_reconstruction_from_distances(model,
             # Get embeddings and reconstruction
             _, z_mean, z_log_var = model.ts_encoder(x)
             z = model.ts_encoder.reparameterization(z_mean, z_log_var + distance)
-            # decode new z
-            if model.concat_embeddings:
-                z_text_embedded = torch.cat([z, tx_emb], dim=1)
-            else:
-                z_text_embedded = z
-            
-            x_hat = model.ts_decoder(z_text_embedded, tx_emb, x, tx_emb)
+            x_hat = model.ts_decoder(z, tx_emb, x, tx_emb)
             
             _, z_mean_hat, _ = model.ts_encoder(x_hat)
             

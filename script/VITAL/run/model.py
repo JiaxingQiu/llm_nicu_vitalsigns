@@ -19,8 +19,7 @@ if overwrite or not os.path.exists(model_path):
                     output_dim=config_dict['embedded_dim'],
                     ts_encoder = ts_encoder,
                     ts_decoder = ts_decoder,
-                    clip_mu = config_dict['clip_mu'],
-                    concat_embeddings = config_dict['concat_embeddings']
+                    clip_mu = config_dict['clip_mu']
                 )
     else:
         model = VITAL(
@@ -31,7 +30,6 @@ if overwrite or not os.path.exists(model_path):
                     ts_decoder=ts_decoder,
                     text_encoder = text_encoder,
                     clip_mu = config_dict['clip_mu'],
-                    concat_embeddings = config_dict['concat_embeddings'],
                     variational = config_dict['variational'],
                     gen_w_src_text = config_dict['gen_w_src_text']
                 )
