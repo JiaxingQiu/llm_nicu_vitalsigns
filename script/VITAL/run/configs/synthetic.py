@@ -1,4 +1,4 @@
-model_name = 'syn4' 
+if 'model_name' not in locals(): model_name = 'syn_at' 
 
 text1 = ('No trend.',1)
 text2 = ('No seasonal pattern.',1)

@@ -23,17 +23,23 @@ if overwrite or not os.path.exists(model_path):
 
     
     for i in range(config_dict['num_saves']):  
-        train_losses_tmp, test_losses_tmp = train_vital(model, 
-                                                        train_dataloader,
-                                                        test_dataloader, 
-                                                        optimizer, 
-                                                        scheduler,
-                                                        num_epochs = config_dict['num_epochs'], 
-                                                        target_type = config_dict['clip_target_type'],
-                                                        train_type = config_dict['train_type'],
-                                                        alpha = config_dict['alpha'],
-                                                        beta = config_dict['beta'],
-                                                        es_patience = config_dict['es_patience'])
+        if config_dict['alpha_init'] is not None:
+            alpha_init = config_dict['alpha_init'] # use customized fixed alpha_init
+        else:
+            alpha_init = None if i == 0 else alpha_tmp # automatically recalibrate alpha after 50 epochs
+        train_losses_tmp, test_losses_tmp, alpha_tmp = train_vital(model, 
+                                                                    train_dataloader,
+                                                                    test_dataloader, 
+                                                                    optimizer, 
+                                                                    scheduler,
+                                                                    num_epochs = config_dict['num_epochs'], 
+                                                                    target_type = config_dict['clip_target_type'],
+                                                                    train_type = config_dict['train_type'],
+                                                                    alpha_init = alpha_init,
+                                                                    beta = config_dict['beta'],
+                                                                    es_patience = config_dict['es_patience'],
+                                                                    target_ratio = config_dict['target_ratio']
+                                                        )
         train_losses = train_losses + train_losses_tmp
         test_losses = test_losses + test_losses_tmp
         # every num_epochs, evaluate the model

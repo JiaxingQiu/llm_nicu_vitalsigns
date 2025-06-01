@@ -1,14 +1,3 @@
-
-
-# ---- result saving directory ----
-output_dir = './results/'+config_dict['model_name']
-model_clip_path = output_dir+'/model_clip.pth' 
-eval_clip_path = output_dir+'/evals_clip.pth'
-model_path = output_dir+'/model.pth' 
-eval_path = output_dir+'/evals.pth'
-config_path = output_dir+'/config.pth'
-
-
 # ---- prepare target matrix ----
 if len(config_dict['custom_target_cols']) > 0:
     target_train = gen_target(df_train, config_dict['custom_target_cols'])
@@ -18,7 +7,6 @@ else:
     target_train = None
     target_test = None
     target_left = None
-
 
 # -- assign global normalization mean and std --
 if config_dict['ts_global_normalize']:
@@ -30,7 +18,7 @@ if config_dict['ts_global_normalize']:
     print("standardization mean and std: ", config_dict['ts_normalize_mean'], config_dict['ts_normalize_std'])
 
 
-if overwrite or not os.path.exists(model_path):
+if overwrite:
     # ------------------------- ready eval inputs for CLIP -------------------------
     # 1. ts to txt prediction evaluation (truei and texti are reserved names) 
     n_levels = len(config_dict['y_levels'])

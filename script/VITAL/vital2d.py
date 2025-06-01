@@ -94,7 +94,8 @@ class TSEncoder(nn.Module):
             # default encoder layers
             self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
                                                     output_dim=output_dim,
-                                                    kernel_sizes=[100, 50, 10],
+                                                    # kernel_sizes=[100, 50, 10],
+                                                    kernel_sizes=[int(ts_dim * frac) for frac in [2/3, 1/2, 1/5, 1/10]],
                                                     hidden_num_channel=16,
                                                     dropout=0.0)
         else:
@@ -134,13 +135,10 @@ class TSDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
         if decoder_layers is None:
-            self.decoder = TransformerDecoderTXTS(
-                ts_dim     = ts_dim,
-                output_dim = output_dim,
-                nhead = 8,
-                num_layers = 6,
-                dim_feedforward = 1024,
-                dropout = 0.0)
+            self.decoder = TransformerDecoder(
+                ts_dim=ts_dim,
+                output_dim=output_dim
+            )
         else:
             self.decoder = decoder_layers
         
@@ -154,12 +152,7 @@ class TSDecoder(nn.Module):
         self._n_required_args = required_params_count
     
     def forward(self, ts_emb, txt_emb, ts = None, src_txt_emb = None):
-        if isinstance(self.decoder, TransformerDecoderTXTS2):
-            x_hat = self.decoder(ts_emb, txt_emb, src_txt_emb)
-        elif isinstance(self.decoder, TransformerDecoderPreAuto):
-            x_hat = self.decoder(ts_emb, txt_emb, ts)
-        else:
-            x_hat = self.decoder(ts_emb, txt_emb) 
+        x_hat = self.decoder(ts_emb, txt_emb) 
         x_hat = x_hat.squeeze(1) if x_hat.dim() == 3 and x_hat.size(1) == 1 else x_hat         # [B, ts_dim]
         return x_hat
 

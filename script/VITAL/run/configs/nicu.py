@@ -1,5 +1,4 @@
-
-model_name = 'nicu3' 
+if 'model_name' not in locals(): model_name = 'nicu_at' 
 
 
 text_config = {
@@ -56,9 +55,7 @@ update_config(
     model_name = model_name,
     
     # Train settings
-    alpha = 1/100,
-    num_saves = 5,
-    init_lr = 1e-5,
+    # init_lr = 1e-5,
     
     # Text configuration
     text_config = text_config

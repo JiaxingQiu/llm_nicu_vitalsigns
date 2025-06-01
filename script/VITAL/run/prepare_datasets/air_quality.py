@@ -34,8 +34,7 @@ print(df_left['text'].value_counts())
 # prepare arguments for evaluation
 # ------------------------------------------------------------------------------------------------
 df_eval = df_left
-w = 0.8 # stength of augmentation
-suffix = ''  
+w = 0.6 # stength of augmentation
 
 math = False
 ts_dist = True

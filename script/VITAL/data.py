@@ -283,26 +283,22 @@ def get_features3d(df,
     return ts_f, tx_f_list, labels
 
 
-
-def gen_target(df, 
-               cluster_cols = ['label']):
+def gen_target(df, cluster_cols=['label']):
     if len(cluster_cols) == 0:
         return None
-    targets = {}
+    target_sum = None
     for cluster_col in cluster_cols:
         label_mapping = {cat: idx+1 for idx, cat in enumerate(sorted(df[cluster_col].unique()))}
         df['cluster'] = df[cluster_col].map(label_mapping).astype(int)
         labels = torch.tensor(df['cluster'].values).to(device)
-        labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1))
-        target = labels_equal.float()
-        targets[cluster_col] = target
-
-    # Sum all target matrices element-wise
-    target_sum = sum(targets.values())
-    # Method 2: Normalize by count
+        labels_equal = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+        if target_sum is None:
+            target_sum = labels_equal
+        else:
+            target_sum += labels_equal
     target_normalized = target_sum / len(cluster_cols)
+    target_normalized = target_normalized.to(device)
     return target_normalized
-
 
 def gen_text_similarity_target(text_features):
     """

@@ -1,4 +1,4 @@
-model_name = 'syn_gt_at'
+if 'model_name' not in locals(): model_name = 'syn_gt_at'
 
 text1 = ('No trend.',1)
 text2 = ('No seasonal pattern.',1)
@@ -36,7 +36,7 @@ update_config(
     # Data settings
     text_col = 'text', #'ts_description',
     seq_length = 200,
-    custom_target_cols = ['segment1', 'segment2', 'segment3', 'segment4', 'label'], # 'label' is the same as the default "by_label" target 
+    custom_target_cols = ['segment1', 'segment2', 'segment3', 'segment4', 'label'], # if text based, overwrite with ['label']
     ts_global_normalize = False, 
     
     # Model settings

@@ -1,3 +1,8 @@
+# --- prepare saving paths ------------------------------------------------------------
+output_dir = './results/'+config_dict['model_name']
+model_path = output_dir+'/model.pth' 
+config_path = output_dir+'/config.pth'
+
 
 # if encoder and decoder not defined otherwise, use the default ones
 if 'ts_encoder' not in locals():

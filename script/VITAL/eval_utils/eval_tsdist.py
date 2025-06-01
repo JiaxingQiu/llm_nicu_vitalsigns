@@ -97,7 +97,8 @@ def _process_pair(i, j, ref_ts, aug_ts, n_patches):
         lcss_simi = _patch_lcss(ref_p, aug_p)
         mse_dist  = _patch_mse(ref_p,  aug_p)
         mae_dist  = _patch_mae(ref_p,  aug_p)
-    dtw_simi = 1 / (1 + dtw_dist)         # convert distance → similarity
+    # dtw_simi = 1 / (1 + dtw_dist)         # convert distance → similarity
+    dtw_simi = dtw_dist # use distance instead of similarity
     # mse_simi = 1 / (1 + mse_dist)
     # mae_simi = 1 / (1 + mae_dist)
     return i, j, dtw_simi, lcss_simi, mse_dist, mae_dist

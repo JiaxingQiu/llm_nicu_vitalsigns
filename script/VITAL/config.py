@@ -65,13 +65,14 @@ config_dict = {
 
     # Training settings
     'init_lr': 1e-4,
-    'patience': 500,
-    'num_saves': 1,
-    'num_epochs': 10000,
-    'alpha': 1/1000, # weight of reconstruction loss
+    'patience': 1000,
+    'num_saves': 5,
+    'num_epochs': 1000,
+    'alpha_init': None, # initial alpha, if None, will be recalibrated after 50 epochs
     'beta': 0.0, # weight of kl loss
     'es_patience': 1000, # early stopping patience, set to smaller ones in application
-    
+    'target_ratio': 1, # target ratio for recalibrating alpha
+
     # Text configuration
     'text_config': None
 }
@@ -145,6 +146,7 @@ def get_config_dict():
         config['beta'] = 0.0 # no kl loss for non-variational models
     
     assert config['model_name'] is not None, "model_name is required"
+    print(config['model_name'])
     
     return config
 

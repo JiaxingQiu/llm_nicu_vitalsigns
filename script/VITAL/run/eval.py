@@ -3,30 +3,30 @@ if 'meta' not in locals():
 if 'configs' not in locals():
     configs = None
 
-# ---------------------------------------  Math eval ---------------------------------------
-# Math properties (applicable to quantitative time series attributes)
-if math:
-    filename = output_dir+'/df_stats_all'+suffix+'.pt.gz'
-    if overwrite or (not os.path.exists(filename)):
-        # calculate the properties of the generated time series
-        df = df_eval.sample(1000)
-        df_stats_all = pd.DataFrame()
-        for aug_type in ['conditional']: # , 'marginal'
-            df_stats = eval_math_properties(df, model, config_dict, aug_type = aug_type, w = w, 
-                                            meta = meta, configs = configs)
-            df_stats['aug_type'] = aug_type
-            df_stats_all = pd.concat([df_stats_all, df_stats], ignore_index=True)
+# # ---------------------------------------  Math eval ---------------------------------------
+# # Math properties (applicable to quantitative time series attributes)
+# if math:
+#     filename = output_dir+'/df_stats_all'+suffix+'.pt.gz'
+#     if overwrite or (not os.path.exists(filename)):
+#         # calculate the properties of the generated time series
+#         df = df_eval.sample(1000)
+#         df_stats_all = pd.DataFrame()
+#         for aug_type in ['conditional']: # , 'marginal'
+#             df_stats = eval_math_properties(df, model, config_dict, aug_type = aug_type, w = w, 
+#                                             meta = meta, configs = configs)
+#             df_stats['aug_type'] = aug_type
+#             df_stats_all = pd.concat([df_stats_all, df_stats], ignore_index=True)
         
-        # Save using PyTorch with gzip compression
-        buffer = io.BytesIO()
-        torch.save(df_stats_all, buffer)
-        with gzip.open(filename, 'wb') as f:
-            f.write(buffer.getvalue())
-    else:
-        # Load compressed file
-        with gzip.open(filename, 'rb') as f:
-            buffer = io.BytesIO(f.read())
-            df_stats_all = torch.load(buffer, map_location=device, weights_only=False)
+#         # Save using PyTorch with gzip compression
+#         buffer = io.BytesIO()
+#         torch.save(df_stats_all, buffer)
+#         with gzip.open(filename, 'wb') as f:
+#             f.write(buffer.getvalue())
+#     else:
+#         # Load compressed file
+#         with gzip.open(filename, 'rb') as f:
+#             buffer = io.BytesIO(f.read())
+#             df_stats_all = torch.load(buffer, map_location=device, weights_only=False)
 
 
 # ---------------------------------------  TS distance eval ---------------------------------------

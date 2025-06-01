@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import random
 import numpy as np
+import time
 
 
 
@@ -177,8 +178,8 @@ def test_epoch(model, test_dataloader, target_type = 'by_target', train_type='jo
 
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, 
-                target_type = 'by_target', train_type='joint', alpha=1.0, beta = 1.0,
-                es_patience=50):  # Add patience parameter for early stopping
+                target_type = 'by_target', train_type='joint', alpha_init=None, beta = 1.0,
+                es_patience=500, target_ratio=100):  # Add patience parameter for early stopping
     
     # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
     torch.manual_seed(333)
@@ -195,21 +196,21 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     # Early stopping variables
     counter = 0
     best_test_loss = float('inf')
-    alpha_init = alpha
+    alpha = alpha_init if alpha_init is not None else 1.0
     
     try:
         for epoch in range(num_epochs):
+            start_time = time.time()
             # Train for one epoch
             train_loss, train_clip_loss, train_reconstruction_loss, train_kl_loss = train_epoch(model, train_dataloader, optimizer, target_type, train_type, alpha, beta)
             
             # Test for one epoch
             test_loss, test_clip_loss, test_reconstruction_loss, test_kl_loss = test_epoch(model, test_dataloader, target_type, train_type, alpha, beta)
             
-            # Recalibrate alpha after 10th epoch
-            if epoch == 10:
+            # Recalibrate alpha
+            if epoch == 10 and alpha_init is None:
                 # Use the recalibrate_alpha function
-                alpha = recalibrate_alpha(train_clip_loss, train_reconstruction_loss/alpha_init, target_ratio=100)
-                alpha = min(alpha, 1e-3)
+                alpha = recalibrate_alpha(train_clip_loss, train_reconstruction_loss/alpha, target_ratio=target_ratio)
                 print("-"*100)
                 print(f"\nRecalibrating alpha to: {alpha:.2e}")
                 print("-"*100)
@@ -231,25 +232,27 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             # Get current learning rate
             current_lr = optimizer.param_groups[0]['lr']
 
+            epoch_time = time.time() - start_time
+
             # Print progress
             if epoch % 10 == 0:
                 if train_type == 'joint':
-                    print(f'Epoch [{epoch+1}/{num_epochs}]')
+                    print(f'Epoch [{epoch}/{num_epochs}] {epoch_time:.2f}s')
                     print(f'\tTraining Loss: {train_loss:.6f} (clip: {train_clip_loss:.6f}, rc: {train_reconstruction_loss:.6f}, kl: {train_kl_loss:.6f})')
                     print(f'\tTesting Loss: {test_loss:.6f} (clip: {test_clip_loss:.6f}, rc: {test_reconstruction_loss:.6f}, kl: {test_kl_loss:.6f})')
                     print(f'\tLearning Rate: {current_lr:.9f}')
-                    print(f'alpha: {alpha}, beta: {beta}')
+                    print(f'\talpha: {alpha}, beta: {beta}')
                 else:
-                    print(f'Epoch [{epoch+1}/{num_epochs}]')
+                    print(f'Epoch [{epoch}/{num_epochs}] {epoch_time:.2f}s')
                     print(f'\tTraining Loss: {train_loss:.6f}')
                     print(f'\tTesting Loss: {test_loss:.6f}')
                     print(f'\tLearning Rate: {current_lr:.9f}')
-                    print(f'alpha: {alpha}, beta: {beta}')
+                    print(f'\talpha: {alpha}, beta: {beta}')
             
             # Early stopping check
             if test_loss < best_test_loss:
                 best_test_loss = test_loss
-                counter = 0
+                counter =  0
             else:
                 counter += 1
                 if counter >= es_patience:
@@ -268,11 +271,11 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
         # Load best model if we found one
         if best_model_state is not None:
             model.load_state_dict(best_model_state)
-        return train_losses, test_losses
+        return train_losses, test_losses, alpha
 
 
 
-def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=1000):
+def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=10):
     """
     Calculate alpha to make reconstruction_loss * alpha approximately target_ratio times smaller than clip_loss
     
@@ -298,5 +301,5 @@ def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=1000):
     
     # Calculate alpha to achieve target ratio
     alpha = 10 ** -(np.log10(target_ratio) - power_diff)
-    
+    # alpha = min(alpha, 1e-2)
     return alpha

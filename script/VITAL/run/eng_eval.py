@@ -1,22 +1,23 @@
 # ---------------------------------- Point-wise performance vs GT ----------------------------------
-# prepare data and labels
-metrics = ['mse', 'mae']
-types_ = ['conditional']
-data = [
-    df_pw_dists_all[(df_pw_dists_all.metric == m) & 
-                    (df_pw_dists_all.aug_type == t)].score
-    for m in metrics for t in types_
-]
-labels = [f"{m.upper()} ({t})" for m in metrics for t in types_]
-# Plot
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.boxplot(data, labels=labels)
-ax.set_ylabel('Distance to ground truth')
-ax.set_ylim(-1, 20)
-plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
-plt.tight_layout()
-plt.show()
+if 'df_pw_dists_all' in locals():
+    # prepare data and labels
+    metrics = ['mse', 'mae']
+    types_ = ['conditional']
+    data = [
+        df_pw_dists_all[(df_pw_dists_all.metric == m) & 
+                        (df_pw_dists_all.aug_type == t)].score
+        for m in metrics for t in types_
+    ]
+    labels = [f"{m.upper()} ({t})" for m in metrics for t in types_]
+    # Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.boxplot(data, labels=labels)
+    ax.set_ylabel('Distance to ground truth')
+    ax.set_ylim(-1, 20)
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
+    plt.tight_layout()
+    plt.show()
 
 
 #---------------------------------- time series distance ----------------------------------
@@ -91,25 +92,25 @@ def summarize_scores(df_all, aug_type= 'conditional'):
         final_score_row = final_score_row.rename(columns={
             'mse': 'Point-wise MSE ↓',
             'mae': 'Point-wise MAE ↓',
-            'delta_dtw': 'DTW similarity improvement ↑',
+            'delta_dtw': 'DTW distance decrease ↓',
             'RaTS': 'RaTS ↑'
         })
     else:
         final_score_row = final_score_row.rename(columns={
-            'delta_dtw': 'DTW similarity improvement ↑',
+            'delta_dtw': 'DTW distance decrease ↓',
             'RaTS': 'RaTS ↑'
         })
     if 'delta_lcss' in final_score_row.columns:
         final_score_row = final_score_row.rename(columns={
-            'delta_lcss': 'LCSS similarity improvement ↑'
+            'delta_lcss': 'LCSS similarity increase ↑'
         })
 
     # Reorder columns (only keep those that exist)
     desired_order = [
         'Point-wise MSE ↓',
         'Point-wise MAE ↓',
-        'DTW similarity improvement ↑',
-        'LCSS similarity improvement ↑',
+        'DTW distance decrease ↓',
+        'LCSS similarity increase ↑',
         'RaTS ↑'
     ]
     final_score_row = final_score_row[[col for col in desired_order if col in final_score_row.columns]]
@@ -205,3 +206,10 @@ def plot_summary(df_all):
 
     plt.tight_layout()
     plt.show()
+
+
+if 'df_pw_dists_all' in locals():
+    df_all = pd.concat([df_rats_all, df_dists_all, df_pw_dists_all], ignore_index=True).dropna(subset=['score'])
+else:
+    df_all = pd.concat([df_rats_all, df_dists_all], ignore_index=True).dropna(subset=['score'])
+summarize_scores(df_all)

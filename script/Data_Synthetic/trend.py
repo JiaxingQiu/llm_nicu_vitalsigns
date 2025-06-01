@@ -7,8 +7,7 @@ import random
 
 def generate_linear_trend(
     length: int,
-    slope_range: Tuple[float, float] = (0.05, 0.3),#(0.1, 1.0),
-    intercept_range: Tuple[float, float] = (0, 10),# (100, 110),
+    slope_range: Tuple[float, float] = (0.05, 0.2),#(0.1, 1.0),
     direction: Optional[str] = None
 ) -> np.ndarray:
     """
@@ -29,7 +28,6 @@ def generate_linear_trend(
     
     # Generate parameters
     a = random.uniform(*slope_range)
-    b = random.uniform(*intercept_range)
     
     # Adjust slope based on direction
     if direction == 'down':
@@ -39,15 +37,14 @@ def generate_linear_trend(
     t = np.arange(length)
     
     # Generate series
-    series = a * t + b
+    series = a * t
     
     return series
 
 def generate_quadratic_trend(
     length: int,
-    a_range: Tuple[float, float] = (0.01, 1),
-    b_range: Tuple[float, float] = (-0.1, 0.1),
-    c_range: Tuple[float, float] = (0, 10),
+    a_range: Tuple[float, float] = (0.0001, 0.0005),
+    b_range: Tuple[float, float] = (0, 50),
     direction: Optional[str] = None,
     ensure_non_negative: bool = True
 ) -> np.ndarray:
@@ -72,7 +69,6 @@ def generate_quadratic_trend(
     # Generate parameters
     a = random.uniform(*a_range)
     b = random.uniform(*b_range)
-    c = random.uniform(*c_range)
     
     # Adjust quadratic coefficient based on direction
     if direction == 'down':
@@ -82,7 +78,7 @@ def generate_quadratic_trend(
     t = np.arange(length)
     
     # Generate series
-    series = a * t**2 + b * t + c
+    series = a * (t+b)**2
     
     # Ensure non-negative values if requested
     if ensure_non_negative and np.min(series) < 0:
@@ -116,8 +112,8 @@ def generate_flat_trend(
 def generate_trend_series(N, L,
                            trend_type = ['linear', 'quadratic', 'flat'][0], 
                            direction=['up', 'down'][0],
-                           mean_range = (-5, 5),
-                           std_range = (0.1, 10)):
+                           mean_range = (-5, 5)#, std_range = (5, 10)
+                           ):
     series_list = []
     description_list = []
     for _ in range(N):
@@ -129,12 +125,14 @@ def generate_trend_series(N, L,
             series = generate_flat_trend(L)
         
         if trend_type != 'flat':
-            # rescale the series to be unit variance
-            series = (series - np.mean(series)) / np.std(series)
-            # randomly sample a mean between -1 and 1 uniform distribution, and a standard deviation between 0.1 and 0.5 uniform distribution
-            mean = random.uniform(*mean_range)
-            std = random.uniform(*std_range)
-            series = series * std + mean
+            # # rescale the series to be unit variance
+            # series = (series - np.mean(series)) / np.std(series)
+            # # randomly sample a mean between -1 and 1 uniform distribution, and a standard deviation between 0.1 and 0.5 uniform distribution
+            # mean = random.uniform(*mean_range)
+            # std = random.uniform(*std_range)
+            # series = series * std + mean
+            series = series - np.mean(series)
+            series = series + random.uniform(*mean_range)
             description = f"The time series shows {direction}ward {trend_type} trend."
         else:
             description = "No trend."  

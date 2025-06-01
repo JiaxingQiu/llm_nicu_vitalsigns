@@ -1,4 +1,4 @@
-model_name = 'air_quality' 
+if 'model_name' not in locals(): model_name = 'air_at' 
 
 update_config(
     
@@ -8,13 +8,13 @@ update_config(
     y_levels = ['This is air quality in Beijing.', 'This is air quality in London.'],
     y_pred_levels = ['This is air quality in Beijing.', 'This is air quality in London.'],
     # txt2ts
-    txt2ts_y_cols = ['city_str', 'year_str', 'season_str'],# 
+    txt2ts_y_cols = ['city_str', 'season_str', 'year_str'],
     
     
     # Data settings
     seq_length = 168,
     text_col = 'ts_description', #'ts_description',
-    custom_target_cols = ['city_str', 'season_str', 'year_str', 'label'], # 
+    custom_target_cols = ['city_str', 'season_str', 'year_str', 'label'], 
     ts_global_normalize = True, 
 
     # Model settings
@@ -22,7 +22,5 @@ update_config(
     alpha = 1/100,
     
     # Train settings
-    init_lr = 5e-5,
-    num_saves = 5
 )
 config_dict = get_config_dict()
