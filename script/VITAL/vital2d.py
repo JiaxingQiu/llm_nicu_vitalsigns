@@ -135,10 +135,11 @@ class TSDecoder(nn.Module):
     def __init__(self, ts_dim: int, output_dim: int, decoder_layers = None):
         super().__init__()
         if decoder_layers is None:
-            self.decoder = TransformerDecoder(
-                ts_dim=ts_dim,
-                output_dim=output_dim
-            )
+            self.decoder = SelfAttnDecoder(ts_dim=ts_dim,
+                                output_dim=output_dim,
+                                num_layers=6,
+                                diffusion_steps = 0
+                            )
         else:
             self.decoder = decoder_layers
         

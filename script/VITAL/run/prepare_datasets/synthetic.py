@@ -46,7 +46,7 @@ print(df_left['text'].value_counts())
 # ------------------------------------------------------------------------------------------------
 
 df_eval = df_left #df_test if 'df_left' not in locals() else df_left
-w = 0.6 # stength of augmentation
+w = 0.8 # stength of augmentation
 
 # Matrices
 math = True

@@ -3,11 +3,13 @@ if 'meta' not in locals():
 if 'configs' not in locals():
     configs = None
 
+suffix = '' if 'meta' is None else str(w) # te / vital
+
 # # ---------------------------------------  Math eval ---------------------------------------
 # # Math properties (applicable to quantitative time series attributes)
 # if math:
 #     filename = output_dir+'/df_stats_all'+suffix+'.pt.gz'
-#     if overwrite or (not os.path.exists(filename)):
+#     if not os.path.exists(filename):
 #         # calculate the properties of the generated time series
 #         df = df_eval.sample(1000)
 #         df_stats_all = pd.DataFrame()
@@ -34,7 +36,7 @@ if 'configs' not in locals():
 if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']:
     if config_dict['text_config']['gt']:
         filename = output_dir+'/df_pw_dists_all'+suffix+'.pt.gz'
-        if overwrite or (not os.path.exists(filename)):
+        if not os.path.exists(filename):
             df_pw_dists_all = pd.DataFrame()
             for aug_type in ['conditional']: # , 'marginal'
                 df_pw_dists = eval_pw_dist(df_eval, 
@@ -61,7 +63,7 @@ if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']
 # TS distance (to both quantitative and qualitative attributes)
 if ts_dist:
     filename = output_dir+'/df_dists_all'+suffix+'.pt.gz'
-    if overwrite or (not os.path.exists(filename)):
+    if not os.path.exists(filename):
         df_dists_ls = []
         for args in args_ls:
             df_dists = pd.DataFrame()
@@ -104,7 +106,7 @@ if rats:
     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
         
     filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
-    if overwrite or (not os.path.exists(filename)):
+    if not os.path.exists(filename):
         df_rats_ls = []
         for args in args_ls:
             df_rats = pd.DataFrame()

@@ -301,5 +301,5 @@ def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=10):
     
     # Calculate alpha to achieve target ratio
     alpha = 10 ** -(np.log10(target_ratio) - power_diff)
-    # alpha = min(alpha, 1e-2)
+    alpha = min(alpha, 1.0)
     return alpha

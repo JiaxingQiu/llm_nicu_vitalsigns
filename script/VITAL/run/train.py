@@ -27,6 +27,7 @@ if overwrite or not os.path.exists(model_path):
             alpha_init = config_dict['alpha_init'] # use customized fixed alpha_init
         else:
             alpha_init = None if i == 0 else alpha_tmp # automatically recalibrate alpha after 50 epochs
+        
         train_losses_tmp, test_losses_tmp, alpha_tmp = train_vital(model, 
                                                                     train_dataloader,
                                                                     test_dataloader, 
@@ -40,8 +41,13 @@ if overwrite or not os.path.exists(model_path):
                                                                     es_patience = config_dict['es_patience'],
                                                                     target_ratio = config_dict['target_ratio']
                                                         )
+        
+    
         train_losses = train_losses + train_losses_tmp
         test_losses = test_losses + test_losses_tmp
+        if i == 0:
+            train_losses = train_losses[11:]
+            test_losses = test_losses[11:]
         # every num_epochs, evaluate the model
         model.eval()
         if config_dict['3d']:
@@ -95,6 +101,9 @@ if overwrite or not os.path.exists(model_path):
         torch.save(model.state_dict(), model_path)
         torch.save(eval_dict_ts2txt, output_dir+'/evals_clip_ts2txt.pth')
         torch.save(eval_dict_txt2ts, output_dir+'/evals_clip_txt2ts.pth')
+        
+        if len(train_losses_tmp) < config_dict['num_epochs']:
+            break
     
         # Eval CLIP
         _ = eng_eval_metrics(eval_dict_ts2txt, binary=False, plot=True, plot_confusion_matrices=True)

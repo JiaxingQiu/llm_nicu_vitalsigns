@@ -138,7 +138,7 @@ print(df_left[config_dict['y_col']].value_counts())
 # prepare arguments for evaluation
 # ------------------------------------------------------------------------------------------------
 df_eval = df_left
-w = 0.6 # stength of augmentation
+w = 0.8 # stength of augmentation
 
 math = True
 ts_dist = True
