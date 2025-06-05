@@ -21,9 +21,7 @@ config_dict = {
 
 
     # Data settings
-    # text features to be embedded
     # 'text_col_ls': ['demo', 'cl_event', 'ts_description'], #['cl_event', 'ts_description', 'demo_ga', 'demo_weight', 'demo_apgar', 'demo_mother'] # for 3d
-    'text_col': '', # for 2d, can be other text columns to replace 'text'
     'seq_length': 300,
     # ts features to be embedded
     'downsample': False,
@@ -71,7 +69,7 @@ config_dict = {
     'alpha_init': None, # initial alpha, if None, will be recalibrated after 50 epochs
     'beta': 0.0, # weight of kl loss
     'es_patience': 1000, # early stopping patience
-    'target_ratio': 1, # target ratio for recalibrating alpha
+    'target_ratio': 10, # target ratio (clip loss over rc loss)
 
     # Text configuration
     'text_config': None

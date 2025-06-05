@@ -39,16 +39,16 @@ update_config(
     y_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'],
     y_pred_levels = ['High amount of consecutive increases.', 'Moderate  amount of consecutive increases.', 'Low amount of consecutive increases.'],
     # txt2ts
-    txt2ts_y_cols = ['description_succ_inc', 'description_histogram', 'description_ts_event_binary'],# 'description_succ_unc', 
+    txt2ts_y_cols = ['cl_event', 'description_succ_inc', 'description_histogram', 'description_ts_event_binary'],# 'description_succ_unc', 
     
     
     
     # Data settings
-    text_col = 'ts_description',
+    seq_length = 300,
     downsample = True,
     downsample_size = 20000,
     downsample_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'],
-    custom_target_cols = ['description_succ_inc', 'description_histogram', 'description_ts_event_binary', 'label'], #  description_ts_event_binary 'description_succ_unc', 
+    custom_target_cols = ['cl_event', 'description_succ_inc', 'description_histogram', 'description_ts_event_binary', 'label'], #  description_ts_event_binary 'description_succ_unc', 
     ts_global_normalize = True, 
     
     # Model settings

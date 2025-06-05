@@ -4,19 +4,22 @@ import torch.nn as nn
 from .helper import CNNEncoder
 
 class MultiCNNEncoder(nn.Module):
-    def __init__(self, ts_dim, output_dim, kernel_sizes=[80, 50, 20, 5], hidden_num_channel=16, dropout=0.0):
+    def __init__(self, ts_dim, output_dim, 
+                 fracs=[1, 1/2, 1/4, 1/8], # [2/3, 1/2, 1/5, 1/10], 
+                 hidden_num_channel=16, dropout=0.0):
         """
         Multi-resolution CNN encoder with attention mechanism.
         
         Args:
             ts_dim (int): Input time series length
             output_dim (int): Output embedding dimension
-            kernel_sizes (list): Different kernel sizes for multi-resolution analysis
+            fracs (list): Different fractions of the input time series length for multi-resolution
             hidden_num_channel (int): Number of channels in CNN layers
             dropout (float): Dropout rate
         """
         super().__init__()
-        
+
+        kernel_sizes=[int(ts_dim * frac) for frac in fracs]
         self.ts_dim = ts_dim
         self.output_dim = output_dim
 
@@ -77,6 +80,80 @@ class MultiCNNEncoder(nn.Module):
 #                 hidden_num_channel=16,
 #                 dropout=0)
 
+class PatchCNNTSEncoder(nn.Module):
+    """
+    Multi-resolution CNN encoder without attention.
+    Each kernel-size branch produces a slice of the final embedding;
+    the slices are concatenated to form the full `output_dim`.
+
+    Args
+    ----
+    ts_dim : int
+        Length (temporal dimension) of the input time series.
+    output_dim : int
+        Desired length of the final embedding. Must be divisible by len(kernel_sizes).
+    kernel_sizes : list[int]
+        Kernel sizes for the parallel CNN branches.
+    hidden_num_channel : int
+        Channel width for each CNNEncoder block.
+    dropout : float
+        Dropout rate used inside each CNN branch.
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        fracs: list[float] = [2/3, 1/2, 1/5, 1/10],
+        hidden_num_channel: int = 16,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        kernel_sizes = [int(ts_dim * frac) for frac in fracs]
+        n_kernels = len(kernel_sizes)
+        assert (
+            output_dim % n_kernels == 0
+        ), f"output_dim ({output_dim}) must be divisible by number of kernels ({n_kernels})."
+        piece_dim = output_dim // n_kernels  # dimensional share per branch
+
+        # One CNN branch per kernel size, each outputting `piece_dim`
+        self.cnns = nn.ModuleList(
+            [
+                CNNEncoder(
+                    ts_dim,
+                    piece_dim,
+                    num_channels=[hidden_num_channel],
+                    kernel_size=ks,
+                    dropout=dropout,
+                )
+                for ks in kernel_sizes
+            ]
+        )
+
+        # Optional final LayerNorm for stability
+        self.layer_norm = nn.LayerNorm(output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        x : torch.Tensor
+            Shape [batch, ts_dim] or [batch, C, ts_dim] depending on CNNEncoder spec.
+
+        Returns
+        -------
+        torch.Tensor
+            Embedding of shape [batch, output_dim], where successive
+            segments correspond to increasing kernel sizes.
+        """
+        # Collect slice-embeddings from each branch → list of [B, piece_dim]
+        pieces = [cnn(x) for cnn in self.cnns]
+
+        # Concatenate along feature dimension → [B, output_dim]
+        embedding = torch.cat(pieces, dim=-1)
+
+        # Normalise and return
+        return self.layer_norm(embedding)
 
 # ------- custom text encoder_layers (for VITAL embedding generation) -------
 class IdenticalEncoder(nn.Module):
@@ -254,3 +331,118 @@ class TextEncoderAttention(nn.Module):
 #     num_heads=4,
 #     dropout=0.1
 # )
+
+
+class _PatchAttnPool(nn.Module):
+    """
+    One slice: query-based attention pooling + MLP → piece_dim.
+    """
+
+    def __init__(
+        self,
+        text_dim: int,
+        piece_dim: int,
+        num_heads: int,
+        dropout: float,
+    ):
+        super().__init__()
+
+        self.query = nn.Parameter(torch.randn(1, 1, text_dim))
+        self.attn = nn.MultiheadAttention(
+            embed_dim=text_dim,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+        self.proj = nn.Linear(text_dim, piece_dim, bias=False)
+
+        self.act = nn.GELU()
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        q = self.query.expand(tokens.size(0), -1, -1)   # (B,1,D)
+        pooled, _ = self.attn(q, tokens, tokens)        # (B,1,D)
+        pooled = pooled.squeeze(1)                      # (B,D)
+        out = self.drop(self.act(self.proj(pooled)))    # (B,piece_dim)
+        return out
+
+class PatchAttnTextEncoder(nn.Module):
+    """
+    Text encoder that produces `n_slices` separate embeddings, one per
+    CNN slice.  Each slice has its own attention pool + projection block.
+    """
+
+    def __init__(
+        self,
+        text_dim: int,
+        output_dim: int,
+        n_slices: int = 4,
+        num_heads: int = 1,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        self.n_slices = n_slices
+        assert output_dim % self.n_slices == 0, (
+            f"output_dim ({output_dim}) must be divisible by n_slices ({self.n_slices})."
+        )
+        piece_dim = output_dim // self.n_slices
+
+        # One independent slice-attention block per slice
+        self.slices = nn.ModuleList(
+            [
+                _PatchAttnPool(
+                    text_dim=text_dim,
+                    piece_dim=piece_dim,
+                    num_heads=num_heads,
+                    dropout=dropout,
+                )
+                for _ in range(self.n_slices)
+            ]
+        )
+
+    def forward(self, text_tokens: torch.Tensor) -> torch.Tensor:
+        if text_tokens.dim() == 2:                        # (B,D) → (B,1,D)
+            text_tokens = text_tokens.unsqueeze(1)
+        # Apply each slice-attention block
+        pieces = [blk(text_tokens) for blk in self.slices]   # list[(B,piece_dim)]
+        # Concatenate along feature axis → (B, output_dim)
+        embedding = torch.cat(pieces, dim=-1)
+        return embedding
+
+class _PatchMLP(nn.Module):
+    def __init__(self, text_dim: int, piece_dim: int, hidden_mult: float = 1.0, dropout: float = 0.0):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.LayerNorm(text_dim),
+            nn.Linear(text_dim, int(text_dim * hidden_mult)),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(int(text_dim * hidden_mult), piece_dim),
+        )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:         # x: [B, text_dim]
+        return self.mlp(x)                                      # [B, piece_dim]
+
+class PatchMLPTextEncoder(nn.Module):
+    def __init__(
+        self,
+        text_dim: int,
+        output_dim: int,
+        n_slices: int = 4,
+        hidden_mult: float = 1.0,      # width multiplier inside each MLP
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+        assert output_dim % n_slices == 0
+        piece_dim = output_dim // n_slices
+        # one MLP per slice (no weight sharing)
+        self.slices = nn.ModuleList(
+            [
+                _PatchMLP(text_dim, piece_dim, hidden_mult, dropout)
+                for _ in range(n_slices)
+            ]
+        )
+    def forward(self, text_tokens: torch.Tensor) -> torch.Tensor:
+        pieces = [mlp(text_tokens) for mlp in self.slices]  # list of (B, piece_dim)
+        tx_emb = torch.cat(pieces, dim=-1)                 # (B, output_dim)
+        return tx_emb
+    

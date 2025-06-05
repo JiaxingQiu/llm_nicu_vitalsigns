@@ -22,6 +22,9 @@ df = df.merge(df_demo, on='VitalID', how='left')
 df_desc = generate_descriptions_parallel(ts_df = df.loc[:, '1':'300'], id_df = df.loc[:, ['VitalID', 'VitalTime']])
 df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
 df = text_gen_input_column(df, config_dict)
+df['text'] = ''
+for str_col in config_dict['txt2ts_y_cols']:
+    df['text'] += ' ' + df[str_col].apply(lambda x: x.strip())                           
 df['rowid'] = df.index.to_series() 
 df_train = df
 if config_dict['downsample']:
@@ -45,6 +48,9 @@ df_test = df_test.rename(columns=rename_dict)
 df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
 df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
 df_test = text_gen_input_column(df_test, config_dict)
+df_test['text'] = ''
+for str_col in config_dict['txt2ts_y_cols']:
+    df_test['text'] += ' ' + df_test[str_col].apply(lambda x: x.strip()) 
 df_test_org = df_test[df.columns]
 if config_dict['downsample']:
     df_test_org = downsample_neg_levels(df_test_org, config_dict, config_dict['random_state'])

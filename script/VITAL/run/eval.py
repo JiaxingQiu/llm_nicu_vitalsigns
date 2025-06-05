@@ -3,7 +3,7 @@ if 'meta' not in locals():
 if 'configs' not in locals():
     configs = None
 
-suffix = '' if 'meta' is None else str(w) # te / vital
+suffix = '' if meta is not None else str(w) # te / vital
 
 # # ---------------------------------------  Math eval ---------------------------------------
 # # Math properties (applicable to quantitative time series attributes)

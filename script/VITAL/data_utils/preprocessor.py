@@ -495,13 +495,13 @@ def text_gen_input_column(df, config_dict):
                                     succ_unc=text_config['ts']['succ_unc'],
                                     histogram=text_config['ts']['histogram'])
     
-    # create reserved text column for 2d clip
-    df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description']
-    df['text'] = df['text'].apply(lambda x: x.strip())
-    if not config_dict['3d']:
-        print("replace 'text' with: ", config_dict['text_col'])
-        df['text'] = df[config_dict['text_col']]
-    print(df['text'].value_counts().nlargest(5)) # head 5 only
+    # # create reserved text column for 2d clip
+    # df['text'] = df['cl_event'] + ' ' + df['demo'] + ' ' + df['ts_description'] # default text for NICU data.
+    # df['text'] = df['text'].apply(lambda x: x.strip())
+    # # if not config_dict['3d']: # suppress
+    # #     print("replace 'text' with: ", config_dict['text_col'])
+    # #     df['text'] = df[config_dict['text_col']]
+    # print(df['text'].value_counts().nlargest(5)) # head 5 only
     
     if text_config['split']:
         # Generate demographic descriptions

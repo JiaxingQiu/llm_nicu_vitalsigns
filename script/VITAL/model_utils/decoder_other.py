@@ -1,11 +1,93 @@
 import torch, math
 import torch.nn as nn
 import torch.nn.functional as F
-from .encoder import ResidualBlock, AddChannelDim
-from .helper import PositionalEncoding, ResidualAttentionBlock, DiffusionRefiner
+from .helper import PositionalEncoding, SelfAttnBlock, DiffusionRefiner
 from torch.utils.checkpoint import checkpoint
 
 # ------- custom ts decoder_layers -------
+
+class WeightedFusionDecoder(nn.Module):
+    """
+    Decoder that learns a per-dimension weight vector w using a single SelfAttnBlock,
+    then decodes the element-wise fused embedding to reconstruct the time series.
+    """
+    def __init__(
+        self,
+        ts_dim: int,
+        output_dim: int,
+        nhead: int = 8,
+        ffn_mult: int = 1,
+        dropout: float = 0.0,
+        diffusion_steps: int = 0,
+        diff_txt_proj: bool = True,
+    ):
+        super().__init__()
+        self.hidden_dim = output_dim
+
+        self.pos_encoder = PositionalEncoding(self.hidden_dim)
+        self.mu_logsigma_block = SelfAttnBlock(
+            width=self.hidden_dim,
+            heads=nhead,
+            ffn_mult=ffn_mult,
+            drop=dropout,
+        )
+
+        self.out_block = SelfAttnBlock(
+            width=self.hidden_dim,
+            heads=nhead,
+            ffn_mult=ffn_mult,
+            drop=dropout,
+        )
+        self.out = nn.Linear(self.hidden_dim, ts_dim)
+
+        self.diffusion_steps = diffusion_steps
+        if diffusion_steps > 0:
+            self.diffusion_tail = DiffusionRefiner(
+                ts_dim=ts_dim,
+                txt_dim=output_dim,
+                n_steps=diffusion_steps,
+                diff_txt_proj=diff_txt_proj,
+            )
+
+    @staticmethod
+    def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+        return x.unsqueeze(1) if x.dim() == 2 else x
+
+    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor):
+        """
+        Args:
+            ts_emb: [B, D]
+            txt_emb: [B, D]
+        Returns:
+            ts_hat: [B, ts_dim]
+        """
+        tokens = torch.cat([self._as_sequence(ts_emb), self._as_sequence(txt_emb)], dim=1) # [B, 2, D]
+        tokens = self.pos_encoder(tokens)
+        h = self.mu_logsigma_block(tokens)               # [B, 2, D]
+        mu = h[:, 0] # [B, D]
+        log_sigma = h[:, 1] # [B, D]
+        sigma = F.softplus(log_sigma) + 1e-6 # [B, D]
+
+        eps = torch.randn_like(sigma) # [B, D]
+        z = mu + sigma * eps # [B, D]
+        w = torch.sigmoid(z) # [B, D]
+
+        blended = w * ts_emb + (1.0 - w) * txt_emb # [B, D] 
+
+        tokens = torch.cat([self._as_sequence(ts_emb),
+                    self._as_sequence(txt_emb),
+                    self._as_sequence(blended)], dim=1)   # [B,3,D]
+
+        h_out  = self.out_block(tokens)                          # [B,3,D]
+        ts_hat = self.out(h_out[:, 2])                           # use blended token
+
+        if self.diffusion_steps > 0:
+            ts_hat = self.diffusion_tail(ts_hat, txt_emb)
+
+        return ts_hat
+
+
+
 class ResNetDecoder(nn.Module):
     def __init__(self, ts_dim, output_dim, hidden_dim=128, num_blocks=2, dropout=0.1):
         super().__init__()

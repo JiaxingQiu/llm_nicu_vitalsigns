@@ -92,12 +92,8 @@ class TSEncoder(nn.Module):
         self.local_norm = LocalNorm()
         if encoder_layers is None:
             # default encoder layers
-            self.encoder_layers = MultiCNNEncoder(ts_dim = ts_dim,
-                                                    output_dim=output_dim,
-                                                    # kernel_sizes=[100, 50, 10],
-                                                    kernel_sizes=[int(ts_dim * frac) for frac in [2/3, 1/2, 1/5, 1/10]],
-                                                    hidden_num_channel=16,
-                                                    dropout=0.0)
+            self.encoder_layers = PatchCNNTSEncoder(ts_dim = ts_dim,
+                                                    output_dim=output_dim)
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
         
@@ -137,7 +133,7 @@ class TSDecoder(nn.Module):
         if decoder_layers is None:
             self.decoder = SelfAttnDecoder(ts_dim=ts_dim,
                                 output_dim=output_dim,
-                                num_layers=6,
+                                num_layers=8,
                                 diffusion_steps = 0
                             )
         else:
@@ -168,11 +164,9 @@ class TextEncoder(nn.Module):
         """
         super().__init__()
         if encoder_layers is None:
-            self.encoder_layers = TextEncoderAttention(
+            self.encoder_layers = PatchMLPTextEncoder(
                 text_dim=text_dim,
-                output_dim=output_dim,
-                num_heads=1,
-                dropout=0.0
+                output_dim=output_dim
             )   
         else:
             self.encoder_layers = encoder_layers # pass an instance of custom encoder layers from classes in the encoder module
