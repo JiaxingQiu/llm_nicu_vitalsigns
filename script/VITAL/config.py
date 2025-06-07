@@ -63,7 +63,7 @@ config_dict = {
 
     # Training settings
     'init_lr': 1e-4,
-    'patience': 1000,
+    'patience': 500,
     'num_saves': 2,
     'num_epochs': 1000,
     'alpha_init': None, # initial alpha, if None, will be recalibrated after 50 epochs

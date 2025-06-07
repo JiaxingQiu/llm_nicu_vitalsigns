@@ -11,6 +11,7 @@ sentence_transformers==3.0.1
 numpy>=1.26.0
 pandas==2.2.0
 scipy==1.11.4
+openai==1.84.0
 
 # Visualization and TSA utilities
 matplotlib==3.10.1

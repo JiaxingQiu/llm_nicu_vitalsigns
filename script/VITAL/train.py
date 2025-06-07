@@ -208,7 +208,9 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             test_loss, test_clip_loss, test_reconstruction_loss, test_kl_loss = test_epoch(model, test_dataloader, target_type, train_type, alpha, beta)
             
             # Recalibrate alpha
-            if epoch == 10 and alpha_init is None:
+            if (epoch == 10 
+                and alpha_init is None 
+                and train_type == 'joint'):
                 # Use the recalibrate_alpha function
                 alpha = recalibrate_alpha(train_clip_loss, train_reconstruction_loss/alpha, target_ratio=target_ratio)
                 print("-"*100)
@@ -292,6 +294,8 @@ def recalibrate_alpha(clip_loss, reconstruction_loss, target_ratio=10):
     reconstruction_loss * alpha ≈ 2 * 10^3 * 10^-4 = 2 * 10^-1
     which is 1000x smaller than clip_loss (9 * 10^2)
     """
+    if target_ratio is None:
+        return 1.0
     # Get the order of magnitude (power of 10) for each loss
     clip_power = int(np.log10(clip_loss))
     recon_power = int(np.log10(reconstruction_loss))

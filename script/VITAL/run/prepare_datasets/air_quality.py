@@ -54,11 +54,20 @@ args2 = {'city_str': [('year_str', 'It is measured in 2017.')],
         }
 args_ls = [args0, args1, args2]
 
-# Define the base augmentation pairs
+# Define the base augmentation pairs used in math and ts_dist
 base_aug_dict = {'city_str': [('This is air quality in Beijing.', 'This is air quality in London.'), 
                             ('This is air quality in London.', 'This is air quality in Beijing.')],
                 'season_str': [('The season is winter.', 'The season is summer.'),
                                ('The season is winter.', 'The season is spring.'),
-                               ('The season is winter.', 'The season is fall.')]
+                               ('The season is winter.', 'The season is fall.'),
+                               ('The season is spring.', 'The season is summer.'),
+                               ('The season is spring.', 'The season is fall.'),
+                               ('The season is summer.', 'The season is winter.'),
+                               ('The season is summer.', 'The season is spring.'),
+                               ('The season is summer.', 'The season is fall.'),
+                               ('The season is summer.', 'The season is winter.'),
+                               ('The season is fall.', 'The season is winter.'),
+                               ('The season is fall.', 'The season is spring.'),
+                               ('The season is fall.', 'The season is summer.')]
                 }
 
