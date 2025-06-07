@@ -34,7 +34,6 @@ update_config(
     
     
     # Data settings
-    text_col = 'text', #'ts_description',
     seq_length = 200,
     downsample = True,
     downsample_size = 20000,

@@ -34,7 +34,6 @@ update_config(
     
     
     # Data settings
-    text_col = 'text', #'ts_description',
     seq_length = 200,
     custom_target_cols = ['segment1', 'segment2', 'segment3', 'segment4', 'label'], # if text based, overwrite with ['label']
     ts_global_normalize = False, 

@@ -13,7 +13,6 @@ update_config(
     
     # Data settings
     seq_length = 168,
-    text_col = 'ts_description', #'ts_description',
     custom_target_cols = ['city_str', 'season_str', 'year_str', 'label'], 
     ts_global_normalize = True, 
 
