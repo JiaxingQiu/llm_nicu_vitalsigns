@@ -194,7 +194,7 @@ def _stratified_bootstrap(group, b):
     return group.sample(n=b, replace=replace, random_state=333)
 
 
-def eval_ts_classifier(df, # df can be df_train / df_test
+def eval_ts_classifier(df, # df can be df_train / df_test / df_left
                       model, config_dict, w, y_col, 
                       conditions = None, # a list of tuples of (y_col, y_level) to filter the df (should not filter y_col)
                       b=None, # number to bootstrap

@@ -9,7 +9,8 @@ update_config(
     y_pred_levels = ['This is air quality in Beijing.', 'This is air quality in London.'],
     # txt2ts
     txt2ts_y_cols = ['city_str', 'season_str', 'year_str'],
-    
+    # open vocabulary
+    open_vocab_dict_path = "../../data/air_quality/aug_text.json",
     
     # Data settings
     seq_length = 168,

@@ -31,7 +31,9 @@ update_config(
     y_pred_levels =[t[0]for t in text_config['text_pairs'][attr_id-1]],
     # txt2ts
     txt2ts_y_cols = ['segment1', 'segment2', 'segment3', 'segment4'], # 
-    
+    # open vocabulary
+    open_vocab = False, 
+    open_vocab_dict_path = "../../data/synthetic/aug_text.json",
     
     # Data settings
     seq_length = 200,

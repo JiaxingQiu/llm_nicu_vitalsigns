@@ -8,15 +8,16 @@ config_dict = {
     'device': device,
     'random_state': 333,
 
-    # Eval (clip)
-    # ts2txt
+    # Eval settings
+    # clip ts2txt
     'y_col': '', # column name for the classification outcome, ie. 'cl_event'
     'y_levels': [], # important: only y_levels are kept in the data after downsampling. (i.e. high, low, moderate need to be explicitly listed here)
     'y_pred_levels': [],
     'y_pred_cols_ls': None,
-    # txt2ts
+    # clip txt2ts + attribute specification
     'txt2ts_y_cols': [],
-    # 'sub_caption_col': 'ts_description', # only used for 3d models
+    # open vocabulary evaluation
+    'open_vocab': False,
 
 
 

@@ -14,7 +14,10 @@ elif dataset_name == "nicu":
 if text_based:
     update_config(custom_target_cols = ['label'])
     config_dict = get_config_dict()
-
+if 'open_vocab' in locals():
+    update_config(open_vocab = open_vocab)
+    config_dict = get_config_dict()
+    
 # --- prepare train, test, left dataframes --------------------------------------------
 if dataset_name == 'syn_gt':
     exec(open('run/prepare_datasets/synthetic.py', 'r').read())

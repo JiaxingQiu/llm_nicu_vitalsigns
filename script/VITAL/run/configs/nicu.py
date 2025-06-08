@@ -40,8 +40,8 @@ update_config(
     y_pred_levels = ['High amount of consecutive increases.', 'Moderate  amount of consecutive increases.', 'Low amount of consecutive increases.'],
     # txt2ts
     txt2ts_y_cols = ['cl_event', 'description_succ_inc', 'description_histogram', 'description_ts_event_binary'],# 'description_succ_unc', 
-    
-    
+    # open vocabulary
+    open_vocab_dict_path = "../../data/nicu/aug_text.json",
     
     # Data settings
     seq_length = 300,

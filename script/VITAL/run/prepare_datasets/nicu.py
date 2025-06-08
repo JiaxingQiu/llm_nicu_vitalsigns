@@ -132,6 +132,9 @@ else:
         df_left['label'] = df_left['rowid'].astype(int)
 
 
+if config_dict['open_vocab']:
+    df_train, df_test, df_left = gen_open_vocab_text(df_train, df_test, df_left, config_dict)
+
 print('\n\nfinal distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())

@@ -316,3 +316,61 @@ def gen_text_similarity_target(text_features):
     
     return similarity
 
+
+import json, random
+np.random.seed(config_dict['random_state'])
+def gen_open_vocab_text(df_train, df_test, df_left, config_dict):
+    df_train['text_attr'] = df_train['text']
+    df_test['text_attr'] = df_test['text']
+    df_left['text_attr'] = df_left['text']
+    with open(config_dict['open_vocab_dict_path'], "r") as f:
+        aug_text_dict = json.load(f)
+    df_train['text_aug'] = ''
+    df_test['text_aug'] = ''
+    df_left['text_aug'] = ''
+    for attr_col in config_dict['txt2ts_y_cols']:
+        df_train[attr_col+'_aug'] = ''
+        df_test[attr_col+'_aug'] = ''
+        df_left[attr_col+'_aug'] = ''
+        for attr_level in aug_text_dict[attr_col]:
+            aug_levels = aug_text_dict[attr_col][attr_level] # list of augmented strings
+            aug_levels_in = aug_levels[0:int(0.5*len(aug_levels))] # first half goes to training set
+            aug_levels_out = aug_levels[int(0.5*len(aug_levels)):] # second half goes to left out set
+
+            train_idx = df_train[attr_col] == attr_level
+            test_idx = df_test[attr_col] == attr_level
+            left_idx = df_left[attr_col] == attr_level
+
+            df_train.loc[train_idx, attr_col+'_aug'] = random.choices(aug_levels_in, k=train_idx.sum())
+            df_test.loc[test_idx, attr_col+'_aug'] = random.choices(aug_levels_in, k=test_idx.sum())
+            df_left.loc[left_idx, attr_col+'_aug'] = random.choices(aug_levels_out, k=left_idx.sum())
+        df_train['text_aug'] += ' ' + df_train[attr_col+'_aug']
+        df_test['text_aug'] += ' ' + df_test[attr_col+'_aug']
+        df_left['text_aug'] += ' ' + df_left[attr_col+'_aug']
+    df_train['text'] = df_train['text_aug']
+    df_test['text'] = df_test['text_aug']
+    df_left['text'] = df_left['text_aug']
+    return df_train, df_test, df_left
+#  --- test ---
+# for attr_col in config_dict['txt2ts_y_cols']:
+#     col_aug = attr_col + '_aug'
+#     left_unique = set(df_left[col_aug].unique())
+#     train_unique = set(df_train[col_aug].unique())
+#     test_unique = set(df_test[col_aug].unique())
+
+#     # Remove empty strings if present
+#     left_unique.discard('')
+#     train_unique.discard('')
+#     test_unique.discard('')
+
+#     # Check for intersection
+#     overlap_train = left_unique & train_unique
+#     overlap_test = left_unique & test_unique
+
+#     print(f"Column: {col_aug}")
+#     print(f"  Overlap with train: {overlap_train}")
+#     print(f"  Overlap with test: {overlap_test}")
+#     if not overlap_train and not overlap_test:
+#         print("  PASS: df_left is disjoint from df_train and df_test for this column.")
+#     else:
+#         print("  FAIL: Overlap found!")

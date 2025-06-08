@@ -22,6 +22,9 @@ df_test['label'] = df_test.index.to_series()
 df_left['label'] = df_left.index.to_series()
 
 
+if config_dict['open_vocab']:
+    df_train, df_test, df_left = gen_open_vocab_text(df_train, df_test, df_left, config_dict)
+
 print('\n\nfinal distribution of text prediction')
 print(df_train['text'].value_counts())
 print(df_test['text'].value_counts())
