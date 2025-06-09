@@ -1,4 +1,4 @@
-if overwrite or not os.path.exists(model_path):
+if overwrite or not os.path.exists(config_dict['output_dir']+'/model.pth'):
     
     # ------------------------- ready training for clip -------------------------
     optimizer = torch.optim.AdamW(
@@ -98,9 +98,9 @@ if overwrite or not os.path.exists(model_path):
         print(f"AUPRC     |   {eval_dict_eng['train_auprc'][-1]:.3f}   |   {eval_dict_eng['test_auprc'][-1]:.3f}")
         print("-" * 70)
 
-        torch.save(model.state_dict(), model_path)
-        torch.save(eval_dict_ts2txt, output_dir+'/evals_clip_ts2txt.pth')
-        torch.save(eval_dict_txt2ts, output_dir+'/evals_clip_txt2ts.pth')
+        torch.save(model.state_dict(), config_dict['output_dir']+'/model.pth')
+        torch.save(eval_dict_ts2txt, config_dict['output_dir']+'/evals_clip_ts2txt.pth')
+        torch.save(eval_dict_txt2ts, config_dict['output_dir']+'/evals_clip_txt2ts.pth')
         
         if len(train_losses_tmp) < config_dict['num_epochs']:
             break
@@ -147,8 +147,8 @@ if overwrite or not os.path.exists(model_path):
 else:
     model.eval()
     # eval clip
-    eval_dict_ts2txt = torch.load(output_dir+'/evals_clip_ts2txt.pth', map_location=torch.device(device), weights_only=False)
-    eval_dict_txt2ts = torch.load(output_dir+'/evals_clip_txt2ts.pth', map_location=torch.device(device), weights_only=False)
+    eval_dict_ts2txt = torch.load(config_dict['output_dir']+'/evals_clip_ts2txt.pth', map_location=torch.device(device), weights_only=False)
+    eval_dict_txt2ts = torch.load(config_dict['output_dir']+'/evals_clip_txt2ts.pth', map_location=torch.device(device), weights_only=False)
     eval_dict_eng = eng_eval_metrics(eval_dict_ts2txt, binary=True, plot=True, plot_confusion_matrices=True)
     eval_dict_eng = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
     

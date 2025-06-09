@@ -109,109 +109,97 @@ def set_seed(seed: int = 333) -> None:
     
     print(f"Random seed set to {seed}")
 
-# Usage
 set_seed(config_dict['random_state'])  # or any other seed value
 
-def update_config(**kwargs):
+def update_config(config_dict, **kwargs):
     """Update configuration with new values"""
     config_dict.update(kwargs)
+    print(config_dict['model_name'])
     return config_dict
 
 
-def get_config_dict():
-    """Get current configuration"""
+# def get_config_dict():
+#     """Get current configuration"""
     
-    # Create a copy to avoid modifying the original
-    config = config_dict.copy()
+#     # Create a copy to avoid modifying the original
+#     config = config_dict.copy()
     
-    # Validate y_levels and y_pred_levels match
-    assert len(config['y_levels']) == len(config['y_pred_levels'])
-    # n_levels = len(config['y_levels'])
+#     # Validate y_levels and y_pred_levels match
+#     assert len(config['y_levels']) == len(config['y_pred_levels'])
+#     # n_levels = len(config['y_levels'])
 
-    # # Generate y_pred_cols_ls for 3D models
-    # if config['3d']:
-    #     pred_cols = [f'text{i+1}' for i in range(n_levels)]
-    #     y_pred_cols_ls = []
-    #     for text_col in pred_cols:
-    #         new_cols = [text_col if x == config['y_col'] else x 
-    #                    for x in config['text_col_ls']]
-    #         y_pred_cols_ls.append(new_cols)
-    # else:
-    #     y_pred_cols_ls = None
+#     # # Generate y_pred_cols_ls for 3D models
+#     # if config['3d']:
+#     #     pred_cols = [f'text{i+1}' for i in range(n_levels)]
+#     #     y_pred_cols_ls = []
+#     #     for text_col in pred_cols:
+#     #         new_cols = [text_col if x == config['y_col'] else x 
+#     #                    for x in config['text_col_ls']]
+#     #         y_pred_cols_ls.append(new_cols)
+#     # else:
+#     #     y_pred_cols_ls = None
 
-    # config['y_pred_cols_ls'] = y_pred_cols_ls
+#     # config['y_pred_cols_ls'] = y_pred_cols_ls
 
-    if not config['variational']:
-        config['beta'] = 0.0 # no kl loss for non-variational models
+#     if not config['variational']:
+#         config['beta'] = 0.0 # no kl loss for non-variational models
     
-    assert config['model_name'] is not None, "model_name is required"
-    print(config['model_name'])
+#     assert config['model_name'] is not None, "model_name is required"
+#     print(config['model_name'])
     
-    return config
+#     return config
 
 
-# Usage example:
-"""
-# Update specific values
-update_config(
-    model_name='new_model_name',
-    batch_size=64,
-    ts_aug=True
-)
 
-# Get current config
-current_config = get_config_dict()
-"""
+# text_encoders = [
+#     # BERT-base
+#     'bert-base-uncased',
+#     'bert-base-cased',
+#     'bert-large-uncased',
+#     'bert-large-cased',
+#     'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
+#     'allenai/scibert_scivocab_uncased',
+#     'dmis-lab/biobert-base-cased-v1.2',
+#     # Standard RoBERTa
+#     'roberta-base',             # 12-layer
+#     'roberta-large',            # 24-layer
+#     'allenai/biomed_roberta_base',  # Biomedical domain
+#     'roberta-base-openai-detector', # OpenAI's version
+#     'microsoft/roberta-base-openai-detector',  # Microsoft's version
+#     # DistilBERT
+#     'distilbert-base-uncased',  # General purpose, uncased
+#     'distilbert-base-cased',    # General purpose, cased
+#     'distilroberta-base',       # Distilled version of RoBERTa
+#     'distilbert-base-multilingual-cased',  # Multilingual version
+#     # MPNet
+#     'microsoft/mpnet-base',     # Base model
+#     'microsoft/mpnet-large',    # Large model
+#     # Sentence Transformers
+#     'sentence-transformers/all-mpnet-base-v2',  # Optimized for sentence embeddings
+#     'sentence-transformers/paraphrase-mpnet-base-v2',  # Optimized for paraphrase detection
+#     'sentence-transformers/all-MiniLM-L6-v2',  # Optimized for sentence embeddings
+#     'sentence-transformers/all-MiniLM-L12-v2'  # Optimized for sentence embeddings
+# ]
 
-text_encoders = [
-    # BERT-base
-    'bert-base-uncased',
-    'bert-base-cased',
-    'bert-large-uncased',
-    'bert-large-cased',
-    'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
-    'allenai/scibert_scivocab_uncased',
-    'dmis-lab/biobert-base-cased-v1.2',
-    # Standard RoBERTa
-    'roberta-base',             # 12-layer
-    'roberta-large',            # 24-layer
-    'allenai/biomed_roberta_base',  # Biomedical domain
-    'roberta-base-openai-detector', # OpenAI's version
-    'microsoft/roberta-base-openai-detector',  # Microsoft's version
-    # DistilBERT
-    'distilbert-base-uncased',  # General purpose, uncased
-    'distilbert-base-cased',    # General purpose, cased
-    'distilroberta-base',       # Distilled version of RoBERTa
-    'distilbert-base-multilingual-cased',  # Multilingual version
-    # MPNet
-    'microsoft/mpnet-base',     # Base model
-    'microsoft/mpnet-large',    # Large model
-    # Sentence Transformers
-    'sentence-transformers/all-mpnet-base-v2',  # Optimized for sentence embeddings
-    'sentence-transformers/paraphrase-mpnet-base-v2',  # Optimized for paraphrase detection
-    'sentence-transformers/all-MiniLM-L6-v2',  # Optimized for sentence embeddings
-    'sentence-transformers/all-MiniLM-L12-v2'  # Optimized for sentence embeddings
-]
-
-ts_encoders = [
-    'hr_vae_linear_medium',
-    'sp_vae_linear_medium'
-]
+# ts_encoders = [
+#     'hr_vae_linear_medium',
+#     'sp_vae_linear_medium'
+# ]
 
 
-def get_true_components(config):
-    """Get all components that are True in the config."""
-    true_components = []
+# def get_true_components(config):
+#     """Get all components that are True in the config."""
+#     true_components = []
     
-    # Flatten nested dictionary and get True values
-    for category, params in config.items():
-        if category == 'split':
-            if params:
-                true_components += ['split']
-        else:
-            true_components += [
-                key for key, value in params.items() 
-                if value is True
-            ]
+#     # Flatten nested dictionary and get True values
+#     for category, params in config.items():
+#         if category == 'split':
+#             if params:
+#                 true_components += ['split']
+#         else:
+#             true_components += [
+#                 key for key, value in params.items() 
+#                 if value is True
+#             ]
     
-    return true_components
+#     return true_components

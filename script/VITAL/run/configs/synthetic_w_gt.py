@@ -22,7 +22,7 @@ text_config = {'text_pairs': [
                 ],  'n': None, 'gt': True}
 
 attr_id = 3 # y_col by the third attribute (third element in the text_config['text_pairs'])
-update_config(
+config_dict = update_config(config_dict,
     
     # Eval settings (clip)
     # ts2txt
@@ -48,5 +48,3 @@ update_config(
     # Text configuration
     text_config = text_config
 )
-config_dict = get_config_dict()
-

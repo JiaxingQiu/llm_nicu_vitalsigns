@@ -5,6 +5,8 @@ if 'configs' not in locals():
 
 suffix = '' if meta is not None else str(w) # te / vital
 
+if 'output_dir' not in locals():
+    output_dir = config_dict['output_dir'] # output_dir will be provided by tesit / tweaver
 # # ---------------------------------------  Math eval ---------------------------------------
 # # Math properties (applicable to quantitative time series attributes)
 # if math:
@@ -99,26 +101,56 @@ if ts_dist:
 
 # ---------------------------------------  RaTS eval ---------------------------------------
 # RaTS from classifiers (to both quantitative and qualitative attritbutes)
+# if rats:
+#     if meta is None:
+#         vital_model = model # defined as vital
+    
+#     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
+        
+#     filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
+#     if not os.path.exists(filename):
+#         df_rats_ls = []
+#         for args in args_ls:
+#             df_rats = pd.DataFrame()
+#             for y_col in args.keys():
+#                 df = pd.DataFrame()
+#                 for aug_type in ['conditional']: # , 'marginal'
+#                     df_type, _ = eval_ts_classifier(df_eval_rats, vital_model, config_dict,
+#                                                     w = w, y_col = y_col, conditions = args[y_col], aug_type = aug_type, meta = meta, configs = configs)
+#                     df = pd.concat([df, df_type], ignore_index=True)
+#                 df_rats = pd.concat([df_rats, df], ignore_index=True)
+#             df_rats_ls.append(df_rats)
+
+#         buffer = io.BytesIO()
+#         torch.save(df_rats_ls, buffer)
+#         with gzip.open(filename, 'wb') as f: f.write(buffer.getvalue())
+#     else:
+#         # Load compressed file
+#         with gzip.open(filename, 'rb') as f:
+#             buffer = io.BytesIO(f.read())
+#             df_rats_ls = torch.load(buffer, map_location=device, weights_only=False)
+
 if rats:
     if meta is None:
         vital_model = model # defined as vital
-    
     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
-        
+    aug_type = 'conditional'
+
     filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
     if not os.path.exists(filename):
         df_rats_ls = []
-        for args in args_ls:
-            df_rats = pd.DataFrame()
-            for y_col in args.keys():
-                df = pd.DataFrame()
-                for aug_type in ['conditional']: # , 'marginal'
-                    df_type, _ = eval_ts_classifier(df_eval_rats, vital_model, config_dict,
-                                                    w = w, y_col = y_col, conditions = args[y_col], aug_type = aug_type, meta = meta, configs = configs)
-                    df = pd.concat([df, df_type], ignore_index=True)
-                df_rats = pd.concat([df_rats, df], ignore_index=True)
-            df_rats_ls.append(df_rats)
-
+        df_rats_all = pd.DataFrame()
+        for y_col in config_dict['txt2ts_y_cols']:
+            df_rats, df_rats_eng = eval_rats(df_eval_rats, 
+                                             vital_model, 
+                                             config_dict, 
+                                             y_col,
+                                             w, 
+                                             aug_type = aug_type, 
+                                             meta = meta, 
+                                             configs = configs)
+            df_rats_all = pd.concat([df_rats_all, df_rats_eng], ignore_index=True)
+        df_rats_ls.append(df_rats_all)
         buffer = io.BytesIO()
         torch.save(df_rats_ls, buffer)
         with gzip.open(filename, 'wb') as f: f.write(buffer.getvalue())

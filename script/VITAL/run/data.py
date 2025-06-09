@@ -1,6 +1,8 @@
 # --- model name as the saving path ----------------------------------------------------------
-attr_suffix = '' if text_based else '_at'
-model_name = ''.join([dataset_name, attr_suffix, suffix])
+model_name = ''.join([dataset_name, attr_suffix, suffix]) 
+# attr_suffix: '' for text-based, '_at' for attribute-based
+# suffix: special name for different model architectures
+# dataset_name: name of the dataset, can be 'syn_gt', 'syn', 'air', 'nicu'
 
 # --- configs, default attribute-based version ----------------------------------------
 if dataset_name == 'syn_gt':
@@ -11,12 +13,10 @@ elif dataset_name == "air":
     exec(open('run/configs/air_quality.py', 'r').read())
 elif dataset_name == "nicu":
     exec(open('run/configs/nicu.py', 'r').read())
-if text_based:
-    update_config(custom_target_cols = ['label'])
-    config_dict = get_config_dict()
+if attr_suffix == '':
+    config_dict = update_config(config_dict, custom_target_cols = ['label'])
 if 'open_vocab' in locals():
-    update_config(open_vocab = open_vocab)
-    config_dict = get_config_dict()
+    config_dict = update_config(config_dict, open_vocab = open_vocab)
     
 # --- prepare train, test, left dataframes --------------------------------------------
 if dataset_name == 'syn_gt':
@@ -32,4 +32,7 @@ elif dataset_name == "nicu":
 with open('run/inputs.py', 'r') as file:
     exec(file.read())
 
-
+# --- prepare saving paths ------------------------------------------------------------
+import os
+config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
+print(config_dict['output_dir'])

@@ -59,7 +59,9 @@ df_rats_condi = df_rats_condi[df_rats_condi['aug_type'] == 'conditional']
 df_rats_all = df_rats_condi
 
 df_rats_all.dropna(inplace=True)
-fig = plot_rats(df_rats_all, figsize=(12, 3))
+fig = plot_rats(df_rats_all, metrics = ['RaTS'], figsize=(12, 3))
+plt.show()
+fig = plot_rats(df_rats_all, metrics = ['RaTS_preserved'], figsize=(12, 3))
 plt.show()
 
 
@@ -93,12 +95,14 @@ def summarize_scores(df_all, aug_type= 'conditional'):
             'mse': 'Point-wise MSE ↓',
             'mae': 'Point-wise MAE ↓',
             'delta_dtw': 'DTW distance decrease ↓',
-            'RaTS': 'RaTS ↑'
+            'RaTS': 'RaTS ↑',
+            'RaTS_preserved': '|RaTS (preserved)|↓'
         })
     else:
         final_score_row = final_score_row.rename(columns={
             'delta_dtw': 'DTW distance decrease ↓',
-            'RaTS': 'RaTS ↑'
+            'RaTS': 'RaTS ↑',
+            'RaTS_preserved': '|RaTS (preserved)|↓'
         })
     if 'delta_lcss' in final_score_row.columns:
         final_score_row = final_score_row.rename(columns={
@@ -111,7 +115,8 @@ def summarize_scores(df_all, aug_type= 'conditional'):
         'Point-wise MAE ↓',
         'DTW distance decrease ↓',
         'LCSS similarity increase ↑',
-        'RaTS ↑'
+        'RaTS ↑',
+        '|RaTS (preserved)|↓'
     ]
     final_score_row = final_score_row[[col for col in desired_order if col in final_score_row.columns]]
     return final_score_row

@@ -1,7 +1,5 @@
-# --- prepare saving paths ------------------------------------------------------------
-output_dir = './results/'+config_dict['model_name']
-model_path = output_dir+'/model.pth' 
-config_path = output_dir+'/config.pth'
+model_path = config_dict['output_dir']+'/model.pth' 
+config_path = config_dict['output_dir']+'/config.pth'
 
 
 # if encoder and decoder not defined otherwise, use the default ones
@@ -38,8 +36,7 @@ if overwrite or not os.path.exists(model_path):
                     variational = config_dict['variational'],
                     gen_w_src_text = config_dict['gen_w_src_text']
                 )
-    update_config(model_init = model)
-    config_dict = get_config_dict()
+    config_dict = update_config(config_dict, model_init = model)
     train_eval_metrics_ts2txt_list = []
     test_eval_metrics_ts2txt_list = []
     train_eval_metrics_txt2ts_list = []
@@ -48,14 +45,16 @@ if overwrite or not os.path.exists(model_path):
     test_losses = []
     # ------------------------- ready output directory -------------------------
     import shutil
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
+    if os.path.exists(config_dict['output_dir']):
+        shutil.rmtree(config_dict['output_dir'])
+    os.makedirs(config_dict['output_dir'])
     config_dict['model_init'] = model
     torch.save(config_dict, config_path)
     # overwrite = False # reset overwrite to False
 else:
-    config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False)
+    config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False) # If a variable is assigned anywhere in the function, Python treats it as local
+    if 'output_dir' not in config_dict:
+        config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
     model = config_dict['model_init']
     print(nn_summary(model))
     model.device = device

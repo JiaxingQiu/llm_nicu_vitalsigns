@@ -31,7 +31,7 @@ text_config = {
 # text_config['cl']['die7d'] = True # udpate text_config here if needed
 # text_config['ts']['succ_unc'] = False
 
-update_config(
+config_dict = update_config(config_dict,
     
     # Eval settings (clip)
     # ts2txt
@@ -56,8 +56,8 @@ update_config(
     
     # Train settings
     # init_lr = 1e-5,
+    num_saves = 3,
     
     # Text configuration
     text_config = text_config
 )
-config_dict = get_config_dict()

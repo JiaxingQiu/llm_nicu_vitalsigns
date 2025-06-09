@@ -12,9 +12,9 @@ else:
 if config_dict['ts_global_normalize']:
     train_mean_std = {'mean': np.nanmean(df_train[[str(i+1) for i in range(config_dict['seq_length'])]].values), 
                       'std': np.nanstd(df_train[[str(i+1) for i in range(config_dict['seq_length'])]].values, ddof=0) }
-    update_config(ts_normalize_mean = train_mean_std['mean'], 
-                  ts_normalize_std = train_mean_std['std'])
-    config_dict = get_config_dict()
+    config_dict = update_config(config_dict, 
+                                ts_normalize_mean = train_mean_std['mean'],
+                                ts_normalize_std = train_mean_std['std'])
     print("standardization mean and std: ", config_dict['ts_normalize_mean'], config_dict['ts_normalize_std'])
 
 

@@ -1,6 +1,6 @@
 if 'model_name' not in locals(): model_name = 'air_at' 
 
-update_config(
+config_dict = update_config(config_dict,
     
     # Eval settings (clip)
     # ts2txt
@@ -23,4 +23,3 @@ update_config(
     
     # Train settings
 )
-config_dict = get_config_dict()
