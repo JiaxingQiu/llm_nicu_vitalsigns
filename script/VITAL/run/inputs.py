@@ -1,3 +1,9 @@
+# --- prepare saving paths ------------------------------------------------------------
+import os
+config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
+print(config_dict['output_dir'])
+
+
 # ---- prepare target matrix ----
 if len(config_dict['custom_target_cols']) > 0:
     target_train = gen_target(df_train, config_dict['custom_target_cols'])
@@ -86,4 +92,3 @@ if 'ts_f_dim' not in locals():
         ts_f_dim, tx_f_dim_ls, labels_dim = get_features3d(df_train.iloc[:1,:], config_dict, text_col_ls = config_dict['text_col_ls'])
     else:
         ts_f_dim, tx_f_dim, labels_dim = get_features(df_train.iloc[:1,:], config_dict)
-    

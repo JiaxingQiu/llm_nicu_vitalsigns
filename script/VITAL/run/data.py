@@ -31,8 +31,3 @@ elif dataset_name == "nicu":
 # --- prepare tensor model inputs -----------------------------------------------------
 with open('run/inputs.py', 'r') as file:
     exec(file.read())
-
-# --- prepare saving paths ------------------------------------------------------------
-import os
-config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
-print(config_dict['output_dir'])
