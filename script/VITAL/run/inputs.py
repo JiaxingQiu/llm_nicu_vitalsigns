@@ -1,9 +1,3 @@
-# --- prepare saving paths ------------------------------------------------------------
-import os
-config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
-print(config_dict['output_dir'])
-
-
 # ---- prepare target matrix ----
 if len(config_dict['custom_target_cols']) > 0:
     target_train = gen_target(df_train, config_dict['custom_target_cols'])

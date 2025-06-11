@@ -1,3 +1,7 @@
+# --- prepare saving paths ---
+import os
+config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
+print(config_dict['output_dir'])
 model_path = config_dict['output_dir']+'/model.pth' 
 config_path = config_dict['output_dir']+'/config.pth'
 
