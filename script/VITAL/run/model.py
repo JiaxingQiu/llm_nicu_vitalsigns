@@ -44,13 +44,29 @@ if overwrite or not os.path.exists(model_path):
     train_losses = []
     test_losses = []
     # ------------------------- ready output directory -------------------------
+    # import shutil
+    # if os.path.exists(config_dict['output_dir']):
+    #     shutil.rmtree(config_dict['output_dir'])
+    # os.makedirs(config_dict['output_dir'])
+    # config_dict['model_init'] = model
+    # # overwrite = False # reset overwrite to False
+    import os
     import shutil
+    keep_file_list = [
+        os.path.join( config_dict['output_dir'], 'model_clip.pth'),
+        # Add more files as needed
+    ]
     if os.path.exists(config_dict['output_dir']):
-        shutil.rmtree(config_dict['output_dir'])
-    os.makedirs(config_dict['output_dir'])
-    config_dict['model_init'] = model
+        for filename in os.listdir(config_dict['output_dir']):
+            file_path = os.path.join(config_dict['output_dir'], filename)
+            if file_path not in keep_file_list:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.remove(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+    else:
+        os.makedirs(config_dict['output_dir'])
     torch.save(config_dict, config_path)
-    # overwrite = False # reset overwrite to False
 else:
     config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False) # If a variable is assigned anywhere in the function, Python treats it as local
     if 'output_dir' not in config_dict:

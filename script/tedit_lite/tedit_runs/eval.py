@@ -13,3 +13,7 @@ output_dir = configs['train']['output_folder']
 # run the same evaluation script on vital model
 exec(open(os.path.join(vital_path, 'run/eval.py')).read())
 
+# rename file "df_rats_all.pt.gz" under output_dir to "df_rats_all{suffix}.pt.gz"
+
+
+# ... existing code ...

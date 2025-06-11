@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from .helper import PositionalEncoding, SelfAttnBlock, DiffusionRefiner, CrossAttnBlock
+from .decoder_patch import *
 
 # ------- custom ts decoder_layers -------
 class TransformerDecoder(nn.Module):
@@ -338,210 +339,91 @@ class BiCrossAttnDecoder(nn.Module):
             ts_hat = self.diffusion_tail(ts_hat, txt_emb)
         return ts_hat
 
-
-
-# class PatchAttnDecoder1(nn.Module):
-#     """
-#     Multi-patch attention decoder.
-#     Each patch slice remains at its original dimension.
-#     """
-
-#     def __init__(
-#         self,
-#         ts_dim: int,
-#         output_dim: int,
-#         n_slices: int = 4,
-#         nhead: int = 8,
-#         num_layers: int = 8,
-#         ffn_mult: int = 4,
-#         dropout: float = 0.0,
-#     ):
-#         super().__init__()
-
-#         assert output_dim % n_slices == 0
-#         self.piece = output_dim // n_slices
-#         self.n_s = n_slices
-
-#         self.pos_encoder = PositionalEncoding(self.piece)
-#         self.blocks = nn.Sequential(
-#             *[
-#                 SelfAttnBlock(
-#                     width=self.piece,
-#                     heads=nhead,
-#                     drop=dropout,
-#                     ffn_mult=ffn_mult,
-#                 )
-#                 for _ in range(num_layers)
-#             ]
-#         )
-
-#         self.out = nn.Sequential(
-#             nn.LayerNorm(self.piece * n_slices),
-#             nn.Linear(self.piece * n_slices, ts_dim),
-#         )
-
-#     def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
-#         """
-#         ts_emb , txt_emb : [B, output_dim]
-#         returns          : [B, ts_dim]
-#         """
-#         B = ts_emb.size(0)
-#         ts_tok = ts_emb.view(B, self.n_s, self.piece)
-#         txt_tok = txt_emb.view(B, self.n_s, self.piece)
-
-#         tokens = torch.cat([ts_tok, txt_tok], dim=1)  # [B, 2n, piece]
-#         tokens = self.pos_encoder(tokens)
-#         fused = self.blocks(tokens)                   # [B, 2n, piece]
-#         ts_fused = fused[:, :self.n_s].reshape(B, -1) # [B, output_dim]
-#         ts_hat = self.out(ts_fused) # [B, ts_dim]
-#         return ts_hat
-
-class _PatchDecoder(nn.Module):
-    """
-    Per-slice decoder with L stacked SelfAttnBlock layers,
-    followed by mean-pool → LayerNorm → linear projection to ts_dim.
-    """
-    def __init__(
-        self,
-        piece_dim: int,
-        ts_dim:   int,
-        num_layers: int = 8,
-        nhead:    int = 8,
-        ffn_mult: int = 4,
-        dropout:  float = 0.0
-    ):
-        super().__init__()
-        self.blocks = nn.Sequential(
-            *[
-                SelfAttnBlock(
-                    width=piece_dim,
-                    heads=nhead,
-                    drop=dropout,
-                    ffn_mult=ffn_mult,
-                )
-                for _ in range(num_layers)
-            ]
-        )
-        self.out = nn.Sequential(
-            nn.LayerNorm(piece_dim),
-            nn.Linear(piece_dim, ts_dim),
-        )
-
-    def forward(self, token_pair: torch.Tensor) -> torch.Tensor:
-        h = self.blocks(token_pair)            # [B, 2, piece_dim]
-        h = h.mean(dim=1)                      # [B, piece_dim]   (average the 2 tokens)
-        ts_hat = self.out(h)                    # [B, ts_dim]
-        return ts_hat
-
-class PatchAttnDecoder(nn.Module):
-    """
-    Decoder that applies an independent 1-layer SelfAttnDecoder per patch slice,
-    then fuses the [B, n_slices, ts_dim] outputs using attention pooling.
-    """
-
+import inspect
+class PatchDecoder(nn.Module):
     def __init__(
         self,
         ts_dim: int,
         output_dim: int,
-        n_slices: int = 4,
-        num_layers: int = 8,
-        ffn_mult: int = 4,
-        nhead: int = 8,
-        dropout: float = 0.0
+        n_slices: int = 8,
+        decoder_cls: type[nn.Module] | None = None,  
+        decoder_kwargs: dict = {},    
+        fuser = "self", # "self" or "attnpool" or "mean" 
     ):
         super().__init__()
+        assert output_dim % n_slices == 0, "output_dim must be divisible by n_slices"
 
-        assert output_dim % n_slices == 0
-        self.n_slices = n_slices
+        self.n_slices  = n_slices
         self.piece_dim = output_dim // n_slices
+        self.decoder_cls = decoder_cls if decoder_cls else PatchSelfDecoder # Save decoder class
+        self.fuser = fuser
 
-        self.pos_encoder = PositionalEncoding(self.piece_dim)
-        # One self-attention + MLP decoder per slice
+        # Create each decoder using decoder_cls and kwargs
         self.patch_decoders = nn.ModuleList([
-            _PatchDecoder(self.piece_dim, ts_dim, num_layers, nhead, ffn_mult, dropout)
+            self.decoder_cls(self.piece_dim, ts_dim, **decoder_kwargs)
             for _ in range(n_slices)
         ])
 
-        # Final fusion MLP: [B, n_slices, ts_dim] → [B, ts_dim]
-        self.query = nn.Parameter(torch.randn(1, 1, ts_dim))  # learnable [1, 1, D]
-        self.fuse_attn = nn.MultiheadAttention(
-            embed_dim=ts_dim,
-            num_heads=1,
-            batch_first=True,
-        )
+        if self.fuser == "self":
+            self.pos_encoder = PositionalEncoding(ts_dim)
+            self.blocks = nn.Sequential(
+                *[SelfAttnBlock(ts_dim, 8, 4, 0.0) for _ in range(8)]
+            )
+        if self.fuser == "attnpool":
+            self.query = nn.Parameter(torch.randn(1, 1, ts_dim))
+            self.fuse_attn = nn.MultiheadAttention(
+                embed_dim=ts_dim,
+                num_heads=8,     
+                batch_first=True,
+            )
+    
+    def _zero_inflated_uniform(self, batch_size, prob_zero=0.5, uniform_max=0.5, device=None):
+        mask = torch.bernoulli((1 - prob_zero) * torch.ones(batch_size, 1, device=device))
+        uniform_part = torch.rand(batch_size, 1, device=device) * uniform_max
+        return mask * uniform_part
 
+    def _patchdecoder_required_args_count(self, decoder):
+        sig = inspect.signature(decoder.forward)
+        required_params_count = 0
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and param.default == inspect.Parameter.empty:
+                required_params_count += 1
+        return required_params_count
+    
     def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
-        """
-        ts_emb , txt_emb : [B, output_dim]
-        returns          : [B, ts_dim]
-        """
         B = ts_emb.size(0)
-
-        # Unpack each into [B, n_slices, piece_dim]
-        ts_pieces  = ts_emb.view(B, self.n_slices, self.piece_dim)
+        ts_pieces  = ts_emb .view(B, self.n_slices, self.piece_dim)
         txt_pieces = txt_emb.view(B, self.n_slices, self.piece_dim)
 
-        # For each slice: cat [ts, txt] → run decoder → get partial [B, ts_dim]
+        # --------- decode patch by patch ---------
         partials = []
         for i in range(self.n_slices):
-            token_pair = torch.stack([ts_pieces[:, i], txt_pieces[:, i]], dim=1)  # [B, 2, piece_dim]
-            token_pair = self.pos_encoder(token_pair)
-            out = self.patch_decoders[i](token_pair)  # [B, ts_dim]
-            partials.append(out)
+            ts_piece, txt_piece = ts_pieces[:, i], txt_pieces[:, i]
+            decoder = self.patch_decoders[i]
+            if self.training:
+                w = torch.randint(0, 2, (B, 1), device=ts_piece.device).float()
+                # w = self._zero_inflated_uniform(B, device=ts_piece.device)
+                h = w * ts_piece + (1.0 - w) * txt_piece
+            else:
+                h = ts_piece
 
-        # Stack partial outputs: [B, n_slices, ts_dim]
-        combined = torch.stack(partials, dim=1)
-        query = self.query.expand(B, -1, -1)
-        fused, _ = self.fuse_attn(query, combined, combined)
-        return fused.squeeze(1)
-
-class PatchAttnDecoder1(nn.Module):
-    """
-    Decoder that applies an independent 1-layer SelfAttnDecoder per patch slice,
-    then fuses the [B, n_slices, ts_dim] outputs using attention pooling.
-    """
-
-    def __init__(
-        self,
-        ts_dim: int,
-        output_dim: int,
-        n_slices: int = 4,
-        num_layers: int = 8,
-        ffn_mult: int = 4,
-        nhead: int = 8,
-        dropout: float = 0.0
-    ):
-        super().__init__()
-
-        assert output_dim % n_slices == 0
-        self.n_slices = n_slices
-        self.piece_dim = output_dim // n_slices
-        self.pos_encoder = PositionalEncoding(self.piece_dim)
-        self.patch_decoders = nn.ModuleList([
-            _PatchDecoder(self.piece_dim, ts_dim, num_layers, nhead, ffn_mult, dropout)
-            for _ in range(n_slices)
-        ])
-
-    def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
-        """
-        ts_emb , txt_emb : [B, output_dim]
-        returns          : [B, ts_dim]
-        """
-        B = ts_emb.size(0)
-
-        # Unpack each into [B, n_slices, piece_dim]
-        ts_pieces  = ts_emb.view(B, self.n_slices, self.piece_dim)
-        txt_pieces = txt_emb.view(B, self.n_slices, self.piece_dim)
-
-        # For each slice: cat [ts, txt] → run decoder → get partial [B, ts_dim]
-        partials = []
-        for i in range(self.n_slices):
-            token_pair = torch.stack([ts_pieces[:, i], txt_pieces[:, i]], dim=1)  # [B, 2, piece_dim]
-            token_pair = self.pos_encoder(token_pair)
-            out = self.patch_decoders[i](token_pair)  # [B, ts_dim]
-            partials.append(out)
-
-        out = torch.stack(partials, dim=1) # [B, n_slices, ts_dim]
-        out = out.mean(dim=1) # [B, ts_dim]
-        return out
+            if self._patchdecoder_required_args_count(decoder) == 2:
+                ts_hat_i = decoder(ts_piece, txt_piece)
+            else:
+                ts_hat_i = decoder(h) # h is the input
+            partials.append(ts_hat_i)
         
+        # --------- fuse ---------
+        combined = torch.stack(partials, dim=1) # [B, n_slices, ts_dim]
+        if self.fuser == "self":
+            # combined as a token
+            combined = self.pos_encoder(combined)
+            combined = self.blocks(combined) # [B, n_slices, ts_dim]
+            fused = combined.mean(dim=1) # [B, ts_dim]
+        if self.fuser == "attnpool":
+            query = self.query.expand(B, 1, -1)
+            fused, _ = self.fuse_attn(query, combined, combined)
+        if self.fuser == "mean":
+            fused = combined.mean(dim=1)
+
+        return fused.squeeze(1)

@@ -70,7 +70,7 @@ config_dict = {
     'alpha_init': None, # initial alpha, if None, will be recalibrated after 50 epochs
     'beta': 0.0, # weight of kl loss
     'es_patience': 1000, # early stopping patience
-    'target_ratio': 10, # target ratio (clip loss over rc loss)
+    'target_ratio': 100, # target ratio (clip loss over rc loss)
 
     # Text configuration
     'text_config': None

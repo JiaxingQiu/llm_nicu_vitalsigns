@@ -71,7 +71,7 @@ plt.show()
 
 
 # ---------------------------------- Summary functions ----------------------------------
-def summarize_scores(df_all, aug_type= 'conditional'):
+def summarize_scores(df_all, aug_type= 'conditional', mean_sd = True):
     df_conditional = df_all[df_all['aug_type'] == aug_type]
 
     stats_table = df_conditional.groupby('metric')['score'].agg(
@@ -81,11 +81,17 @@ def summarize_scores(df_all, aug_type= 'conditional'):
         q50=lambda x: x.quantile(0.50),
         q75=lambda x: x.quantile(0.75)
     ).round(3)
-
-    stats_table['final_score'] = stats_table.apply(
-        lambda row: f"{row['q50']:.2f} [{row['q25']:.2f}, {row['q75']:.2f}]",
-        axis=1
-    )
+    
+    if mean_sd:
+        stats_table['final_score'] = stats_table.apply(
+            lambda row: f"{row['mean']:.2f} ({row['std']:.2f})",
+            axis=1
+        )
+    else:
+        stats_table['final_score'] = stats_table.apply(
+            lambda row: f"{row['q50']:.2f} [{row['q25']:.2f}, {row['q75']:.2f}]",
+            axis=1
+        )
 
     final_score_row = stats_table['final_score'].to_frame().T
     final_score_row.index = ['final_score']

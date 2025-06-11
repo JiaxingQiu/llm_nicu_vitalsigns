@@ -3,7 +3,7 @@ if 'meta' not in locals():
 if 'configs' not in locals():
     configs = None
 
-suffix = '' if meta is not None else str(w) # te / vital
+eval_suffix = '' if meta is not None else str(w) # te / vital
 
 if 'output_dir' not in locals():
     output_dir = config_dict['output_dir'] # output_dir will be provided by tesit / tweaver
@@ -37,7 +37,7 @@ if 'output_dir' not in locals():
 # point-wise distance (to syn-gt only()
 if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']:
     if config_dict['text_config']['gt']:
-        filename = output_dir+'/df_pw_dists_all'+suffix+'.pt.gz'
+        filename = output_dir+'/df_pw_dists_all'+eval_suffix+'.pt.gz'
         if not os.path.exists(filename):
             df_pw_dists_all = pd.DataFrame()
             for aug_type in ['conditional']: # , 'marginal'
@@ -64,7 +64,7 @@ if config_dict.get('text_config') and 'text_pairs' in config_dict['text_config']
 
 # TS distance (to both quantitative and qualitative attributes)
 if ts_dist:
-    filename = output_dir+'/df_dists_all'+suffix+'.pt.gz'
+    filename = output_dir+'/df_dists_all'+eval_suffix+'.pt.gz'
     if not os.path.exists(filename):
         df_dists_ls = []
         for args in args_ls:
@@ -136,7 +136,7 @@ if rats:
     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
     aug_type = 'conditional'
 
-    filename = output_dir+'/df_rats_all'+suffix+'.pt.gz'
+    filename = output_dir+'/df_rats_all'+eval_suffix+'.pt.gz'
     if not os.path.exists(filename):
         df_rats_ls = []
         df_rats_all = pd.DataFrame()

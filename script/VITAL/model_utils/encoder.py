@@ -103,7 +103,7 @@ class PatchCNNTSEncoder(nn.Module):
         self,
         ts_dim: int,
         output_dim: int,
-        fracs: list[float] = [2/3, 1/2, 1/5, 1/10],
+        fracs: list[float] = [1, 2/3, 1/2, 1/3, 1/4, 1/6, 1/8, 1/10],#[1, 1/2, 1/4, 1/8],#[2/3, 1/2, 1/5, 1/10],
         hidden_num_channel: int = 16,
         dropout: float = 0.0,
     ):
@@ -333,51 +333,48 @@ class TextEncoderAttention(nn.Module):
 # )
 
 
-class _PatchAttnPool(nn.Module):
-    """
-    One slice: query-based attention pooling + MLP → piece_dim.
-    """
-
+class _PatchAttnTextEncoder(nn.Module):
     def __init__(
         self,
         text_dim: int,
         piece_dim: int,
         num_heads: int,
-        dropout: float,
     ):
         super().__init__()
-
-        self.query = nn.Parameter(torch.randn(1, 1, text_dim))
+        self.query = nn.Parameter(torch.randn(1, piece_dim, text_dim))# Multiple learnable queries: [1, piece_dim, text_dim]
         self.attn = nn.MultiheadAttention(
             embed_dim=text_dim,
             num_heads=num_heads,
             batch_first=True,
         )
-        self.proj = nn.Linear(text_dim, piece_dim, bias=False)
+        self.proj = nn.Sequential(
+            nn.LayerNorm(text_dim),
+            nn.Linear(text_dim, text_dim//2, bias=False),  # Project to scalar per query
+            nn.GELU(),
+            nn.LayerNorm(text_dim//2), # Project to scalar per query
+            nn.Linear(text_dim//2, 1, bias=False)
+        )
 
-        self.act = nn.GELU()
-        self.drop = nn.Dropout(dropout)
-
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        q = self.query.expand(tokens.size(0), -1, -1)   # (B,1,D)
-        pooled, _ = self.attn(q, tokens, tokens)        # (B,1,D)
-        pooled = pooled.squeeze(1)                      # (B,D)
-        out = self.drop(self.act(self.proj(pooled)))    # (B,piece_dim)
+    def forward(self, tx_feature: torch.Tensor) -> torch.Tensor:
+        """
+        tx_feature: [B, text_dim]
+        returns: [B, piece_dim]
+        """
+        B = tx_feature.size(0)
+        q = self.query.expand(B, -1, -1) # [B, piece_dim, text_dim]
+        k = v = tx_feature.unsqueeze(1) # [B, 1, text_dim]
+        attn_out, _ = self.attn(q, k, v)  # [B, piece_dim, text_dim]
+        out = self.proj(attn_out) # [B, piece_dim, 1]
+        out = out.squeeze(-1) # [B, piece_dim]
         return out
 
 class PatchAttnTextEncoder(nn.Module):
-    """
-    Text encoder that produces `n_slices` separate embeddings, one per
-    CNN slice.  Each slice has its own attention pool + projection block.
-    """
-
     def __init__(
         self,
         text_dim: int,
         output_dim: int,
         n_slices: int = 4,
-        num_heads: int = 1,
-        dropout: float = 0.0,
+        num_heads: int = 8,
     ):
         super().__init__()
 
@@ -386,31 +383,43 @@ class PatchAttnTextEncoder(nn.Module):
             f"output_dim ({output_dim}) must be divisible by n_slices ({self.n_slices})."
         )
         piece_dim = output_dim // self.n_slices
-
-        # One independent slice-attention block per slice
         self.slices = nn.ModuleList(
             [
-                _PatchAttnPool(
+                _PatchAttnTextEncoder(
                     text_dim=text_dim,
                     piece_dim=piece_dim,
-                    num_heads=num_heads,
-                    dropout=dropout,
+                    num_heads=num_heads
                 )
                 for _ in range(self.n_slices)
             ]
         )
-
-    def forward(self, text_tokens: torch.Tensor) -> torch.Tensor:
-        if text_tokens.dim() == 2:                        # (B,D) → (B,1,D)
-            text_tokens = text_tokens.unsqueeze(1)
-        # Apply each slice-attention block
-        pieces = [blk(text_tokens) for blk in self.slices]   # list[(B,piece_dim)]
-        # Concatenate along feature axis → (B, output_dim)
+    def forward(self, text_feature: torch.Tensor) -> torch.Tensor:
+        """
+        text_feature: [B, text_dim]
+        returns: [B, output_dim]
+        """
+        pieces = [blk(text_feature) for blk in self.slices]   # list[(B,piece_dim)]
         embedding = torch.cat(pieces, dim=-1)
         return embedding
 
+# class _PatchMLP(nn.Module):
+#     def __init__(self, text_dim: int, piece_dim: int):
+#         super().__init__()
+#         self.mlp = nn.Sequential(
+#             nn.LayerNorm(text_dim),
+#             nn.Linear(text_dim, text_dim//2),
+#             nn.GELU(),
+#             nn.LayerNorm(text_dim//2),
+#             nn.Linear(text_dim//2, piece_dim),
+#             nn.GELU(),
+#             nn.LayerNorm(piece_dim),
+#             nn.Linear(piece_dim, piece_dim)
+#         )
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:         # x: [B, text_dim]
+#         return self.mlp(x)    
+                                      # [B, piece_dim]
 class _PatchMLP(nn.Module):
-    def __init__(self, text_dim: int, piece_dim: int, hidden_mult: float = 1.0, dropout: float = 0.0):
+    def __init__(self, text_dim: int, piece_dim: int, hidden_mult: float = 0.5, dropout: float = 0.0):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.LayerNorm(text_dim),
@@ -427,8 +436,8 @@ class PatchMLPTextEncoder(nn.Module):
         self,
         text_dim: int,
         output_dim: int,
-        n_slices: int = 4,
-        hidden_mult: float = 1.0,      # width multiplier inside each MLP
+        n_slices: int = 8,
+        hidden_mult: float = 1.0, 
         dropout: float = 0.0,
     ):
         super().__init__()

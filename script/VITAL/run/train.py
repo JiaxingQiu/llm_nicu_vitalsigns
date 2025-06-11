@@ -102,26 +102,24 @@ if overwrite or not os.path.exists(config_dict['output_dir']+'/model.pth'):
         torch.save(eval_dict_ts2txt, config_dict['output_dir']+'/evals_clip_ts2txt.pth')
         torch.save(eval_dict_txt2ts, config_dict['output_dir']+'/evals_clip_txt2ts.pth')
         
-        if len(train_losses_tmp) < config_dict['num_epochs']:
-            break
-    
+        
         # Eval CLIP
         _ = eng_eval_metrics(eval_dict_ts2txt, binary=False, plot=True, plot_confusion_matrices=True)
         _ = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
-        for y_col in config_dict['txt2ts_y_cols']:
-            try:
-                text_levels = list(df_test[y_col].unique())
-                _ = net_emb(df_test, model, config_dict,
-                            top=100,
-                            y_col = y_col,
-                            text_levels = text_levels)
-                # _ = net_emb_w_text(df_test, model, config_dict,
-                #                 top=100,
-                #                 y_col = y_col,
-                #                 text_levels = text_levels)
-            except Exception as e:
-                print(f"Error plot network embedding for {y_col}")
-                continue
+        # for y_col in config_dict['txt2ts_y_cols']:
+        #     try:
+        #         text_levels = list(df_test[y_col].unique())
+        #         _ = net_emb(df_test, model, config_dict,
+        #                     top=100,
+        #                     y_col = y_col,
+        #                     text_levels = text_levels)
+        #         # _ = net_emb_w_text(df_test, model, config_dict,
+        #         #                 top=100,
+        #         #                 y_col = y_col,
+        #         #                 text_levels = text_levels)
+        #     except Exception as e:
+        #         print(f"Error plot network embedding for {y_col}")
+        #         continue
         
         if config_dict['train_type'] != 'clip':
             # Eval VAE
@@ -142,7 +140,10 @@ if overwrite or not os.path.exists(config_dict['output_dir']+'/model.pth'):
             if len(config_dict['txt2ts_y_cols'])<3:
                 # viz_generation_conditional(df_train, model, config_dict)
                 viz_generation_conditional(df_test, model, config_dict)
-    
+        
+        
+        if len(train_losses_tmp) < config_dict['num_epochs']: # Early stopping
+            break
         
 else:
     model.eval()
@@ -152,28 +153,28 @@ else:
     eval_dict_eng = eng_eval_metrics(eval_dict_ts2txt, binary=True, plot=True, plot_confusion_matrices=True)
     eval_dict_eng = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
     
-    for y_col in config_dict['txt2ts_y_cols']:
-        try:
-            text_levels = list(df_train[y_col].unique())
-            # _ = net_emb(df_train, model, config_dict,
-            #             top=100,
-            #             y_col = y_col,
-            #             text_levels = text_levels)
-            # _ = net_emb_w_text(df_train, model, config_dict,
-            #                 top=100,
-            #                 y_col = y_col,
-            #                 text_levels = text_levels)
-            _ = net_emb(df_test, model, config_dict,
-                        top=100,
-                        y_col = y_col,
-                        text_levels = text_levels)
-            # _ = net_emb_w_text(df_test, model, config_dict,
-            #                 top=100,
-            #                 y_col = y_col,
-            #                 text_levels = text_levels)
-        except Exception as e:
-            print(f"Error plot network embedding for {y_col}")
-            continue
+    # for y_col in config_dict['txt2ts_y_cols']:
+    #     try:
+    #         text_levels = list(df_train[y_col].unique())
+    #         # _ = net_emb(df_train, model, config_dict,
+    #         #             top=100,
+    #         #             y_col = y_col,
+    #         #             text_levels = text_levels)
+    #         # _ = net_emb_w_text(df_train, model, config_dict,
+    #         #                 top=100,
+    #         #                 y_col = y_col,
+    #         #                 text_levels = text_levels)
+    #         _ = net_emb(df_test, model, config_dict,
+    #                     top=100,
+    #                     y_col = y_col,
+    #                     text_levels = text_levels)
+    #         # _ = net_emb_w_text(df_test, model, config_dict,
+    #         #                 top=100,
+    #         #                 y_col = y_col,
+    #         #                 text_levels = text_levels)
+    #     except Exception as e:
+    #         print(f"Error plot network embedding for {y_col}")
+    #         continue
         
         
     # eval vae
