@@ -19,7 +19,7 @@ if overwrite: # only load clip encoders during training phase
     
 config_dict['train_type'] = 'joint'
 config_dict['num_saves'] = 1
-config_dict['num_epochs'] = 2000 
+config_dict['num_epochs'] = 4000 
 config_dict['es_patience'] = 2000 # early stopping patience
 with open('run/train.py', 'r') as file:
     exec(file.read()) 

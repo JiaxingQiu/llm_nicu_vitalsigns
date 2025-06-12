@@ -4,6 +4,8 @@ if 'configs' not in locals():
     configs = None
 
 eval_suffix = '' if meta is not None else str(w) # te / vital
+if 'vital_suffix' not in locals():
+    vital_suffix = '' # '' for vital model, otherwise for te/tw
 
 if 'output_dir' not in locals():
     output_dir = config_dict['output_dir'] # output_dir will be provided by tesit / tweaver
@@ -136,7 +138,7 @@ if rats:
     df_eval_rats = df_eval if len(df_eval) <= 15000 else df_eval.sample(15000)
     aug_type = 'conditional'
 
-    filename = output_dir+'/df_rats_all'+eval_suffix+'.pt.gz'
+    filename = output_dir+'/df_rats_all'+eval_suffix+vital_suffix+'.pt.gz'
     if not os.path.exists(filename):
         df_rats_ls = []
         df_rats_all = pd.DataFrame()

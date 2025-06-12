@@ -160,17 +160,17 @@ args0 = {'cl_event': None,
         'description_ts_event_binary': None
         }
 
-args1 = {'cl_event': [('description_succ_inc', "Moderate amount of consecutive increases."),
+args1 = {'cl_event': [('description_succ_inc', "Low amount of consecutive increases."),
                       ('description_histogram', "Low variability."), 
                       ('description_ts_event_binary', "No events.")],
         'description_succ_inc': [('cl_event', 'This infant will survive.'),
                                  ('description_histogram', "Low variability."), 
                                  ('description_ts_event_binary', "No events.")],
         'description_histogram': [('cl_event', 'This infant will survive.'),
-                                  ('description_succ_inc', "Moderate amount of consecutive increases."),
+                                  ('description_succ_inc', "Low amount of consecutive increases."),
                                   ('description_ts_event_binary', "No events.")],
         'description_ts_event_binary': [('cl_event', 'This infant will survive.'),
-                                        ('description_succ_inc', "Moderate amount of consecutive increases."), 
+                                        ('description_succ_inc', "Low amount of consecutive increases."), 
                                         ('description_histogram', "Moderate variability.")]
         }
 
@@ -178,11 +178,13 @@ args_ls = [args0, args1]
 
 # Define the base augmentation pairs
 base_aug_dict = {'successive_increases': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
-                                          ('Moderate amount of consecutive increases.', 'High amount of consecutive increases.'),
-                                          ('High amount of consecutive increases.', 'Moderate amount of consecutive increases.'),
                                           ('High amount of consecutive increases.', 'Low amount of consecutive increases.')],
                 'variability': [('Low variability.', 'High variability.'),
-                                          ('High variability.', 'Low variability.')],
+                                ('Low variability.', 'Moderate variability.'),
+                                ('Moderate variability.', 'Low variability.'),
+                                ('Moderate variability.', 'High variability.'),
+                                ('High variability.', 'Low variability.'),
+                                ('High variability.', 'Moderate variability.')],
                 'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
                                                 ('Bradycardia events happened.', 'No events.')],
                 'cl_event': [('This infant will survive.', 'This infant will die in 7 days.'),

@@ -94,32 +94,105 @@ class TransformerDecoder(nn.Module):
         return ts_hat
 
 
-class SelfAttnDecoder(nn.Module):
-    """
-    Decoder using stacked self-attention blocks and optional diffusion tail.
+# class SelfAttnDecoder(nn.Module):
+#     """
+#     Decoder using stacked self-attention blocks and optional diffusion tail.
 
-    Args:
-        ts_dim (int): Output time series dimension.
-        output_dim (int): Latent/embedding dimension.
-        hidden_dim (int, optional): Internal dimension. Defaults to output_dim.
-        nhead (int): Number of attention heads.
-        num_layers (int): Number of self-attention layers.
-        diffusion_steps (int): If >0, apply diffusion tail.
-        diff_txt_proj (bool): If True, project text embedding in diffusion tail.
-    """
+#     Args:
+#         ts_dim (int): Output time series dimension.
+#         output_dim (int): Latent/embedding dimension.
+#         hidden_dim (int, optional): Internal dimension. Defaults to output_dim.
+#         nhead (int): Number of attention heads.
+#         num_layers (int): Number of self-attention layers.
+#         diffusion_steps (int): If >0, apply diffusion tail.
+#         diff_txt_proj (bool): If True, project text embedding in diffusion tail.
+#     """
+#     def __init__(
+#         self,
+#         ts_dim: int,
+#         output_dim: int,
+#         hidden_dim: int | None = None,
+#         nhead: int = 8,
+#         num_layers: int = 8,
+#         ffn_mult: int = 1,
+#         diffusion_steps: int = 0,
+#         diff_txt_proj: bool = True,
+#     ):
+#         super().__init__()
+#         self.hidden_dim = hidden_dim or output_dim
+#         if hidden_dim is not None and hidden_dim != output_dim:
+#             self.proj_ts = nn.Linear(output_dim, self.hidden_dim)
+#             self.proj_text = nn.Linear(output_dim, self.hidden_dim)
+#         self.pos_encoder = PositionalEncoding(self.hidden_dim)
+#         self.blocks = nn.Sequential(
+#             *[
+#                 SelfAttnBlock(
+#                     width=self.hidden_dim,
+#                     heads=nhead,
+#                     drop=0.0,
+#                     ffn_mult=ffn_mult,
+#                 )
+#                 for _ in range(num_layers)
+#             ]
+#         )
+#         self.out = nn.Sequential(
+#             nn.LayerNorm(self.hidden_dim),
+#             nn.Linear(self.hidden_dim, ts_dim),
+#         )
+#         self.diffusion_steps = diffusion_steps
+#         if diffusion_steps > 0:
+#             self.diffusion_tail = DiffusionRefiner(
+#                 ts_dim=ts_dim,
+#                 txt_dim=output_dim,
+#                 n_steps=diffusion_steps,
+#                 diff_txt_proj=diff_txt_proj
+#             )
+
+#     @staticmethod
+#     def _as_sequence(x: torch.Tensor) -> torch.Tensor:
+#         """Ensure input is 3D: [B, L, E]."""
+#         return x.unsqueeze(1) if x.dim() == 2 else x
+
+#     def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
+#         """
+#         Args:
+#             ts_emb: [B, E] or [B, 1, E] - time series embedding
+#             txt_emb: [B, E] or [B, 1, E] - text embedding
+#         Returns:
+#             ts_hat: [B, ts_dim] - reconstructed time series
+#         """
+#         if hasattr(self, "proj_ts"):
+#             tgt = self.proj_ts(ts_emb)
+#             memory = self.proj_text(txt_emb)
+#         else:
+#             tgt, memory = ts_emb, txt_emb
+#         tgt = self._as_sequence(tgt)
+#         memory = self._as_sequence(memory)
+#         tokens = torch.cat([tgt, memory], dim=1)
+#         tokens = self.pos_encoder(tokens)
+#         h = self.blocks(tokens)
+#         ts_hat = self.out(h[:, 0])
+#         if self.diffusion_steps > 0:
+#             ts_hat = self.diffusion_tail(ts_hat, txt_emb)
+#         return ts_hat
+
+
+class SelfAttnDecoder(nn.Module):
     def __init__(
         self,
         ts_dim: int,
         output_dim: int,
         hidden_dim: int | None = None,
         nhead: int = 8,
-        num_layers: int = 4,
+        num_layers: int = 8,
         ffn_mult: int = 1,
         diffusion_steps: int = 0,
         diff_txt_proj: bool = True,
+        p: float = 1.0,
     ):
         super().__init__()
         self.hidden_dim = hidden_dim or output_dim
+        self.p = p
         if hidden_dim is not None and hidden_dim != output_dim:
             self.proj_ts = nn.Linear(output_dim, self.hidden_dim)
             self.proj_text = nn.Linear(output_dim, self.hidden_dim)
@@ -156,11 +229,17 @@ class SelfAttnDecoder(nn.Module):
     def forward(self, ts_emb: torch.Tensor, txt_emb: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            ts_emb: [B, E] or [B, 1, E] - time series embedding
-            txt_emb: [B, E] or [B, 1, E] - text embedding
+            ts_emb: [B, E] - time series embedding
+            txt_emb: [B, E] - text embedding
         Returns:
             ts_hat: [B, ts_dim] - reconstructed time series
         """
+
+        if self.training:
+            # w ~ Bernoulli(p) per batch element
+            w = torch.distributions.Bernoulli(self.p).sample((ts_emb.size(0), 1)).to(device=ts_emb.device, dtype=ts_emb.dtype) # (B, 1)
+            ts_emb = w * ts_emb + (1.0 - w) * txt_emb
+
         if hasattr(self, "proj_ts"):
             tgt = self.proj_ts(ts_emb)
             memory = self.proj_text(txt_emb)
@@ -168,6 +247,7 @@ class SelfAttnDecoder(nn.Module):
             tgt, memory = ts_emb, txt_emb
         tgt = self._as_sequence(tgt)
         memory = self._as_sequence(memory)
+        # self-attention
         tokens = torch.cat([tgt, memory], dim=1)
         tokens = self.pos_encoder(tokens)
         h = self.blocks(tokens)
@@ -175,6 +255,7 @@ class SelfAttnDecoder(nn.Module):
         if self.diffusion_steps > 0:
             ts_hat = self.diffusion_tail(ts_hat, txt_emb)
         return ts_hat
+
 
 
 class CrossAttnDecoder(nn.Module):

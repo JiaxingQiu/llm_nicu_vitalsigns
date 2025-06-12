@@ -26,7 +26,7 @@ config_dict = {
     'seq_length': 300,
     # ts features to be embedded
     'downsample': False,
-    'downsample_levels': [],
+    'downsample_levels': [], # levels to be downsampled, can be a subset of y_levels
     'downsample_size': 1000,
     'ts_aug': False,
     'ts_aug_max_size': None,
