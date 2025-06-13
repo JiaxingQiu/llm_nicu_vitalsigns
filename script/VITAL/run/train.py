@@ -1,4 +1,4 @@
-if overwrite or not os.path.exists(config_dict['output_dir']+'/model.pth'):
+if overwrite:
     
     # ------------------------- ready training for clip -------------------------
     optimizer = torch.optim.AdamW(

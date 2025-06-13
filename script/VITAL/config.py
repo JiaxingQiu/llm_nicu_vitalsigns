@@ -65,12 +65,12 @@ config_dict = {
     # Training settings
     'init_lr': 1e-4,
     'patience': 500,
-    'num_saves': 2,
-    'num_epochs': 1000,
+    'num_saves': 1,
+    'num_epochs': 2000,
     'alpha_init': None, # initial alpha, if None, will be recalibrated after 50 epochs
     'beta': 0.0, # weight of kl loss
-    'es_patience': 1000, # early stopping patience
-    'target_ratio': 100, # target ratio (clip loss over rc loss)
+    'es_patience': 200, # early stopping patience
+    'target_ratio': 10, # target ratio (clip loss over rc loss)
 
     # Text configuration
     'text_config': None

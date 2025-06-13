@@ -4,9 +4,7 @@ config_dict_org = config_dict.copy() # maintain the original config
 # train clip (once)
 if overwrite: # only load clip encoders during training phase
     if not os.path.exists(config_dict_org['output_dir']+'/model_clip.pth'):
-        config_dict['train_type'] = 'clip'
-        config_dict['num_saves'] = 1
-        config_dict['es_patience'] = 100 # early stopping patience
+        config_dict['train_type'] = 'clip'   
         with open('run/train.py', 'r') as file:
             exec(file.read())
         torch.save(model.state_dict(), config_dict_org['output_dir']+'/model_clip.pth')
@@ -18,9 +16,7 @@ if overwrite: # only load clip encoders during training phase
         model.text_encoder.load_state_dict(text_encoder_state)
     
 config_dict['train_type'] = 'joint'
-config_dict['num_saves'] = 1
-config_dict['num_epochs'] = 4000 
-config_dict['es_patience'] = 2000 # early stopping patience
+config_dict['es_patience'] = config_dict_org['num_epochs']
 with open('run/train.py', 'r') as file:
     exec(file.read()) 
 

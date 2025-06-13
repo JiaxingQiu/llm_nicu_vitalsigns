@@ -198,7 +198,7 @@ def eval_ts_similarity(df, # df can be df_train / df_test
                       ths = (None, None),
                       round_to = 4,
                       n_patches=None,
-                      aug_type='conditional',
+                      aug_type="conditional",
                       meta = None, # tedit meta
                       configs = None, # teidt configs
                       model_type = None # if None, will be auto-detected
@@ -242,7 +242,7 @@ def eval_ts_similarity(df, # df can be df_train / df_test
         for j in range(len(y_levels)):
             if aug_type == 'marginal':
                 df_level['text' + str(j)] = y_levels[j] # marginal augmentation
-            elif aug_type == 'conditional':
+            elif aug_type == "conditional":
                 df_level['text' + str(j)] = df_level['text'].str.replace(ref_level, y_levels[j]) # sub ref_text with y_levels[j] in 'text'
         # mapping text_col to y_level
         col_level_map = dict(zip(['text' + str(j) for j in range(len(y_levels))], y_levels))
@@ -358,7 +358,7 @@ def eng_dists(df_dist,
 
 
 
-def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditional'):
+def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type="conditional"):
 
     df_dists = df_dists[df_dists['aug_type'] == aug_type]
 
@@ -481,7 +481,7 @@ def eng_dists_multiple(df_dists, base_aug_dict, metric='lcss', aug_type='conditi
 
 # ----------------- point-wise distance evaluation on synthetic with ground truth data --------------------------------
 # only used for synthetic_gt data
-def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
+def eval_pw_dist(df, model, config_dict, w, aug_type="conditional",
                  meta = None, # tedit meta
                  configs = None, # teidt configs
                  model_type = None # if None, will be auto-detected
@@ -515,7 +515,7 @@ def eval_pw_dist(df, model, config_dict, w, aug_type='conditional',
             for tgt_id, tgt_level in enumerate(tgt_levels): 
                 if aug_type == 'marginal':
                     df_src_level['text'+str(tgt_id+1)] = tgt_level # marginal augmentation 
-                elif aug_type == 'conditional':
+                elif aug_type == "conditional":
                     df_src_level['text'+str(tgt_id+1)] = df_src_level['text'].str.replace(src_level, tgt_level) # sub src_level with tgt_level  in 'text'+str(tgt_id+1)
             new_text_cols = ['text'+str(tgt_id+1) for tgt_id, _ in enumerate(tgt_levels)]
             # mapping text_col to y_level

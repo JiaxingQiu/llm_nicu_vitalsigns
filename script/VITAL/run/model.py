@@ -15,7 +15,7 @@ if 'text_encoder' not in locals():
     text_encoder = None
 
 # customize model
-if overwrite or not os.path.exists(model_path):  
+if overwrite:  
     
     # ------------------------- initialize model -------------------------
     if config_dict['3d']:
@@ -73,8 +73,7 @@ if overwrite or not os.path.exists(model_path):
     torch.save(config_dict, config_path)
 else:
     config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False) # If a variable is assigned anywhere in the function, Python treats it as local
-    if 'output_dir' not in config_dict:
-        config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name))
+    config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name)) # overwrite with current eval_dir
     model = config_dict['model_init']
     print(nn_summary(model))
     model.device = device

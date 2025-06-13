@@ -371,7 +371,7 @@ def plot_rats(df_rats_all, metrics = ['RaTS'], figsize=(15, 4)):
     axes = axes.flatten()
 
     # Plot settings
-    types_ = ['marginal', 'conditional']
+    types_ = ['marginal', "conditional"]
 
     # First pass: collect all data to determine y-limits
     all_data = []

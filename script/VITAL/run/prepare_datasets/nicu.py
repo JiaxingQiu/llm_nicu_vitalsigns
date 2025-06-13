@@ -154,16 +154,12 @@ ts_dist = True
 rats = True
 
 # argument dictionary {y_col:conditions}
-args0 = {'cl_event': None,
-        'description_succ_inc': None,
+args0 = {'description_succ_inc': None,
         'description_histogram': None,
         'description_ts_event_binary': None
         }
 
-args1 = {'cl_event': [('description_succ_inc', "Low amount of consecutive increases."),
-                      ('description_histogram', "Low variability."), 
-                      ('description_ts_event_binary', "No events.")],
-        'description_succ_inc': [('cl_event', 'This infant will survive.'),
+args1 = {'description_succ_inc': [('cl_event', 'This infant will survive.'),
                                  ('description_histogram', "Low variability."), 
                                  ('description_ts_event_binary', "No events.")],
         'description_histogram': [('cl_event', 'This infant will survive.'),
@@ -186,9 +182,7 @@ base_aug_dict = {'successive_increases': [('Low amount of consecutive increases.
                                 ('High variability.', 'Low variability.'),
                                 ('High variability.', 'Moderate variability.')],
                 'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
-                                                ('Bradycardia events happened.', 'No events.')],
-                'cl_event': [('This infant will survive.', 'This infant will die in 7 days.'),
-                             ('This infant will die in 7 days.', 'This infant will survive.')]
+                                                ('Bradycardia events happened.', 'No events.')]
                 }
 
 

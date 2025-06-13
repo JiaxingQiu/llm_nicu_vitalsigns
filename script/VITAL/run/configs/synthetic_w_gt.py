@@ -32,7 +32,6 @@ config_dict = update_config(config_dict,
     # txt2ts
     txt2ts_y_cols = ['segment1', 'segment2', 'segment3', 'segment4'], # 
     # open vocabulary
-    open_vocab = False, 
     open_vocab_dict_path = "../../data/synthetic/aug_text.json",
     
     # Data settings

@@ -179,9 +179,9 @@ def test_epoch(model, test_dataloader, target_type = 'by_target', train_type='jo
 
 def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, num_epochs, 
                 target_type = 'by_target', train_type='joint', alpha_init=None, beta = 1.0,
-                es_patience=500, target_ratio=100):  # Add patience parameter for early stopping
+                es_patience=500, target_ratio=100):
     
-    # Set random seeds for reproducibility (dataloader shuffling, model initialization, etc.)
+    # Set random seeds for reproducibility
     torch.manual_seed(333)
     random.seed(333)
     np.random.seed(333)
@@ -189,29 +189,21 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
     train_losses = []
     test_losses = []
 
-    # Keep track of best model
-    best_loss = float('inf')
-    best_model_state = None
-    
-    # Early stopping variables
-    counter = 0
+    # Keep track of best model and early stopping
     best_test_loss = float('inf')
+    best_model_state = None
+    counter = 0
     alpha = alpha_init if alpha_init is not None else 1.0
     
     try:
         for epoch in range(num_epochs):
             start_time = time.time()
-            # Train for one epoch
+            # Train and test for one epoch
             train_loss, train_clip_loss, train_reconstruction_loss, train_kl_loss = train_epoch(model, train_dataloader, optimizer, target_type, train_type, alpha, beta)
-            
-            # Test for one epoch
             test_loss, test_clip_loss, test_reconstruction_loss, test_kl_loss = test_epoch(model, test_dataloader, target_type, train_type, alpha, beta)
             
             # Recalibrate alpha
-            if (epoch == 10 
-                and alpha_init is None 
-                and train_type == 'joint'):
-                # Use the recalibrate_alpha function
+            if (epoch == 10 and alpha_init is None and train_type == 'joint'):
                 alpha = recalibrate_alpha(train_clip_loss, train_reconstruction_loss/alpha, target_ratio=target_ratio)
                 print("-"*100)
                 print(f"\nRecalibrating alpha to: {alpha:.2e}")
@@ -221,23 +213,31 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
             train_losses.append(train_loss)
             test_losses.append(test_loss)
             
-            # Update learning rate based on test loss
-            average_loss = (train_loss + test_loss) / 2
-            # scheduler.step(average_loss)
+            # Update learning rate
             scheduler.step(test_loss)
             
-            # Save best model
-            if test_loss < best_loss:
-                best_loss = test_loss
+            # Save best model and check early stopping
+            if test_loss < best_test_loss:
+                best_test_loss = test_loss
                 best_model_state = model.state_dict().copy()
+                counter = 0
+            else:
+                counter += 1
+                if counter >= es_patience:
+                    print(f"\nEarly stopping triggered after {epoch + 1} epochs. No improvement in test loss for {es_patience} epochs.")
+                    break
             
             # Get current learning rate
             current_lr = optimizer.param_groups[0]['lr']
 
-            epoch_time = time.time() - start_time
+            # Early stopping if learning rate becomes too small
+            if current_lr <= scheduler.min_lrs[0]:
+                print("Learning rate too small. Stopping training.")
+                break
 
             # Print progress
             if epoch % 10 == 0:
+                epoch_time = time.time() - start_time
                 if train_type == 'joint':
                     print(f'Epoch [{epoch}/{num_epochs}] {epoch_time:.2f}s')
                     print(f'\tTraining Loss: {train_loss:.6f} (clip: {train_clip_loss:.6f}, rc: {train_reconstruction_loss:.6f}, kl: {train_kl_loss:.6f})')
@@ -250,21 +250,7 @@ def train_vital(model, train_dataloader, test_dataloader, optimizer, scheduler, 
                     print(f'\tTesting Loss: {test_loss:.6f}')
                     print(f'\tLearning Rate: {current_lr:.9f}')
                     print(f'\talpha: {alpha}, beta: {beta}')
-            
-            # Early stopping check
-            if test_loss < best_test_loss:
-                best_test_loss = test_loss
-                counter =  0
-            else:
-                counter += 1
-                if counter >= es_patience:
-                    print(f"\nEarly stopping triggered after {epoch + 1} epochs. No improvement in test loss for {es_patience} epochs.")
-                    break
-            
-            # Early stopping if learning rate becomes too small
-            if current_lr <= scheduler.min_lrs[0]:
-                print("Learning rate too small. Stopping training.")
-                break
+                    
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Saving current progress...")
     except Exception as e:
