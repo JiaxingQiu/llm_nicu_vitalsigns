@@ -36,8 +36,8 @@ config_dict = update_config(config_dict,
     # Eval settings (clip)
     # ts2txt
     y_col = 'description_succ_inc',
-    y_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'], 
-    y_pred_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'], 
+    y_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'], 
+    y_pred_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'], 
     # txt2ts
     txt2ts_y_cols = ['description_succ_inc', 'description_histogram', 'description_ts_event_binary'],
     # open vocabulary
@@ -47,7 +47,7 @@ config_dict = update_config(config_dict,
     seq_length = 300,
     downsample = True,
     downsample_size = 20000,
-    downsample_levels = ['High amount of consecutive increases.', 'Low amount of consecutive increases.'], 
+    downsample_levels = ['High amount of consecutive increases.', 'Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'], 
     custom_target_cols = ['description_succ_inc', 'description_histogram', 'description_ts_event_binary', 'label'], 
     ts_global_normalize = True, 
     

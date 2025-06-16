@@ -13,6 +13,11 @@ df.columns = df.columns.astype(str)
 df['unique_values'] = df.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
 df = df[df['unique_values'] > 5]
 df = df.reset_index(drop=True)
+# rolling smoothing with window size 5
+original_data = df.loc[:, '1':'300'].copy().astype(float)
+smoothed_data = original_data.apply(lambda row: row.rolling(window=3, min_periods=1, center=True).mean(), axis=1)
+df.loc[:, '1':'300'] = smoothed_data
+del original_data, smoothed_data
 df_y = pd.read_excel('../../data/nicu/PAS Challenge Outcome Data.xlsx', engine="calamine")[['VitalID', 'DiedNICU', 'DeathAge']]
 df_demo = pd.read_excel('../../data/nicu/PAS Challenge Demographic Data.xlsx', engine="calamine")
 df_x = pd.read_excel('../../data/nicu/PAS Challenge Model Data.xlsx', engine="calamine")
@@ -37,6 +42,11 @@ df_test.columns = df_test.columns.astype(str)
 df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
 df_test = df_test[df_test['unique_values'] > 5]
 df_test = df_test.reset_index(drop=True)
+# rolling smoothing with window size 5
+original_data = df_test.loc[:, '1':'300'].copy().astype(float)
+smoothed_data = original_data.apply(lambda row: row.rolling(window=3, min_periods=1, center=True).mean(), axis=1)
+df_test.loc[:, '1':'300'] = smoothed_data
+del original_data, smoothed_data
 df_test = label_death7d(df_test, df_y_test, id_col='TestID')
 df_demo_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
 df_test = df_test.merge(df_demo_test, on='TestID', how='left')
@@ -139,6 +149,9 @@ print('\n\nfinal distribution of text prediction')
 print(df_train[config_dict['y_col']].value_counts())
 print(df_test[config_dict['y_col']].value_counts())
 print(df_left[config_dict['y_col']].value_counts())
+print(df_train['text'].value_counts())
+print(df_test['text'].value_counts())
+print(df_left['text'].value_counts())
 
 
 
@@ -159,14 +172,11 @@ args0 = {'description_succ_inc': None,
         'description_ts_event_binary': None
         }
 
-args1 = {'description_succ_inc': [('cl_event', 'This infant will survive.'),
-                                 ('description_histogram', "Low variability."), 
+args1 = {'description_succ_inc': [('description_histogram', "Low variability."), 
                                  ('description_ts_event_binary', "No events.")],
-        'description_histogram': [('cl_event', 'This infant will survive.'),
-                                  ('description_succ_inc', "Low amount of consecutive increases."),
+        'description_histogram': [('description_succ_inc', "Low amount of consecutive increases."),
                                   ('description_ts_event_binary', "No events.")],
-        'description_ts_event_binary': [('cl_event', 'This infant will survive.'),
-                                        ('description_succ_inc', "Low amount of consecutive increases."), 
+        'description_ts_event_binary': [('description_succ_inc', "Low amount of consecutive increases."), 
                                         ('description_histogram', "Moderate variability.")]
         }
 
@@ -174,7 +184,11 @@ args_ls = [args0, args1]
 
 # Define the base augmentation pairs
 base_aug_dict = {'successive_increases': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
-                                          ('High amount of consecutive increases.', 'Low amount of consecutive increases.')],
+                                          ('Low amount of consecutive increases.', 'Moderate amount of consecutive increases.'),
+                                          ('Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'),
+                                          ('Moderate amount of consecutive increases.', 'High amount of consecutive increases.'),
+                                          ('High amount of consecutive increases.', 'Low amount of consecutive increases.'),
+                                          ('High amount of consecutive increases.', 'Moderate amount of consecutive increases.')],
                 'variability': [('Low variability.', 'High variability.'),
                                 ('Low variability.', 'Moderate variability.'),
                                 ('Moderate variability.', 'Low variability.'),
