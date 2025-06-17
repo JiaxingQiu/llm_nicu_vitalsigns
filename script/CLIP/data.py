@@ -381,7 +381,7 @@ def text_summarize_brady(text):
         return f"{event_count} {event_name} {event_word} (heart rate below {threshold}) happened."
     else:
         event_word = "event" if event_count == 1 else "events"
-        return f"{event_count} Bradycardia {event_word} happened."
+        return f"Bradycardia {event_word} happened." # "{event_count} Bradycardia {event_word} happened."
     
 def text_summarize_desat(text):
     """

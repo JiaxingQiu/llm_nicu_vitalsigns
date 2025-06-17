@@ -32,20 +32,13 @@ for str_col in config_dict['txt2ts_y_cols']:
     df['text'] += ' ' + df[str_col].apply(lambda x: x.strip())   
 df['text'] = df['text'].str.strip()
 df['rowid'] = df.index.to_series() 
-# option 1: split data
-df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df[config_dict['y_col']], random_state=config_dict['random_state'])
-df_test, df_left = train_test_split(df_temp, test_size=1/3,stratify=df_temp[config_dict['y_col']],random_state=config_dict['random_state'])
-# ---- downsample negative class(es) ----
+df_train = df
 if config_dict['downsample']:
     df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-    df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
-    df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
+# option 1: split first data
+df_train, df_temp = train_test_split(df_train, test_size=0.3, stratify=df_train[config_dict['y_col']], random_state=config_dict['random_state'])
+df_test, df_left = train_test_split(df_temp, test_size=1/3,stratify=df_temp[config_dict['y_col']],random_state=config_dict['random_state'])
 print("train, test, left: ", len(df_train), len(df_test), len(df_left))
-
-# option 2: use all data
-# df_train = df
-# if config_dict['downsample']:
-#     df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
 
 # # Test Data
 # df_y_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
@@ -74,11 +67,11 @@ print("train, test, left: ", len(df_train), len(df_test), len(df_left))
 # for str_col in config_dict['txt2ts_y_cols']:
 #     df_test['text'] += ' ' + df_test[str_col].apply(lambda x: x.strip()) 
 # df_test_org = df_test[df.columns]
+# # option 2: second data as test and left
 # if config_dict['downsample']:
 #     df_test_org = downsample_neg_levels(df_test_org, config_dict, config_dict['random_state'])
 # df_test, df_left = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
 # print("train, test, left: ", len(df_train), len(df_test), len(df_left))
-
 
 # # ---- augment + balance train data----
 # target_event_rate = len(df_test[df_test[config_dict['y_col']]==config_dict['y_levels'][0]])/len(df_test)
@@ -176,15 +169,18 @@ rats = True
 # argument dictionary {y_col:conditions}
 args0 = {'description_succ_inc': None,
         'description_histogram': None,
-        'description_ts_event_binary': None
+        # 'description_ts_event_binary': None,
+        'description_ts_event': None
         }
 
 args1 = {'description_succ_inc': [('description_histogram', "Low variability."), 
                                  ('description_ts_event_binary', "No events.")],
         'description_histogram': [('description_succ_inc', "Low amount of consecutive increases."),
                                   ('description_ts_event_binary', "No events.")],
-        'description_ts_event_binary': [('description_succ_inc', "Low amount of consecutive increases."), 
-                                        ('description_histogram', "Moderate variability.")]
+        # 'description_ts_event_binary': [('description_succ_inc', "Low amount of consecutive increases."), 
+        #                                 ('description_histogram', "Moderate variability.")],
+        'description_ts_event': [('description_succ_inc', "Low amount of consecutive increases."), 
+                                 ('description_histogram', "Moderate variability.")]
         }
 
 args_ls = [args0, args1]
@@ -202,8 +198,14 @@ base_aug_dict = {'description_succ_inc': [('Low amount of consecutive increases.
                                 ('Moderate variability.', 'High variability.'),
                                 ('High variability.', 'Low variability.'),
                                 ('High variability.', 'Moderate variability.')],
-                'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
-                                                ('Bradycardia events happened.', 'No events.')]
+                # 'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
+                #                                 ('Bradycardia events happened.', 'No events.')],
+                'description_ts_event': [('No events.', 'Bradycardia 80 event (heart rate below 80) happened.'),
+                                         ('No events.', 'Bradycardia 90 event (heart rate below 90) happened.'),
+                                         ('No events.', 'Bradycardia 100 event (heart rate below 100) happened.'),
+                                         ('Bradycardia 80 event (heart rate below 80) happened.', 'No events.'),
+                                         ('Bradycardia 90 event (heart rate below 90) happened.', 'No events.'),
+                                         ('Bradycardia 100 event (heart rate below 100) happened.', 'No events.')]
                 }
 
 

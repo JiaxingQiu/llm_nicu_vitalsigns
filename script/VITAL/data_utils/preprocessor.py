@@ -262,10 +262,7 @@ def text_summarize_brady(text):
         event_name = brady_match.group(0)  # e.g., "Bradycardia90"
         threshold = brady_match.group(1)    # e.g., "90"
         event_word = "event" if event_count == 1 else "events"
-        return f"{event_count} {event_name} {event_word} (heart rate below {threshold}) happened."
-    else:
-        event_word = "event" if event_count == 1 else "events"
-        return f"{event_count} Bradycardia {event_word} happened."
+        return f"{event_name} event (heart rate below {threshold}) happened." #"{event_count} {event_name} {event_word} (heart rate below {threshold}) happened."
     
 def text_summarize_desat(text):
     """
