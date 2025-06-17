@@ -29,49 +29,56 @@ df = df.merge(df_desc, on=['VitalID', 'VitalTime'], how='left')
 df = text_gen_input_column(df, config_dict)
 df['text'] = ''
 for str_col in config_dict['txt2ts_y_cols']:
-    df['text'] += ' ' + df[str_col].apply(lambda x: x.strip())                           
+    df['text'] += ' ' + df[str_col].apply(lambda x: x.strip())   
+df['text'] = df['text'].str.strip()
 df['rowid'] = df.index.to_series() 
-df_train = df
+# option 1: split data
+df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df[config_dict['y_col']], random_state=config_dict['random_state'])
+df_test, df_left = train_test_split(df_temp, test_size=1/3,stratify=df_temp[config_dict['y_col']],random_state=config_dict['random_state'])
+# ---- downsample negative class(es) ----
 if config_dict['downsample']:
     df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-
-# Test Data
-df_y_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
-df_test = pd.read_excel('../../data/nicu/Test Data/Test HR Data.xlsx', sheet_name=0, engine="calamine") # test hr with description
-df_test.columns = df_test.columns.astype(str)
-df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
-df_test = df_test[df_test['unique_values'] > 5]
-df_test = df_test.reset_index(drop=True)
-# rolling smoothing with window size 5
-original_data = df_test.loc[:, '1':'300'].copy().astype(float)
-smoothed_data = original_data.apply(lambda row: row.rolling(window=3, min_periods=1, center=True).mean(), axis=1)
-df_test.loc[:, '1':'300'] = smoothed_data
-del original_data, smoothed_data
-df_test = label_death7d(df_test, df_y_test, id_col='TestID')
-df_demo_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
-df_test = df_test.merge(df_demo_test, on='TestID', how='left')
-df_test['rowid'] = df_test.index.to_series()
-df_test['VitalTime'] = df_test['Age']*24*60*60 # convert to second since birth
-df_test['VitalTime'] = df_test['VitalTime'].astype(int)
-rename_dict = {'TestID': 'VitalID'}
-df_test = df_test.rename(columns=rename_dict)
-df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
-df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
-df_test = text_gen_input_column(df_test, config_dict)
-df_test['text'] = ''
-for str_col in config_dict['txt2ts_y_cols']:
-    df_test['text'] += ' ' + df_test[str_col].apply(lambda x: x.strip()) 
-df_test_org = df_test[df.columns]
-if config_dict['downsample']:
-    df_test_org = downsample_neg_levels(df_test_org, config_dict, config_dict['random_state'])
-df_test, df_left = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
+    df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
+    df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
 print("train, test, left: ", len(df_train), len(df_test), len(df_left))
 
-# # ---- downsample negative class(es) ----
+# option 2: use all data
+# df_train = df
 # if config_dict['downsample']:
 #     df_train = downsample_neg_levels(df_train, config_dict, config_dict['random_state'])
-#     df_test = downsample_neg_levels(df_test, config_dict, config_dict['random_state'])
-#     df_left = downsample_neg_levels(df_left, config_dict, config_dict['random_state'])
+
+# # Test Data
+# df_y_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Key.xlsx', sheet_name=0, engine="calamine")
+# df_test = pd.read_excel('../../data/nicu/Test Data/Test HR Data.xlsx', sheet_name=0, engine="calamine") # test hr with description
+# df_test.columns = df_test.columns.astype(str)
+# df_test['unique_values'] = df_test.loc[:, '1':'300'].apply(lambda x: x.nunique(), axis=1)# filter out rows where unique_values <= 5
+# df_test = df_test[df_test['unique_values'] > 5]
+# df_test = df_test.reset_index(drop=True)
+# # rolling smoothing with window size 5
+# original_data = df_test.loc[:, '1':'300'].copy().astype(float)
+# smoothed_data = original_data.apply(lambda row: row.rolling(window=3, min_periods=1, center=True).mean(), axis=1)
+# df_test.loc[:, '1':'300'] = smoothed_data
+# del original_data, smoothed_data
+# df_test = label_death7d(df_test, df_y_test, id_col='TestID')
+# df_demo_test = pd.read_excel('../../data/nicu/Test Data/Test Demographic Data.xlsx', sheet_name=0, engine="calamine")
+# df_test = df_test.merge(df_demo_test, on='TestID', how='left')
+# df_test['rowid'] = df_test.index.to_series()
+# df_test['VitalTime'] = df_test['Age']*24*60*60 # convert to second since birth
+# df_test['VitalTime'] = df_test['VitalTime'].astype(int)
+# rename_dict = {'TestID': 'VitalID'}
+# df_test = df_test.rename(columns=rename_dict)
+# df_desc_test = generate_descriptions_parallel(ts_df = df_test.loc[:, '1':'300'], id_df = df_test.loc[:, ['VitalID', 'VitalTime']])
+# df_test = df_test.merge(df_desc_test, on=['VitalID', 'VitalTime'], how='left')
+# df_test = text_gen_input_column(df_test, config_dict)
+# df_test['text'] = ''
+# for str_col in config_dict['txt2ts_y_cols']:
+#     df_test['text'] += ' ' + df_test[str_col].apply(lambda x: x.strip()) 
+# df_test_org = df_test[df.columns]
+# if config_dict['downsample']:
+#     df_test_org = downsample_neg_levels(df_test_org, config_dict, config_dict['random_state'])
+# df_test, df_left = train_test_split(df_test_org, test_size=0.5, stratify=df_test_org[config_dict['y_col']], random_state=config_dict['random_state']) 
+# print("train, test, left: ", len(df_train), len(df_test), len(df_left))
+
 
 # # ---- augment + balance train data----
 # target_event_rate = len(df_test[df_test[config_dict['y_col']]==config_dict['y_levels'][0]])/len(df_test)
@@ -183,13 +190,13 @@ args1 = {'description_succ_inc': [('description_histogram', "Low variability."),
 args_ls = [args0, args1]
 
 # Define the base augmentation pairs
-base_aug_dict = {'successive_increases': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
+base_aug_dict = {'description_succ_inc': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
                                           ('Low amount of consecutive increases.', 'Moderate amount of consecutive increases.'),
                                           ('Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'),
                                           ('Moderate amount of consecutive increases.', 'High amount of consecutive increases.'),
                                           ('High amount of consecutive increases.', 'Low amount of consecutive increases.'),
                                           ('High amount of consecutive increases.', 'Moderate amount of consecutive increases.')],
-                'variability': [('Low variability.', 'High variability.'),
+                'description_histogram': [('Low variability.', 'High variability.'),
                                 ('Low variability.', 'Moderate variability.'),
                                 ('Moderate variability.', 'Low variability.'),
                                 ('Moderate variability.', 'High variability.'),

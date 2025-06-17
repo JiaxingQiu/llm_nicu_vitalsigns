@@ -8,6 +8,7 @@ df.columns = df.columns.astype(str)
 df['text'] = ''
 for str_col in config_dict['txt2ts_y_cols']:
     df['text'] += ' ' + df[str_col]
+df['text'] = df['text'].str.strip()
 df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df[config_dict['y_col']], random_state=config_dict['random_state'])
 df_test, df_left = train_test_split(df_temp, test_size=1/3,stratify=df_temp[config_dict['y_col']],random_state=config_dict['random_state'])
         

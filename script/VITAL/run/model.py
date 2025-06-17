@@ -74,6 +74,8 @@ if overwrite:
 else:
     config_dict = torch.load(config_path, map_location=torch.device(device), weights_only=False) # If a variable is assigned anywhere in the function, Python treats it as local
     config_dict = update_config(config_dict, output_dir = os.path.abspath('./results/' + model_name)) # overwrite with current eval_dir
+    if 'open_vocab' in locals():
+        config_dict = update_config(config_dict, open_vocab = open_vocab)
     model = config_dict['model_init']
     print(nn_summary(model))
     model.device = device

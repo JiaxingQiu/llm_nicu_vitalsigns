@@ -233,8 +233,6 @@ def eval_ts_similarity(df, # df can be df_train / df_test
     model.eval()
     df_dists = pd.DataFrame()
     y_levels = list(df[y_col].unique())
-    if config_dict['open_vocab']:
-        aug_level_map = df.groupby(y_col).agg({f"{y_col}_aug": lambda x: list(x.unique())}).to_dict()[f"{y_col}_aug"]
 
     for i in range(len(y_levels)):
         # agument data with original reference text y_levels[i]
@@ -242,22 +240,10 @@ def eval_ts_similarity(df, # df can be df_train / df_test
         df_level = df[df[y_col] == ref_level].reset_index(drop=False).copy() #
         # agument towards new text conditions 
         for j in range(len(y_levels)):
-            if not config_dict['open_vocab']:
-                if aug_type == 'marginal':
-                    df_level['text' + str(j)] = y_levels[j] # marginal augmentation
-                elif aug_type == "conditional":
-                    df_level['text' + str(j)] = df_level['text'].str.replace(ref_level, y_levels[j]) # sub ref_text with y_levels[j] in 'text'
-            else:
-                if aug_type == 'marginal':
-                    df_level['text' + str(j)] = np.random.choice(aug_level_map[y_levels[j]], size=len(df_level))
-                elif aug_type == "conditional":
-                    # change the original augmented y_col to a new level (also augmented)
-                    df_level[y_col+'_aug'] = np.random.choice(aug_level_map[y_levels[j]], size=len(df_level))
-                    df_level['text' + str(j)]  = ''
-                    for str_col in [col+'_aug' for col in config_dict['txt2ts_y_cols']]:
-                        df_level['text' + str(j)] += ' ' + df_level[str_col]
-                    df_level['text' + str(j)] = df_level['text' + str(j)].str.strip()
-        
+            if aug_type == 'marginal':
+                df_level['text' + str(j)] = y_levels[j] # marginal augmentation
+            elif aug_type == "conditional":
+                df_level['text' + str(j)] = df_level['text'].str.replace(ref_level, y_levels[j]) # sub ref_text with y_levels[j] in 'text'
         # mapping text_col to y_level
         col_level_map = dict(zip(['text' + str(j) for j in range(len(y_levels))], y_levels))
     
@@ -522,32 +508,15 @@ def eval_pw_dist(df, model, config_dict, w, aug_type="conditional",
     pw_df_all = pd.DataFrame()
     # attribute to be modified
     for att_idx, att in enumerate(text_pairs):  
-        if config_dict['open_vocab']:
-            # aug_level_map = aug_level_map_all[att_idx]
-            y_col = config_dict['txt2ts_y_cols'][att_idx]
-            aug_level_map = df.groupby(y_col).agg({f"{y_col}_aug": lambda x: list(x.unique())}).to_dict()[f"{y_col}_aug"]
-
         # source level to be modified
         for src_level, _ in tqdm(att):   
             df_src_level = df.loc[df["segment"+str(att_idx+1)] == src_level,:]
             tgt_levels = [tgt_level for (tgt_level, _) in att if tgt_level != src_level]
             for tgt_id, tgt_level in enumerate(tgt_levels): 
-                if not config_dict['open_vocab']:
-                    if aug_type == 'marginal':
-                        df_src_level['text'+str(tgt_id+1)] = tgt_level # marginal augmentation 
-                    elif aug_type == "conditional":
-                        df_src_level['text'+str(tgt_id+1)] = df_src_level['text'].str.replace(src_level, tgt_level) # sub src_level with tgt_level  in 'text'+str(tgt_id+1)
-                else:
-                    if aug_type == 'marginal':
-                        df_src_level['text'+str(tgt_id+1)] = np.random.choice(aug_level_map[tgt_level], size=len(df_src_level))
-                    elif aug_type == "conditional":
-                        # change the original augmented y_col to a new level (also augmented)
-                        df_src_level[y_col+'_aug'] = np.random.choice(aug_level_map[tgt_level], size=len(df_src_level))
-                        df_src_level['text'+str(tgt_id+1)]  = ''
-                        for str_col in [col+'_aug' for col in config_dict['txt2ts_y_cols']]:
-                            df_src_level['text'+str(tgt_id+1)] += ' ' + df_src_level[str_col]
-                        df_src_level['text'+str(tgt_id+1)] = df_src_level['text'+str(tgt_id+1)].str.strip()
-                    
+                if aug_type == 'marginal':
+                    df_src_level['text'+str(tgt_id+1)] = tgt_level # marginal augmentation 
+                elif aug_type == "conditional":
+                    df_src_level['text'+str(tgt_id+1)] = df_src_level['text'].str.replace(src_level, tgt_level) # sub src_level with tgt_level  in 'text'+str(tgt_id+1)
             new_text_cols = ['text'+str(tgt_id+1) for tgt_id, _ in enumerate(tgt_levels)]
             # mapping text_col to y_level
             col_level_map = dict(zip(['text' + str(j+1) for j in range(len(tgt_levels))], tgt_levels))

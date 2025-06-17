@@ -61,8 +61,8 @@ df_rats_all = df_rats_condi
 df_rats_all.dropna(inplace=True)
 fig = plot_rats(df_rats_all, metrics = ['RaTS'], figsize=(12, 3))
 plt.show()
-fig = plot_rats(df_rats_all, metrics = ['RaTS_preserved'], figsize=(12, 3))
-plt.show()
+# fig = plot_rats(df_rats_all, metrics = ['RaTS_preserved'], figsize=(12, 3))
+# plt.show()
 
 
 

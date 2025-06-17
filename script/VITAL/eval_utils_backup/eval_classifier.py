@@ -66,17 +66,9 @@ class TSClassifier(nn.Module):
             )
         else:
             df2train = df_work.copy()
-        if not config_dict['open_vocab']:
-            df2train = df2train[
-                self.ts_cols + config_dict["txt2ts_y_cols"] + ["text", "label"]
-            ].copy()
-        else:
-            df2train = df2train[
-                self.ts_cols + config_dict["txt2ts_y_cols"] + 
-                [col+'_aug' for col in config_dict["txt2ts_y_cols"]] + 
-                ["text", "label"]
-            ].copy()
-
+        df2train = df2train[
+            self.ts_cols + config_dict["txt2ts_y_cols"] + ["text", "label"]
+        ].copy()
 
         if config_dict.get("ts_global_normalize", False):
             global_mean = config_dict["ts_normalize_mean"]
@@ -240,31 +232,21 @@ def prep_df2pred(
     model.eval()
     y_levels = list(df2train[y_col].unique()) # levels of the target attribute
     ts_str_cols = [str(i + 1) for i in range(config_dict["seq_length"])] # time-series columns
-
-    if config_dict['open_vocab']:
-        aug_level_map = df2train.groupby(y_col).agg({f"{y_col}_aug": lambda x: list(x.unique())}).to_dict()[f"{y_col}_aug"]
     
     df2pred_aug = pd.DataFrame()
     df2pred_src = pd.DataFrame()
     for tgt_level in y_levels:
         df2aug = df2train[df2train[y_col] != tgt_level].copy().reset_index(drop=True)
-        if not config_dict['open_vocab']:
-            if aug_type == "marginal":
-                df2aug["new_text"] = tgt_level
-            elif aug_type == "conditional":
-                org_levels = list(set(y_levels) - {tgt_level})
-                df2aug["new_text"] = df2aug["text"].copy()
-                for org_level in org_levels:
-                    df2aug["new_text"] = df2aug["new_text"].str.replace(org_level, tgt_level)
+
+        if aug_type == "marginal":
+            df2aug["new_text"] = tgt_level
+        elif aug_type == "conditional":
+            org_levels = list(set(y_levels) - {tgt_level})
+            df2aug["new_text"] = df2aug["text"].copy()
+            for org_level in org_levels:
+                df2aug["new_text"] = df2aug["new_text"].str.replace(org_level, tgt_level)
         else:
-            if aug_type == "marginal":
-                df2aug["new_text"] = np.random.choice(aug_level_map[tgt_level], size=len(df2aug))
-            elif aug_type == "conditional":
-                df2aug[y_col+'_aug'] = np.random.choice(aug_level_map[tgt_level], size=len(df2aug))
-                df2aug["new_text"] = ''
-                for str_col in [col+'_aug' for col in config_dict["txt2ts_y_cols"]]:
-                    df2aug["new_text"] += ' ' + df2aug[str_col]
-                df2aug["new_text"] = df2aug["new_text"].str.strip()
+            raise ValueError(f"Unsupported aug_type: {aug_type}")
 
         df2aug_src = df2aug[
             ts_str_cols + config_dict["txt2ts_y_cols"] + ["text", "label"]

@@ -9,6 +9,8 @@ if 'vital_suffix' not in locals():
 
 if 'output_dir' not in locals():
     output_dir = config_dict['output_dir'] # output_dir will be provided by tesit / tweaver
+
+base_aug_dict = {k: v for k, v in base_aug_dict.items() if k in config_dict['txt2ts_y_cols']}
 # # ---------------------------------------  Math eval ---------------------------------------
 # # Math properties (applicable to quantitative time series attributes)
 # if math:
@@ -71,7 +73,7 @@ if ts_dist:
         df_dists_ls = []
         for args in args_ls:
             df_dists = pd.DataFrame()
-            for y_col in args.keys():
+            for y_col in config_dict['txt2ts_y_cols']:#args.keys():
                 print(y_col)
                 df = pd.DataFrame()
                 for aug_type in ['conditional']: # , 'marginal'
