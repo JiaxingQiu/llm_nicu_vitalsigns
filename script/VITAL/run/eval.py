@@ -73,7 +73,7 @@ if ts_dist:
         df_dists_ls = []
         for args in args_ls:
             df_dists = pd.DataFrame()
-            for y_col in config_dict['txt2ts_y_cols']:#args.keys():
+            for y_col in args.keys():# config_dict['txt2ts_y_cols']:#
                 print(y_col)
                 df = pd.DataFrame()
                 for aug_type in ['conditional']: # , 'marginal'

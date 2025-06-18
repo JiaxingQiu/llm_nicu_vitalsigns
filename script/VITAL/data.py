@@ -334,8 +334,8 @@ def gen_open_vocab_text(df_train, df_test, df_left, config_dict):
         df_left[attr_col+'_aug'] = ''
         for attr_level in aug_text_dict[attr_col]:
             aug_levels = aug_text_dict[attr_col][attr_level] # list of augmented strings
-            aug_levels_in = aug_levels[0:int(0.5*len(aug_levels))] # first half goes to training set
-            aug_levels_out = aug_levels[int(0.5*len(aug_levels)):] # second half goes to left out set
+            aug_levels_in = aug_levels[0:int(0.7*len(aug_levels))] # first half goes to training set
+            aug_levels_out = aug_levels[int(0.3*len(aug_levels)):] # second half goes to left out set
 
             train_idx = df_train[attr_col] == attr_level
             test_idx = df_test[attr_col] == attr_level

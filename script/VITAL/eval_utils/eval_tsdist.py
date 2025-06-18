@@ -351,8 +351,8 @@ def eng_dists(df_dist,
     import matplotlib.pyplot as plt
    
     df = df_dist[
-                    (df_dist['ref_y_level'].str.contains(ref_y_level, case=False)) & 
-                    (df_dist['aug_y_level'].str.contains(aug_y_level, case=False))
+                    (df_dist['ref_y_level'].str.contains(ref_y_level, case=False, regex=False)) & 
+                    (df_dist['aug_y_level'].str.contains(aug_y_level, case=False, regex=False))
                 ]
     for metric in metrics:
         df['aug_'+metric] = df[metric+'_aug2tgt'].apply(lambda x: x['q50'])
