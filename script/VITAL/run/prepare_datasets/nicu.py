@@ -167,45 +167,23 @@ ts_dist = True
 rats = True
 
 # argument dictionary {y_col:conditions}
-args0 = {'description_succ_inc': None,
+args0 = {#'description_succ_inc': None,
         'description_histogram': None,
         'description_ts_event_binary': None,
         # 'description_ts_event': None
         }
 
-args1 = {'description_succ_inc': [('description_histogram', "Low variability."), 
-                                 ('description_ts_event_binary', "No events.")],
-        'description_histogram': [('description_succ_inc', "Low amount of consecutive increases."),
-                                  ('description_ts_event_binary', "No events.")],
-        'description_ts_event_binary': [('description_succ_inc', "Low amount of consecutive increases."), 
-                                        ('description_histogram', "Moderate variability.")],
-        # 'description_ts_event': [('description_succ_inc', "Low amount of consecutive increases."), 
-        #                          ('description_histogram', "Moderate variability.")]
+args1 = {'description_histogram': [('description_ts_event_binary', "No events.")],
+        'description_ts_event_binary': [('description_histogram', "Low variability.")]
         }
 
 args_ls = [args0, args1]
 
 # Define the base augmentation pairs
-base_aug_dict = {'description_succ_inc': [('Low amount of consecutive increases.', 'High amount of consecutive increases.'), 
-                                          ('Low amount of consecutive increases.', 'Moderate amount of consecutive increases.'),
-                                          ('Moderate amount of consecutive increases.', 'Low amount of consecutive increases.'),
-                                          ('Moderate amount of consecutive increases.', 'High amount of consecutive increases.'),
-                                          ('High amount of consecutive increases.', 'Low amount of consecutive increases.'),
-                                          ('High amount of consecutive increases.', 'Moderate amount of consecutive increases.')],
-                'description_histogram': [('Low variability.', 'High variability.'),
-                                ('Low variability.', 'Moderate variability.'),
-                                ('Moderate variability.', 'Low variability.'),
-                                ('Moderate variability.', 'High variability.'),
-                                ('High variability.', 'Low variability.'),
-                                ('High variability.', 'Moderate variability.')],
+base_aug_dict = {'description_histogram': [('Low variability.', 'High variability.'),
+                                            ('High variability.', 'Low variability.')],
                 'description_ts_event_binary': [('No events.', 'Bradycardia events happened.'),
                                                 ('Bradycardia events happened.', 'No events.')],
-                # 'description_ts_event': [('No events.', 'Bradycardia 80 event (heart rate below 80) happened.'),
-                #                          ('No events.', 'Bradycardia 90 event (heart rate below 90) happened.'),
-                #                          ('No events.', 'Bradycardia 100 event (heart rate below 100) happened.'),
-                #                          ('Bradycardia 80 event (heart rate below 80) happened.', 'No events.'),
-                #                          ('Bradycardia 90 event (heart rate below 90) happened.', 'No events.'),
-                #                          ('Bradycardia 100 event (heart rate below 100) happened.', 'No events.')]
                 }
 
 

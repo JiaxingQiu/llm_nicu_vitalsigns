@@ -153,28 +153,28 @@ else:
     eval_dict_eng = eng_eval_metrics(eval_dict_ts2txt, binary=True, plot=True, plot_confusion_matrices=True)
     eval_dict_eng = eng_eval_metrics(eval_dict_txt2ts, binary=False, plot=True, plot_confusion_matrices=True)
     
-    # for y_col in config_dict['txt2ts_y_cols']:
-    #     try:
-    #         text_levels = list(df_train[y_col].unique())
-    #         # _ = net_emb(df_train, model, config_dict,
-    #         #             top=100,
-    #         #             y_col = y_col,
-    #         #             text_levels = text_levels)
-    #         # _ = net_emb_w_text(df_train, model, config_dict,
-    #         #                 top=100,
-    #         #                 y_col = y_col,
-    #         #                 text_levels = text_levels)
-    #         _ = net_emb(df_test, model, config_dict,
-    #                     top=100,
-    #                     y_col = y_col,
-    #                     text_levels = text_levels)
-    #         # _ = net_emb_w_text(df_test, model, config_dict,
-    #         #                 top=100,
-    #         #                 y_col = y_col,
-    #         #                 text_levels = text_levels)
-    #     except Exception as e:
-    #         print(f"Error plot network embedding for {y_col}")
-    #         continue
+    for y_col in config_dict['txt2ts_y_cols']:
+        try:
+            text_levels = list(df_train[y_col].unique())
+            # _ = net_emb(df_train, model, config_dict,
+            #             top=100,
+            #             y_col = y_col,
+            #             text_levels = text_levels)
+            # _ = net_emb_w_text(df_train, model, config_dict,
+            #                 top=100,
+            #                 y_col = y_col,
+            #                 text_levels = text_levels)
+            _ = net_emb(df_test, model, config_dict,
+                        top=100,
+                        y_col = y_col,
+                        text_levels = text_levels)
+            # _ = net_emb_w_text(df_test, model, config_dict,
+            #                 top=100,
+            #                 y_col = y_col,
+            #                 text_levels = text_levels)
+        except Exception as e:
+            print(f"Error plot network embedding for {y_col}")
+            continue
         
         
     # eval vae

@@ -17,7 +17,7 @@ if 'text_pairs' in config_dict['text_config'] : # use mixture of attributes inst
         df = mix_w_counter(df, config_dict, n = config_dict['text_config']['n'], plot=False)
         df = df.reset_index(drop=True)
         df = add_y_col(df, config_dict)
-        print(df.text.value_counts())
+        # print(df.text.value_counts())
 
         # downsample negative levels first
         if config_dict['downsample']:

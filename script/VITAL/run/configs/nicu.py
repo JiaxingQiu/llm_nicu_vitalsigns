@@ -36,19 +36,19 @@ config_dict = update_config(config_dict,
     # Eval settings (clip)
     # ts2txt
     y_col = 'description_histogram',
-    y_levels = ['High variability.', 'Moderate variability.', 'Low variability.'], 
-    y_pred_levels = ['High variability.', 'Moderate variability.', 'Low variability.'], 
+    y_levels = ['High variability.', 'Low variability.'], # 'Moderate variability.', 
+    y_pred_levels = ['High variability.', 'Low variability.'], 
     # txt2ts
-    txt2ts_y_cols = ['description_histogram', 'description_ts_event'], # 'description_succ_inc', description_ts_event_binary
+    txt2ts_y_cols = ['description_histogram', 'description_ts_event_binary'],
     # open vocabulary
     open_vocab_dict_path = "../../data/nicu/aug_text.json",
     
     # Data settings
     seq_length = 300,
     downsample = True,
-    downsample_size = 10000,
-    downsample_levels = ['High variability.', 'Moderate variability.', 'Low variability.'], 
-    custom_target_cols = ['description_histogram', 'description_ts_event', 'label'],  # 'description_succ_inc', 
+    downsample_size = 20000, #10000,
+    downsample_levels = ['High variability.', 'Low variability.'], 
+    custom_target_cols = ['description_histogram', 'description_ts_event_binary', 'label'],  # 'description_succ_inc', 
     ts_global_normalize = True, 
     
     # Model settings

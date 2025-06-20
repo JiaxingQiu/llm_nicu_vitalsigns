@@ -223,4 +223,11 @@ if 'df_pw_dists_all' in locals():
     df_all = pd.concat([df_rats_all, df_dists_all, df_pw_dists_all], ignore_index=True).dropna(subset=['score'])
 else:
     df_all = pd.concat([df_rats_all, df_dists_all], ignore_index=True).dropna(subset=['score'])
-summarize_scores(df_all)
+# summarize_scores(df_all)
+
+
+res_df_msd = summarize_scores(df_all)
+res_df_iqr = summarize_scores(df_all, mean_sd = False)
+if meta is None:
+    res_df_msd.to_csv(os.path.join(config_dict['output_dir'], 'res_df_msd'+eval_suffix+'.csv'), index=False)
+    res_df_iqr.to_csv(os.path.join(config_dict['output_dir'], 'res_df_iqr'+eval_suffix+'.csv'), index=False)
