@@ -258,10 +258,11 @@ def interpolate_ts_tx_single_sampling(df, model, config_dict, text_cols, w,
 
 
 def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_values=None, 
-                                       label = True, plot = False, b=200, ep=1, ylims = None):
+                                       label = True, plot = False, b=200, ep=1, ylims = None,
+                                       return_essentials = False):
     if w_values is None:
         w_values = np.arange(0, 1.1, 0.1)
-
+    median_dict = {}    
     # Get ground truth reconstruction
     ts_hats, raw_ts = interpolate_ts_tx_single_sampling(df, model, config_dict, 
                                          text_cols = ['text'], # ground truth text condition
@@ -310,6 +311,11 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
                 ts_hat_r = torch.quantile(ts_hat, 0.975, dim=0).numpy()
                 ts_hat_q = torch.quantile(ts_hat, 0.5, dim=0).numpy()
                 ts_hat_i = torch.quantile(ts_hat, 0.025, dim=0).numpy()
+
+                if text_condition not in median_dict:
+                    median_dict[text_condition] = {}
+                median_dict[text_condition][float(w)] = ts_hat_q
+                
         
         # --- Plotting ---
         for idx, w in enumerate(w_values):
@@ -357,4 +363,12 @@ def plot_interpolate_ts_tx_ws_sampling(df, model, config_dict, text_cols, w_valu
     del all_results, ts_hats
     torch.cuda.empty_cache()
 
+    # ---------- 3. pack & return (optional)------------------------------------------ #
+    if return_essentials:
+        return {
+            'raw_ts': raw_ts,
+            'median': median_dict,
+            'ylims': ylims,
+            'w_values': list(map(float, w_values))
+        }
 
