@@ -16,11 +16,6 @@ if overwrite:
         threshold=1e-4,      
         cooldown=20          
     )
-
-    # kl_annealer = KLAnnealer(start=0.0, 
-    #                             end=0.0, 
-    #                             epochs=10000) # for the first 1000 epochs, favor reconstruction more
-
     
     for i in range(config_dict['num_saves']):  
         if config_dict['alpha_init'] is not None:
@@ -123,18 +118,10 @@ if overwrite:
         
         if config_dict['train_type'] != 'clip':
             # Eval VAE
-            # plot_reconstructions(model, 
-            #                     df=df_train, 
-            #                     config_dict = config_dict, 
-            #                     text_col_ls = config_dict['text_col_ls'],
-            #                     title="Training Data Reconstructions")
             plot_reconstructions(model, 
                                 df=df_test, 
                                 config_dict = config_dict, 
                                 title="Test Data Reconstructions")
-            # distances = [0, 0.1, 0.25, 0.3, 0.6]
-            # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-            # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
             
             # Eval Generation
             if len(config_dict['txt2ts_y_cols'])<3:
@@ -156,42 +143,20 @@ else:
     for y_col in config_dict['txt2ts_y_cols']:
         try:
             text_levels = list(df_train[y_col].unique())
-            # _ = net_emb(df_train, model, config_dict,
-            #             top=100,
-            #             y_col = y_col,
-            #             text_levels = text_levels)
-            # _ = net_emb_w_text(df_train, model, config_dict,
-            #                 top=100,
-            #                 y_col = y_col,
-            #                 text_levels = text_levels)
             _ = net_emb(df_test, model, config_dict,
                         top=100,
                         y_col = y_col,
                         text_levels = text_levels)
-            # _ = net_emb_w_text(df_test, model, config_dict,
-            #                 top=100,
-            #                 y_col = y_col,
-            #                 text_levels = text_levels)
         except Exception as e:
             print(f"Error plot network embedding for {y_col}")
             continue
         
         
     # eval vae
-    # plot_reconstructions(model, 
-    #                     df = df_train, 
-    #                     config_dict = config_dict, 
-    #                     text_col_ls = config_dict['text_col_ls'],
-    #                     title="Training Data Reconstructions")
-
     plot_reconstructions(model, 
                         df = df_test, 
                         config_dict = config_dict, 
                         title="Test Data Reconstructions")
-    # distances = [0, 0.1, 0.25, 0.3, 0.6]
-    # plot_reconstruction_from_distances(model, df_train, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-    # plot_reconstruction_from_distances(model, df_test, config_dict, text_col_ls = config_dict['text_col_ls'], distances = distances)
-    
     # Eval Generation
     if len(config_dict['txt2ts_y_cols'])<3:
         # viz_generation_marginal(df_train, model, config_dict)

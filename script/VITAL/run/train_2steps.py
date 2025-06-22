@@ -1,5 +1,5 @@
 # # run this script to train clip first then decoder.
-config_dict_org = config_dict.copy() # maintain the original config
+config_dict_org = config_dict.copy()
 
 # train clip (once)
 if overwrite: # only load clip encoders during training phase
@@ -19,6 +19,5 @@ config_dict['train_type'] = 'joint'
 config_dict['es_patience'] = config_dict_org['num_epochs']
 with open('run/train.py', 'r') as file:
     exec(file.read()) 
-
 
 config_dict = config_dict_org.copy()

@@ -48,12 +48,6 @@ if overwrite:
     train_losses = []
     test_losses = []
     # ------------------------- ready output directory -------------------------
-    # import shutil
-    # if os.path.exists(config_dict['output_dir']):
-    #     shutil.rmtree(config_dict['output_dir'])
-    # os.makedirs(config_dict['output_dir'])
-    # config_dict['model_init'] = model
-    # # overwrite = False # reset overwrite to False
     import os
     import shutil
     keep_file_list = [

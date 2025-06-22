@@ -6,6 +6,7 @@ torchinfo==1.8.0
 transformers==4.46.2
 datasets==3.1.0
 sentence_transformers==3.0.1
+argparse==1.4.0
 
 # Data processing
 numpy>=1.26.0

@@ -17,6 +17,8 @@ if attr_suffix == '':
     config_dict = update_config(config_dict, custom_target_cols = ['label'])
 if 'open_vocab' in locals():
     config_dict = update_config(config_dict, open_vocab = open_vocab)
+if 'alpha_init' in locals(): 
+    config_dict = update_config(config_dict, alpha_init = alpha_init)
     
 # --- prepare train, test, left dataframes --------------------------------------------
 if dataset_name == 'syn_gt':

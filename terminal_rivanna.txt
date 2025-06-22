@@ -85,3 +85,8 @@ cd ~/llm_nicu_vitalsigns
 conda activate ./clip_env
 pip install package_name
 
+
+
+3. To execute main.py in Rivanna 
+conda install -n clip_env -c conda-forge "libstdcxx-ng>=13" "libgcc-ng>=13"
+export LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6
